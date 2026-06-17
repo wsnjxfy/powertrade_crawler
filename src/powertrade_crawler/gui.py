@@ -1,0 +1,3228 @@
+import csv
+import calendar
+import json
+import sqlite3
+import threading
+import webbrowser
+from datetime import date, timedelta
+from pathlib import Path
+from time import sleep
+from urllib.parse import urlencode
+from tkinter import (
+    BOTH,
+    END,
+    LEFT,
+    RIGHT,
+    TOP,
+    VERTICAL,
+    W,
+    X,
+    Y,
+    DoubleVar,
+    StringVar,
+    Tk,
+    Toplevel,
+    messagebox,
+)
+from tkinter.filedialog import asksaveasfilename
+from tkinter import ttk
+
+from powertrade_crawler.clients.elecheck import ElecheckClient, ElecheckUnauthorizedError
+from powertrade_crawler.config import get_settings
+from powertrade_crawler.elecheck_auth import (
+    cache_elecheck_authorization,
+    resolve_elecheck_authorization,
+    set_elecheck_authorization_for_current_process,
+)
+from powertrade_crawler.gridstatus_downloader import (
+    DownloadCancelled,
+    DownloadControl,
+    checkpoint_path,
+    download_dataset_csv_adaptive,
+    format_gridstatus_time,
+    parse_gridstatus_time,
+)
+from powertrade_crawler.spiders.elecheck import (
+    ElecheckClearPriceSpider,
+    ElecheckMechanismElectricityPriceSpider,
+    ElecheckPurchasingNationalRangeSpider,
+)
+from powertrade_crawler.storage import (
+    upsert_elecheck_clear_price_records,
+    upsert_elecheck_mechanism_electricity_price_records,
+    upsert_elecheck_purchasing_records,
+)
+
+
+GRIDSTATUS_QUERY_BASE_URL = "https://api.gridstatus.io/v1/datasets/{dataset_id}/query"
+GRIDSTATUS_API_KEY_PLACEHOLDER = "replace-with-your-gridstatus-api-key"
+GRIDSTATUS_API_KEY_SETTINGS_URL = "https://www.gridstatus.io/settings/api"
+
+
+def resolve_sqlite_path() -> Path:
+    database_url = get_settings().database_url
+    if not database_url.startswith("sqlite:///"):
+        raise ValueError(f"GUI only supports sqlite database URLs, got: {database_url}")
+    return Path(database_url.replace("sqlite:///", "", 1)).resolve()
+
+
+def has_usable_gridstatus_api_key() -> bool:
+    api_key = (get_settings().gridstatus_api_key or "").strip()
+    return bool(api_key and api_key != GRIDSTATUS_API_KEY_PLACEHOLDER)
+
+
+def save_gridstatus_api_key(api_key: str, env_path: Path = Path(".env")) -> None:
+    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
+    output_lines = []
+    wrote_key = False
+    for line in lines:
+        if line.startswith("GRIDSTATUS_API_KEY="):
+            output_lines.append(f"GRIDSTATUS_API_KEY={api_key}")
+            wrote_key = True
+        else:
+            output_lines.append(line)
+    if not wrote_key:
+        output_lines.append(f"GRIDSTATUS_API_KEY={api_key}")
+    env_path.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+    get_settings.cache_clear()
+
+
+def suggested_download_range(metadata: dict[str, object]) -> tuple[str, str]:
+    earliest_text = str(metadata.get("earliest_available_time_utc") or "")
+    latest_text = str(metadata.get("latest_available_time_utc") or "")
+    earliest = parse_gridstatus_time(earliest_text)
+    latest = parse_gridstatus_time(latest_text)
+    if latest is None:
+        return earliest_text, latest_text
+
+    frequency = str(metadata.get("data_frequency") or "").upper()
+    if "5_MIN" in frequency or "15_MIN" in frequency:
+        window = timedelta(hours=6)
+    elif "HOUR" in frequency:
+        window = timedelta(days=3)
+    elif "DAY" in frequency or "DAILY" in frequency:
+        window = timedelta(days=30)
+    else:
+        window = timedelta(days=1)
+
+    start = latest - window
+    if earliest is not None and start < earliest:
+        start = earliest
+    return format_gridstatus_time(start), format_gridstatus_time(latest)
+
+
+class GridStatusMetadataRepository:
+    def __init__(self, db_path: Path | None = None) -> None:
+        self.db_path = db_path or resolve_sqlite_path()
+
+    def connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    def filter_values(self, column: str) -> list[str]:
+        if column not in {"source", "data_frequency", "status"}:
+            raise ValueError(f"Unsupported filter column: {column}")
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT {column}, COUNT(*) AS row_count
+                FROM gridstatus_dataset_metadata
+                WHERE {column} IS NOT NULL AND TRIM({column}) != ''
+                GROUP BY {column}
+                ORDER BY row_count DESC, {column}
+                """
+            ).fetchall()
+        return [str(row[column]) for row in rows]
+
+    def search(
+        self,
+        keyword: str = "",
+        source: str = "",
+        data_frequency: str = "",
+        status: str = "active",
+        limit: int = 300,
+    ) -> list[sqlite3.Row]:
+        where = []
+        params: list[object] = []
+
+        keyword = keyword.strip()
+        if keyword:
+            like = f"%{keyword}%"
+            where.append(
+                """
+                (
+                    dataset_id LIKE ?
+                    OR name LIKE ?
+                    OR description_chinese LIKE ?
+                    OR description LIKE ?
+                )
+                """
+            )
+            params.extend([like, like, like, like])
+        if source:
+            where.append("source = ?")
+            params.append(source)
+        if data_frequency:
+            where.append("data_frequency = ?")
+            params.append(data_frequency)
+        if status:
+            where.append("status = ?")
+            params.append(status)
+
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        params.append(limit)
+
+        with self.connect() as connection:
+            return connection.execute(
+                f"""
+                SELECT
+                    id,
+                    dataset_id,
+                    name,
+                    source,
+                    status,
+                    data_frequency,
+                    earliest_available_time_utc,
+                    latest_available_time_utc,
+                    description,
+                    description_chinese
+                FROM gridstatus_dataset_metadata
+                {where_sql}
+                ORDER BY
+                    CASE WHEN popularity_rank IS NULL THEN 1 ELSE 0 END,
+                    popularity_rank,
+                    source,
+                    dataset_id
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+
+    def get_dataset(self, row_id: int) -> sqlite3.Row | None:
+        with self.connect() as connection:
+            return connection.execute(
+                """
+                SELECT *
+                FROM gridstatus_dataset_metadata
+                WHERE id = ?
+                """,
+                (row_id,),
+            ).fetchone()
+
+
+class GridStatusMetadataApp:
+    def __init__(
+        self,
+        root,
+        repository: GridStatusMetadataRepository,
+        *,
+        configure_window: bool = True,
+    ) -> None:
+        self.root = root
+        self.repository = repository
+        self.current_row: sqlite3.Row | None = None
+        self.result_rows: dict[str, sqlite3.Row] = {}
+        self.download_dialog: Toplevel | None = None
+        self.download_message_var = StringVar()
+        self.download_detail_var = StringVar()
+        self.download_progress_var = DoubleVar(value=0.0)
+        self.download_pause_button: ttk.Button | None = None
+        self.download_control: DownloadControl | None = None
+        self.download_start_time_var = StringVar()
+        self.download_end_time_var = StringVar()
+        self.download_format_var = StringVar(value="csv")
+        self.download_range_mode_var = StringVar(value="sample")
+
+        self.keyword_var = StringVar()
+        self.source_var = StringVar()
+        self.frequency_var = StringVar()
+        self.status_var = StringVar(value="active")
+        self.summary_var = StringVar(value="Ready")
+
+        if configure_window:
+            self.root.title("GridStatus 数据集目录")
+            self.root.geometry("1220x760")
+            self.root.minsize(980, 640)
+
+        self.setup_styles()
+        self.build_layout()
+        self.load_filters()
+        self.refresh_results()
+
+    def setup_styles(self) -> None:
+        style = ttk.Style()
+        style.configure("Treeview", rowheight=28)
+        style.configure("TButton", padding=(10, 5))
+        style.configure("Toolbar.TFrame", padding=8)
+
+    def build_layout(self) -> None:
+        toolbar = ttk.Frame(self.root, style="Toolbar.TFrame")
+        toolbar.pack(fill=X)
+
+        ttk.Label(toolbar, text="关键词").pack(side=LEFT, padx=(0, 6))
+        keyword_entry = ttk.Entry(toolbar, textvariable=self.keyword_var, width=34)
+        keyword_entry.pack(side=LEFT, padx=(0, 12))
+        keyword_entry.bind("<Return>", lambda _event: self.refresh_results())
+
+        ttk.Label(toolbar, text="来源").pack(side=LEFT, padx=(0, 6))
+        self.source_combo = ttk.Combobox(toolbar, textvariable=self.source_var, width=12, state="readonly")
+        self.source_combo.pack(side=LEFT, padx=(0, 12))
+
+        ttk.Label(toolbar, text="频率").pack(side=LEFT, padx=(0, 6))
+        self.frequency_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.frequency_var,
+            width=15,
+            state="readonly",
+        )
+        self.frequency_combo.pack(side=LEFT, padx=(0, 12))
+
+        ttk.Label(toolbar, text="状态").pack(side=LEFT, padx=(0, 6))
+        self.status_combo = ttk.Combobox(toolbar, textvariable=self.status_var, width=12, state="readonly")
+        self.status_combo.pack(side=LEFT, padx=(0, 12))
+
+        ttk.Button(toolbar, text="搜索", command=self.refresh_results).pack(side=LEFT)
+        ttk.Button(toolbar, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(toolbar, text="更换 API key", command=self.change_gridstatus_api_key).pack(
+            side=LEFT,
+            padx=(8, 0),
+        )
+
+        status_bar = ttk.Frame(self.root)
+        status_bar.pack(fill=X, side="bottom")
+        ttk.Label(status_bar, textvariable=self.summary_var, anchor=W).pack(fill=X, padx=8, pady=4)
+
+        main = ttk.PanedWindow(self.root, orient="horizontal")
+        main.pack(fill=BOTH, expand=True, padx=8, pady=(0, 8))
+
+        left = ttk.Frame(main)
+        right = ttk.Frame(main)
+        main.add(left, weight=3)
+        main.add(right, weight=2)
+
+        columns = ("name", "source", "frequency", "status", "time_range")
+        self.tree = ttk.Treeview(left, columns=columns, show="headings", selectmode="browse")
+        self.tree.heading("name", text="数据集")
+        self.tree.heading("source", text="来源")
+        self.tree.heading("frequency", text="频率")
+        self.tree.heading("status", text="状态")
+        self.tree.heading("time_range", text="时间范围")
+        self.tree.column("name", width=280, minwidth=180)
+        self.tree.column("source", width=58, minwidth=46, anchor="center", stretch=False)
+        self.tree.column("frequency", width=92, minwidth=78, anchor="center", stretch=False)
+        self.tree.column("status", width=64, minwidth=56, anchor="center", stretch=False)
+        self.tree.column("time_range", width=360, minwidth=260)
+
+        tree_scroll = ttk.Scrollbar(left, orient=VERTICAL, command=self.tree.yview)
+        self.tree.configure(yscrollcommand=tree_scroll.set)
+        self.tree.pack(side=LEFT, fill=BOTH, expand=True)
+        tree_scroll.pack(side=RIGHT, fill=Y)
+        self.tree.bind("<<TreeviewSelect>>", self.on_select_dataset)
+
+        self.build_detail_panel(right)
+
+    def build_detail_panel(self, parent: ttk.Frame) -> None:
+        header = ttk.Frame(parent)
+        header.pack(fill=X, pady=(0, 8))
+        self.title_label = ttk.Label(header, text="请选择一个数据集", font=("", 14, "bold"))
+        self.title_label.pack(anchor=W)
+        self.dataset_id_label = ttk.Label(header, text="")
+        self.dataset_id_label.pack(anchor=W, pady=(3, 0))
+
+        action_bar = ttk.Frame(parent)
+        action_bar.pack(fill=X, pady=(0, 8))
+        ttk.Button(action_bar, text="复制 dataset_id", command=self.copy_dataset_id).pack(side=LEFT)
+        ttk.Button(action_bar, text="复制 API 地址", command=self.copy_api_url).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(action_bar, text="下载 CSV", command=self.download_csv).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(action_bar, text="更换 API key", command=self.change_gridstatus_api_key).pack(
+            side=LEFT,
+            padx=(8, 0),
+        )
+        ttk.Button(action_bar, text="打开来源", command=self.open_source_url).pack(side=LEFT, padx=(8, 0))
+
+        notebook = ttk.Notebook(parent)
+        notebook.pack(fill=BOTH, expand=True)
+
+        self.description_text = self.create_text_tab(notebook, "说明")
+        self.columns_text = self.create_text_tab(notebook, "字段")
+        self.technical_text = self.create_text_tab(notebook, "技术")
+
+    def create_text_tab(self, notebook: ttk.Notebook, label: str):
+        frame = ttk.Frame(notebook)
+        text = __import__("tkinter").Text(frame, wrap="word", height=10, padx=10, pady=10)
+        scroll = ttk.Scrollbar(frame, orient=VERTICAL, command=text.yview)
+        text.configure(yscrollcommand=scroll.set)
+        text.pack(side=LEFT, fill=BOTH, expand=True)
+        scroll.pack(side=RIGHT, fill=Y)
+        text.configure(state="disabled")
+        notebook.add(frame, text=label)
+        return text
+
+    def load_filters(self) -> None:
+        self.source_combo["values"] = [""] + self.repository.filter_values("source")
+        self.frequency_combo["values"] = [""] + self.repository.filter_values("data_frequency")
+        self.status_combo["values"] = ["active", ""] + [
+            value for value in self.repository.filter_values("status") if value != "active"
+        ]
+
+    def reset_filters(self) -> None:
+        self.keyword_var.set("")
+        self.source_var.set("")
+        self.frequency_var.set("")
+        self.status_var.set("active")
+        self.refresh_results()
+
+    def refresh_results(self) -> None:
+        rows = self.repository.search(
+            keyword=self.keyword_var.get(),
+            source=self.source_var.get(),
+            data_frequency=self.frequency_var.get(),
+            status=self.status_var.get(),
+        )
+        self.result_rows = {}
+        self.tree.delete(*self.tree.get_children())
+
+        for row in rows:
+            item_id = str(row["id"])
+            self.result_rows[item_id] = row
+            self.tree.insert(
+                "",
+                END,
+                iid=item_id,
+                values=(
+                    row["name"] or row["dataset_id"],
+                    row["source"] or "",
+                    row["data_frequency"] or "",
+                    row["status"] or "",
+                    self.format_time_range(row),
+                ),
+            )
+
+        self.summary_var.set(f"找到 {len(rows)} 个数据集。默认最多显示 300 条。")
+        if rows:
+            first_id = str(rows[0]["id"])
+            self.tree.selection_set(first_id)
+            self.tree.focus(first_id)
+            self.show_dataset(int(first_id))
+        else:
+            self.clear_detail()
+
+    def on_select_dataset(self, _event) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        self.show_dataset(int(selection[0]))
+
+    def show_dataset(self, row_id: int) -> None:
+        row = self.repository.get_dataset(row_id)
+        if row is None:
+            return
+        self.current_row = row
+
+        self.title_label.configure(text=row["name"] or row["dataset_id"])
+        self.dataset_id_label.configure(text=f"{row['dataset_id']}  |  {row['source'] or '-'}")
+
+        self.set_text(self.description_text, self.build_description(row))
+        self.set_text(self.columns_text, self.build_columns(row))
+        self.set_text(self.technical_text, self.build_technical(row))
+
+    def clear_detail(self) -> None:
+        self.current_row = None
+        self.title_label.configure(text="没有匹配的数据集")
+        self.dataset_id_label.configure(text="")
+        self.set_text(self.description_text, "")
+        self.set_text(self.columns_text, "")
+        self.set_text(self.technical_text, "")
+
+    def build_description(self, row: sqlite3.Row) -> str:
+        parts = [
+            "中文说明",
+            row["description_chinese"] or "暂无中文说明",
+            "",
+            "英文原文",
+            row["description"] or "No description.",
+            "",
+            "常用信息",
+            f"dataset_id: {row['dataset_id']}",
+            f"API 地址: {self.build_api_url(row)}",
+            f"CSV 下载地址: {self.build_csv_url(row)}",
+            f"可用时间: {self.format_time_range(row)}",
+        ]
+        return "\n".join(parts)
+
+    def build_columns(self, row: sqlite3.Row) -> str:
+        columns = self.parse_json(row["all_columns_json"], default=[])
+        primary_keys = self.parse_json(row["primary_key_columns_json"], default=[])
+
+        lines = ["主键字段", ", ".join(primary_keys) if primary_keys else "暂无", "", "返回字段"]
+        if not columns:
+            lines.append("暂无字段说明")
+            return "\n".join(lines)
+
+        for column in columns:
+            if isinstance(column, dict):
+                name = column.get("name") or column.get("column") or "-"
+                data_type = column.get("type") or column.get("data_type") or "-"
+                description = column.get("description") or column.get("comment") or ""
+                lines.append(f"- {name}  ({data_type})")
+                if description:
+                    lines.append(f"  {description}")
+            else:
+                lines.append(f"- {column}")
+        return "\n".join(lines)
+
+    def build_technical(self, row: sqlite3.Row) -> str:
+        pairs = [
+            ("source", row["source"]),
+            ("status", row["status"]),
+            ("data_frequency", row["data_frequency"]),
+            ("publication_frequency", row["publication_frequency"]),
+            ("time_index_column", row["time_index_column"]),
+            ("publish_time_column", row["publish_time_column"]),
+            ("subseries_index_column", row["subseries_index_column"]),
+            ("number_of_rows_approximate", row["number_of_rows_approximate"]),
+            ("source_url", row["source_url"]),
+            ("earliest_available_time_utc", row["earliest_available_time_utc"]),
+            ("latest_available_time_utc", row["latest_available_time_utc"]),
+            ("last_checked_time_utc", row["last_checked_time_utc"]),
+            ("created_at_utc", row["created_at_utc"]),
+            ("collected_at", row["collected_at"]),
+        ]
+        return "\n".join(f"{key}: {value if value not in (None, '') else '-'}" for key, value in pairs)
+
+    def set_text(self, text_widget, content: str) -> None:
+        text_widget.configure(state="normal")
+        text_widget.delete("1.0", END)
+        text_widget.insert("1.0", content)
+        text_widget.configure(state="disabled")
+
+    def copy_dataset_id(self) -> None:
+        if not self.current_row:
+            return
+        self.copy_to_clipboard(self.current_row["dataset_id"], "dataset_id 已复制")
+
+    def copy_api_url(self) -> None:
+        if not self.current_row:
+            return
+        if not self.ensure_gridstatus_api_key():
+            return
+        self.copy_to_clipboard(self.build_api_url(self.current_row), "API 地址已复制")
+
+    def download_csv(self) -> None:
+        if not self.current_row:
+            return
+        if not self.ensure_gridstatus_api_key():
+            return
+        if not get_settings().gridstatus_api_key:
+            messagebox.showerror("缺少 API key", "请先在 .env 中设置 GRIDSTATUS_API_KEY。")
+            return
+
+        self.show_download_options(dict(self.current_row))
+
+    def change_gridstatus_api_key(self) -> None:
+        api_key = self.ask_gridstatus_api_key()
+        if not api_key:
+            self.summary_var.set("未更改 GridStatus API key。")
+            return
+
+        save_gridstatus_api_key(api_key.strip())
+        self.summary_var.set("GridStatus API key 已更换。")
+        messagebox.showinfo("API key 已更换", "新的 GridStatus API key 已保存到当前目录的 .env 文件。")
+
+    def ensure_gridstatus_api_key(self) -> bool:
+        if has_usable_gridstatus_api_key():
+            return True
+
+        api_key = self.ask_gridstatus_api_key()
+        if not api_key:
+            messagebox.showinfo("未设置 API key", "已取消下载。下载真实数据需要 GridStatus API key。")
+            return False
+
+        save_gridstatus_api_key(api_key.strip())
+        self.summary_var.set("GridStatus API key 已保存。")
+        return True
+
+    def ask_gridstatus_api_key(self) -> str | None:
+        dialog = Toplevel(self.root)
+        dialog.title("设置 GridStatus API key")
+        dialog.geometry("560x250")
+        dialog.resizable(False, False)
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        value = StringVar()
+        result: dict[str, str | None] = {"api_key": None}
+
+        ttk.Label(dialog, text="请输入 GridStatus API key", font=("", 11, "bold")).pack(
+            anchor=W,
+            padx=18,
+            pady=(18, 6),
+        )
+        ttk.Label(
+            dialog,
+            text="每个用户的 API key 可在 GridStatus 设置页面获取：",
+        ).pack(anchor=W, padx=18)
+
+        url_row = ttk.Frame(dialog)
+        url_row.pack(fill=X, padx=18, pady=(6, 12))
+        url_entry = ttk.Entry(url_row)
+        url_entry.insert(0, GRIDSTATUS_API_KEY_SETTINGS_URL)
+        url_entry.configure(state="readonly")
+        url_entry.pack(side=LEFT, fill=X, expand=True)
+
+        def copy_settings_url() -> None:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(GRIDSTATUS_API_KEY_SETTINGS_URL)
+
+        ttk.Button(url_row, text="复制网址", command=copy_settings_url).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(
+            url_row,
+            text="打开网页",
+            command=lambda: webbrowser.open(GRIDSTATUS_API_KEY_SETTINGS_URL),
+        ).pack(side=LEFT, padx=(8, 0))
+
+        ttk.Label(dialog, text="API key").pack(anchor=W, padx=18)
+        entry = ttk.Entry(dialog, textvariable=value, show="*", width=64)
+        entry.pack(fill=X, padx=18, pady=(6, 14))
+        entry.focus_set()
+
+        buttons = ttk.Frame(dialog)
+        buttons.pack(fill=X, padx=18)
+
+        def submit() -> None:
+            result["api_key"] = value.get().strip()
+            dialog.destroy()
+
+        def cancel() -> None:
+            dialog.destroy()
+
+        ttk.Button(buttons, text="保存并继续", command=submit).pack(side=LEFT)
+        ttk.Button(buttons, text="取消", command=cancel).pack(side=LEFT, padx=(8, 0))
+        dialog.bind("<Return>", lambda _event: submit())
+        dialog.bind("<Escape>", lambda _event: cancel())
+
+        self.root.wait_window(dialog)
+        return result["api_key"]
+
+    def show_download_options(self, metadata: dict[str, object]) -> None:
+        dialog = Toplevel(self.root)
+        dialog.title("下载时间范围")
+        dialog.geometry("560x290")
+        dialog.resizable(False, False)
+
+        dataset_id = str(metadata["dataset_id"])
+        start, end = suggested_download_range(metadata)
+        self.download_start_time_var.set(start)
+        self.download_end_time_var.set(end)
+        self.download_range_mode_var.set("sample")
+
+        ttk.Label(dialog, text=f"数据集：{dataset_id}", font=("", 11, "bold")).pack(
+            anchor=W,
+            padx=18,
+            pady=(16, 8),
+        )
+        ttk.Label(dialog, text="默认安全试下载；如需完整历史，请选择“完整数据集”。").pack(
+            anchor=W,
+            padx=18,
+            pady=(0, 12),
+        )
+
+        form = ttk.Frame(dialog)
+        form.pack(fill=X, padx=18)
+        mode_frame = ttk.Frame(form)
+        mode_frame.grid(row=0, column=0, columnspan=2, sticky=W, pady=(0, 10))
+
+        def use_sample_range() -> None:
+            sample_start, sample_end = suggested_download_range(metadata)
+            self.download_start_time_var.set(sample_start)
+            self.download_end_time_var.set(sample_end)
+
+        def use_full_range() -> None:
+            self.download_start_time_var.set(str(metadata.get("earliest_available_time_utc") or ""))
+            self.download_end_time_var.set(str(metadata.get("latest_available_time_utc") or ""))
+
+        def on_mode_change() -> None:
+            if self.download_range_mode_var.get() == "sample":
+                use_sample_range()
+            elif self.download_range_mode_var.get() == "full":
+                use_full_range()
+
+        ttk.Radiobutton(
+            mode_frame,
+            text="安全试下载",
+            variable=self.download_range_mode_var,
+            value="sample",
+            command=on_mode_change,
+        ).pack(side=LEFT)
+        ttk.Radiobutton(
+            mode_frame,
+            text="完整数据集",
+            variable=self.download_range_mode_var,
+            value="full",
+            command=on_mode_change,
+        ).pack(side=LEFT, padx=(12, 0))
+        ttk.Radiobutton(
+            mode_frame,
+            text="自定义时间",
+            variable=self.download_range_mode_var,
+            value="custom",
+        ).pack(side=LEFT, padx=(12, 0))
+        ttk.Label(form, text="开始时间").grid(row=1, column=0, sticky=W, pady=(0, 8))
+        ttk.Entry(form, textvariable=self.download_start_time_var, width=46).grid(
+            row=1,
+            column=1,
+            sticky=W,
+            padx=(10, 0),
+            pady=(0, 8),
+        )
+        ttk.Label(form, text="结束时间").grid(row=2, column=0, sticky=W)
+        ttk.Entry(form, textvariable=self.download_end_time_var, width=46).grid(
+            row=2,
+            column=1,
+            sticky=W,
+            padx=(10, 0),
+        )
+        ttk.Label(form, text="保存格式").grid(row=3, column=0, sticky=W, pady=(8, 0))
+        ttk.Combobox(
+            form,
+            textvariable=self.download_format_var,
+            values=["csv", "sqlite"],
+            state="readonly",
+            width=14,
+        ).grid(row=3, column=1, sticky=W, padx=(10, 0), pady=(8, 0))
+
+        ttk.Label(
+            dialog,
+            text="时间格式示例：2023-04-21T00:00Z。若看到大量已写入行，通常是在继续旧断点。",
+        ).pack(anchor=W, padx=18, pady=(12, 12))
+
+        buttons = ttk.Frame(dialog)
+        buttons.pack(fill=X, padx=18)
+        ttk.Button(
+            buttons,
+            text="开始下载",
+            command=lambda: self.start_download_with_options(dialog, metadata),
+        ).pack(side=LEFT)
+        ttk.Button(buttons, text="取消", command=dialog.destroy).pack(side=LEFT, padx=(8, 0))
+
+    def start_download_with_options(self, dialog: Toplevel, metadata: dict[str, object]) -> None:
+        start_time = self.download_start_time_var.get().strip()
+        end_time = self.download_end_time_var.get().strip()
+        if start_time:
+            metadata["download_start_time_utc"] = start_time
+        if end_time:
+            metadata["download_end_time_utc"] = end_time
+
+        dataset_id = self.current_row["dataset_id"]
+        output_format = self.download_format_var.get() or "csv"
+        if output_format == "sqlite":
+            initialfile = f"{dataset_id}.db"
+            defaultextension = ".db"
+            filetypes = [("SQLite database", "*.db"), ("All files", "*.*")]
+        else:
+            initialfile = f"{dataset_id}.csv"
+            defaultextension = ".csv"
+            filetypes = [("CSV files", "*.csv"), ("All files", "*.*")]
+        output_path = asksaveasfilename(
+            title="保存 CSV",
+            initialfile=initialfile,
+            defaultextension=defaultextension,
+            filetypes=filetypes,
+        )
+        if not output_path:
+            return
+        output = Path(output_path)
+
+        if self.download_range_mode_var.get() == "full":
+            if not messagebox.askyesno(
+                "确认完整下载",
+                (
+                    "完整数据集可能包含大量历史数据，并消耗较多 GridStatus API usage。\n\n"
+                    "确认继续完整下载吗？"
+                ),
+            ):
+                return
+
+        if not self.confirm_existing_download_state(output):
+            return
+
+        dialog.destroy()
+        self.summary_var.set(f"正在下载 {dataset_id} ...")
+        self.show_download_dialog(dataset_id)
+        self.download_control = DownloadControl(
+            cancel_event=threading.Event(),
+            pause_event=threading.Event(),
+        )
+        thread = threading.Thread(
+            target=self.download_csv_worker,
+            args=(metadata, output, dataset_id, output_format, self.download_control),
+            daemon=True,
+        )
+        thread.start()
+
+    def confirm_existing_download_state(self, output_path: Path) -> bool:
+        state_path = checkpoint_path(output_path)
+        if not output_path.exists() and not state_path.exists():
+            return True
+
+        choice = messagebox.askyesnocancel(
+            "发现已有下载文件",
+            (
+                "已发现同名输出文件或断点文件。\n\n"
+                "是：继续上次断点下载。\n"
+                "否：删除旧文件并重新开始。\n"
+                "取消：不开始下载。"
+            ),
+        )
+        if choice is None:
+            return False
+        if choice:
+            return True
+
+        for path in (output_path, state_path):
+            if path.exists():
+                path.unlink()
+        return True
+
+    def show_download_dialog(self, dataset_id: str) -> None:
+        if self.download_dialog is not None and self.download_dialog.winfo_exists():
+            self.download_dialog.destroy()
+
+        dialog = Toplevel(self.root)
+        dialog.title("正在下载")
+        dialog.geometry("480x210")
+        dialog.resizable(False, False)
+        dialog.attributes("-toolwindow", False)
+        dialog.protocol("WM_DELETE_WINDOW", self.cancel_download)
+
+        self.download_message_var.set(f"正在下载 {dataset_id} 的 CSV 文件，请稍候...")
+        self.download_detail_var.set("准备请求 GridStatus API")
+        self.download_progress_var.set(0.0)
+        ttk.Label(dialog, textvariable=self.download_message_var, wraplength=360).pack(
+            side=TOP,
+            fill=X,
+            padx=18,
+            pady=(18, 6),
+        )
+        ttk.Label(dialog, textvariable=self.download_detail_var, wraplength=420).pack(
+            side=TOP,
+            fill=X,
+            padx=18,
+            pady=(0, 8),
+        )
+        progress = ttk.Progressbar(
+            dialog,
+            mode="determinate",
+            maximum=100,
+            variable=self.download_progress_var,
+        )
+        progress.pack(fill=X, padx=18, pady=(0, 14))
+
+        button_bar = ttk.Frame(dialog)
+        button_bar.pack(fill=X, padx=18, pady=(0, 14))
+        self.download_pause_button = ttk.Button(
+            button_bar,
+            text="暂停",
+            command=self.toggle_download_pause,
+        )
+        self.download_pause_button.pack(side=LEFT)
+        ttk.Button(button_bar, text="取消", command=self.cancel_download).pack(side=LEFT, padx=(8, 0))
+        ttk.Label(button_bar, text="可最小化窗口，下载会继续。").pack(side=RIGHT)
+
+        self.download_dialog = dialog
+
+    def toggle_download_pause(self) -> None:
+        if self.download_control is None or self.download_control.pause_event is None:
+            return
+        if self.download_control.pause_event.is_set():
+            self.download_control.pause_event.clear()
+            if self.download_pause_button is not None:
+                self.download_pause_button.configure(text="暂停")
+            self.update_download_message("继续下载")
+        else:
+            self.download_control.pause_event.set()
+            if self.download_pause_button is not None:
+                self.download_pause_button.configure(text="继续")
+            self.update_download_message("下载已暂停")
+
+    def cancel_download(self) -> None:
+        if self.download_control is not None and self.download_control.cancel_event is not None:
+            self.download_control.cancel_event.set()
+        self.update_download_message("正在取消下载，会保留已完成的 CSV 和断点文件...")
+
+    def download_csv_worker(
+        self,
+        metadata: dict[str, object],
+        output_path: Path,
+        dataset_id: str,
+        output_format: str,
+        control: DownloadControl,
+    ) -> None:
+        try:
+            result = download_dataset_csv_adaptive(
+                metadata=metadata,
+                output_path=output_path,
+                progress=lambda message: self.root.after(
+                    0,
+                    lambda message=message: self.update_download_message(message),
+                ),
+                control=control,
+                output_format=output_format,
+            )
+        except DownloadCancelled as exc:
+            message = str(exc)
+            self.root.after(0, lambda message=message: self.on_download_cancelled(dataset_id, message))
+        except Exception as exc:
+            message = str(exc)
+            self.root.after(0, lambda message=message: self.on_download_error(dataset_id, message))
+        else:
+            self.root.after(0, lambda: self.on_download_success(dataset_id, result.output_path, result))
+
+    def update_download_message(self, message) -> None:
+        if isinstance(message, dict):
+            text = str(message.get("message", "正在下载"))
+            percent = float(message.get("percent", self.download_progress_var.get()) or 0)
+            rows_written = message.get("rows_written", 0)
+            requests_made = message.get("requests_made", 0)
+            intervals_pending = message.get("intervals_pending", 0)
+            self.download_message_var.set(text)
+            self.download_detail_var.set(
+                f"进度约 {percent:.1f}% | 已写入 {rows_written} 行 | "
+                f"请求 {requests_made} 次 | 待处理区间 {intervals_pending} 个"
+            )
+            self.download_progress_var.set(percent)
+            self.summary_var.set(text)
+            return
+
+        self.download_message_var.set(str(message))
+        self.summary_var.set(str(message))
+
+    def clear_download_state(self) -> None:
+        self.download_control = None
+        self.download_pause_button = None
+
+    def on_download_success(self, dataset_id: str, output_path: Path, result) -> None:
+        self.summary_var.set(f"{dataset_id} 文件已保存到 {output_path}")
+        self.download_progress_var.set(100.0)
+        if self.download_dialog is not None and self.download_dialog.winfo_exists():
+            self.download_dialog.destroy()
+            self.download_dialog = None
+        self.clear_download_state()
+        messagebox.showinfo(
+            "下载完成",
+            (
+                f"文件已保存到：\n{output_path}\n\n"
+                f"写入行数：{result.rows_written}\n"
+                f"API 请求次数：{result.requests_made}\n"
+                f"完成时间段：{result.intervals_completed}"
+            ),
+        )
+
+    def on_download_cancelled(self, dataset_id: str, message: str) -> None:
+        self.summary_var.set(f"{dataset_id} 下载已取消")
+        if self.download_dialog is not None and self.download_dialog.winfo_exists():
+            self.download_dialog.destroy()
+            self.download_dialog = None
+        self.clear_download_state()
+        messagebox.showinfo(
+            "下载已取消",
+            f"{message}\n\n下次选择同一个保存路径时，会从断点继续。",
+        )
+
+    def on_download_error(self, dataset_id: str, message: str) -> None:
+        self.summary_var.set(f"{dataset_id} CSV 下载失败")
+        if self.download_dialog is not None and self.download_dialog.winfo_exists():
+            self.download_dialog.destroy()
+            self.download_dialog = None
+        self.clear_download_state()
+        messagebox.showerror("下载失败", message)
+
+    def open_source_url(self) -> None:
+        if not self.current_row:
+            return
+        source_url = self.current_row["source_url"]
+        if not source_url:
+            messagebox.showinfo("没有来源链接", "这个数据集没有 source_url。")
+            return
+        webbrowser.open(source_url)
+
+    def copy_to_clipboard(self, value: str, message: str) -> None:
+        self.root.clipboard_clear()
+        self.root.clipboard_append(value)
+        self.summary_var.set(message)
+
+    @staticmethod
+    def build_api_url(row: sqlite3.Row) -> str:
+        params = {"limit": 1000}
+        api_key = (get_settings().gridstatus_api_key or "").strip()
+        if api_key and api_key != GRIDSTATUS_API_KEY_PLACEHOLDER:
+            params["api_key"] = api_key
+        return f"{GRIDSTATUS_QUERY_BASE_URL.format(dataset_id=row['dataset_id'])}?{urlencode(params)}"
+
+    @staticmethod
+    def build_csv_url(row: sqlite3.Row) -> str:
+        params = {
+            "return_format": "csv",
+            "download": "true",
+            "limit": 1000,
+        }
+        api_key = (get_settings().gridstatus_api_key or "").strip()
+        if api_key and api_key != GRIDSTATUS_API_KEY_PLACEHOLDER:
+            params["api_key"] = api_key
+        return f"{GRIDSTATUS_QUERY_BASE_URL.format(dataset_id=row['dataset_id'])}?{urlencode(params)}"
+
+    @staticmethod
+    def parse_json(value: str | None, default):
+        if not value:
+            return default
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default
+
+    @staticmethod
+    def format_time_range(row: sqlite3.Row) -> str:
+        start = row["earliest_available_time_utc"] or "?"
+        end = row["latest_available_time_utc"] or "?"
+        return f"{start} -> {end}"
+
+
+class ElecheckDataRepository:
+    def __init__(self, db_path: Path | None = None) -> None:
+        self.db_path = db_path or resolve_sqlite_path()
+
+    def connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    def table_exists(self, table_name: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table_name,),
+            ).fetchone()
+        return row is not None
+
+    def distinct_values(self, table_name: str, column: str) -> list[str]:
+        if not self.table_exists(table_name):
+            return []
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT {column}, COUNT(*) AS row_count
+                FROM {table_name}
+                WHERE {column} IS NOT NULL AND TRIM(CAST({column} AS TEXT)) != ''
+                GROUP BY {column}
+                ORDER BY row_count DESC, {column}
+                """
+            ).fetchall()
+        return [str(row[column]) for row in rows]
+
+    def area_options(self) -> list[str]:
+        if not self.table_exists("elecheck_area_records"):
+            return []
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT area_name, area_code
+                FROM elecheck_area_records
+                ORDER BY area_name
+                """
+            ).fetchall()
+        return [f"{row['area_name']} ({row['area_code']})" for row in rows]
+
+    def clear_price_area_targets(self) -> list[dict[str, str | None]]:
+        if not self.table_exists("elecheck_area_records"):
+            return []
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT area_name, area_code, earliest_clear_price_date
+                FROM elecheck_area_records
+                ORDER BY id
+                """
+            ).fetchall()
+        return [
+            {
+                "area_name": str(row["area_name"]),
+                "area_code": str(row["area_code"]),
+                "earliest_clear_price_date": str(row["earliest_clear_price_date"])
+                if row["earliest_clear_price_date"]
+                else None,
+            }
+            for row in rows
+        ]
+
+    def clear_price_latest_daily_dates_by_area(self) -> dict[str, str]:
+        if not self.table_exists("elecheck_clear_price_records"):
+            return {}
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT area_code, MAX(start_date) AS latest_date
+                FROM elecheck_clear_price_records
+                WHERE start_date = end_date
+                GROUP BY area_code
+                """
+            ).fetchall()
+        return {
+            str(row["area_code"]): str(row["latest_date"])
+            for row in rows
+            if row["area_code"] and row["latest_date"]
+        }
+
+    def resolve_area_code(self, area_selection: str) -> str:
+        value = area_selection.strip()
+        if not value:
+            raise ValueError("请选择或输入地区。")
+        if value.endswith(")") and "(" in value:
+            return value.rsplit("(", 1)[1].rstrip(")").strip()
+        if value.isdigit():
+            return value
+        if not self.table_exists("elecheck_area_records"):
+            raise ValueError("地区映射表不存在，请先运行 powertrade init-db。")
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT area_code
+                FROM elecheck_area_records
+                WHERE area_name = ?
+                """,
+                (value,),
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"找不到地区：{value}")
+        return str(row["area_code"])
+
+    def earliest_clear_price_date(self, area_selection: str) -> str | None:
+        area_code = self.resolve_area_code(area_selection)
+        if not self.table_exists("elecheck_area_records"):
+            return None
+        with self.connect() as connection:
+            row = connection.execute(
+                """
+                SELECT earliest_clear_price_date
+                FROM elecheck_area_records
+                WHERE area_code = ?
+                """,
+                (area_code,),
+            ).fetchone()
+        if row is None:
+            return None
+        value = row["earliest_clear_price_date"]
+        return str(value) if value else None
+
+    def search_clear_price(
+        self,
+        *,
+        area_code: str = "",
+        endpoint: str = "",
+        metric: str = "",
+        time96: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        limit: int = 1000,
+    ) -> list[sqlite3.Row]:
+        where = []
+        params: list[object] = []
+        if area_code:
+            where.append("area_code = ?")
+            params.append(area_code)
+        if endpoint:
+            where.append("endpoint = ?")
+            params.append(endpoint)
+        if metric:
+            where.append("metric = ?")
+            params.append(metric)
+        if time96:
+            where.append("time96 = ?")
+            params.append(time96)
+        if start_date:
+            where.append("start_date >= ?")
+            params.append(start_date)
+        if end_date:
+            where.append("start_date <= ?")
+            params.append(end_date)
+        return self.query_table(
+            table_name="elecheck_clear_price_records",
+            columns=[
+                "id",
+                "endpoint",
+                "area_code",
+                "start_date",
+                "end_date",
+                "time96",
+                "metric",
+                "value",
+                "unit",
+                "currency",
+                "collected_at",
+                "raw_json",
+            ],
+            where=where,
+            params=params,
+            order_by="start_date DESC, end_date DESC, endpoint, time96, metric",
+            limit=limit,
+        )
+
+    def delete_clear_price_records(self) -> int:
+        if not self.table_exists("elecheck_clear_price_records"):
+            return 0
+        with self.connect() as connection:
+            cursor = connection.execute("DELETE FROM elecheck_clear_price_records")
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+            connection.commit()
+        return deleted
+
+    def delete_purchasing_records(self) -> int:
+        if not self.table_exists("elecheck_purchasing_records"):
+            return 0
+        with self.connect() as connection:
+            cursor = connection.execute("DELETE FROM elecheck_purchasing_records")
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+            connection.commit()
+        return deleted
+
+    def delete_mechanism_records(self) -> int:
+        if not self.table_exists("elecheck_mechanism_electricity_price_records"):
+            return 0
+        with self.connect() as connection:
+            cursor = connection.execute("DELETE FROM elecheck_mechanism_electricity_price_records")
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+            connection.commit()
+        return deleted
+
+    def search_purchasing(
+        self,
+        *,
+        data_month: str = "",
+        province_name: str = "",
+        data_kind: str = "",
+        metric: str = "",
+        limit: int = 1000,
+    ) -> list[sqlite3.Row]:
+        where = []
+        params: list[object] = []
+        if data_month:
+            where.append("data_month = ?")
+            params.append(data_month)
+        if province_name:
+            where.append("province_name = ?")
+            params.append(province_name)
+        if data_kind:
+            where.append("data_kind = ?")
+            params.append(data_kind)
+        if metric:
+            where.append("metric = ?")
+            params.append(metric)
+        return self.query_table(
+            table_name="elecheck_purchasing_records",
+            columns=[
+                "id",
+                "endpoint",
+                "data_kind",
+                "data_month",
+                "province_name",
+                "metric",
+                "value",
+                "unit",
+                "diff_value",
+                "statistic",
+                "related_province_name",
+                "collected_at",
+                "raw_json",
+            ],
+            where=where,
+            params=params,
+            order_by="data_month DESC, province_name, data_kind, metric, statistic",
+            limit=limit,
+        )
+
+    def search_mechanism(
+        self,
+        *,
+        region_name: str = "",
+        category: str = "",
+        limit: int = 1000,
+    ) -> list[sqlite3.Row]:
+        where = []
+        params: list[object] = []
+        if region_name:
+            where.append("region_name = ?")
+            params.append(region_name)
+        if category:
+            where.append("category = ?")
+            params.append(category)
+        return self.query_table(
+            table_name="elecheck_mechanism_electricity_price_records",
+            columns=[
+                "id",
+                "region_name",
+                "region",
+                "category",
+                "price",
+                "clear_price",
+                "unit",
+                "collected_at",
+                "raw_json",
+            ],
+            where=where,
+            params=params,
+            order_by="region_name, category",
+            limit=limit,
+        )
+
+    def query_table(
+        self,
+        *,
+        table_name: str,
+        columns: list[str],
+        where: list[str],
+        params: list[object],
+        order_by: str,
+        limit: int,
+    ) -> list[sqlite3.Row]:
+        if not self.table_exists(table_name):
+            return []
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        params = [*params, limit]
+        with self.connect() as connection:
+            return connection.execute(
+                f"""
+                SELECT {", ".join(columns)}
+                FROM {table_name}
+                {where_sql}
+                ORDER BY {order_by}
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+
+    def export_query_to_csv(
+        self,
+        *,
+        output_path: Path,
+        table_name: str,
+        columns: list[str],
+        where: list[str],
+        params: list[object],
+        order_by: str,
+        progress,
+    ) -> int:
+        if not self.table_exists(table_name):
+            return 0
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        row_count = 0
+        with self.connect() as connection, output_path.open(
+            "w",
+            newline="",
+            encoding="utf-8-sig",
+        ) as file:
+            writer = csv.DictWriter(file, fieldnames=columns)
+            writer.writeheader()
+            cursor = connection.execute(
+                f"""
+                SELECT {", ".join(columns)}
+                FROM {table_name}
+                {where_sql}
+                ORDER BY {order_by}
+                """,
+                params,
+            )
+            for row in cursor:
+                writer.writerow(dict(row))
+                row_count += 1
+                if row_count % 10000 == 0:
+                    progress(row_count)
+        progress(row_count)
+        return row_count
+
+class DatePickerDialog:
+    def __init__(self, root, initial_value: str = "") -> None:
+        self.root = root
+        self.selected_date: date | None = None
+        self.current_month = self.parse_initial_date(initial_value)
+
+        self.dialog = Toplevel(root)
+        self.dialog.title("选择日期")
+        self.dialog.geometry("460x430")
+        self.dialog.resizable(False, False)
+        self.dialog.transient(root.winfo_toplevel())
+        self.dialog.grab_set()
+
+        self.year_var = StringVar(value=str(self.current_month.year))
+        self.month_var = StringVar(value=str(self.current_month.month))
+        self.build_layout()
+        self.render_calendar()
+
+    def build_layout(self) -> None:
+        header = ttk.Frame(self.dialog, padding=(14, 14, 14, 8))
+        header.pack(fill=X)
+        ttk.Button(header, text="上月", width=8, command=lambda: self.shift_month(-1)).pack(side=LEFT)
+
+        selectors = ttk.Frame(header)
+        selectors.pack(side=LEFT, fill=X, expand=True, padx=12)
+        ttk.Label(selectors, text="年份").pack(side=LEFT, padx=(0, 6))
+        self.year_combo = ttk.Combobox(
+            selectors,
+            textvariable=self.year_var,
+            values=[str(year) for year in range(2020, date.today().year + 2)],
+            width=8,
+            state="readonly",
+        )
+        self.year_combo.pack(side=LEFT, padx=(0, 12))
+        ttk.Label(selectors, text="月份").pack(side=LEFT, padx=(0, 6))
+        self.month_combo = ttk.Combobox(
+            selectors,
+            textvariable=self.month_var,
+            values=[str(month) for month in range(1, 13)],
+            width=6,
+            state="readonly",
+        )
+        self.month_combo.pack(side=LEFT)
+        self.year_combo.bind("<<ComboboxSelected>>", lambda _event: self.apply_year_month())
+        self.month_combo.bind("<<ComboboxSelected>>", lambda _event: self.apply_year_month())
+
+        ttk.Button(header, text="下月", width=8, command=lambda: self.shift_month(1)).pack(side=RIGHT)
+
+        self.days_frame = ttk.Frame(self.dialog, padding=(14, 4, 14, 10))
+        self.days_frame.pack(fill=BOTH, expand=True)
+
+        footer = ttk.Frame(self.dialog, padding=(14, 4, 14, 14))
+        footer.pack(fill=X)
+        ttk.Button(footer, text="选择今天", width=12, command=self.select_today).pack(side=LEFT)
+        ttk.Button(footer, text="取消", width=12, command=self.dialog.destroy).pack(side=RIGHT)
+
+    def render_calendar(self) -> None:
+        for child in self.days_frame.winfo_children():
+            child.destroy()
+
+        self.year_var.set(str(self.current_month.year))
+        self.month_var.set(str(self.current_month.month))
+        weekday_labels = ["一", "二", "三", "四", "五", "六", "日"]
+        for column, label in enumerate(weekday_labels):
+            ttk.Label(self.days_frame, text=label, anchor="center", font=("", 10, "bold")).grid(
+                row=0,
+                column=column,
+                sticky="nsew",
+                padx=3,
+                pady=4,
+            )
+
+        month_days = calendar.monthcalendar(self.current_month.year, self.current_month.month)
+        for row_index, week in enumerate(month_days, start=1):
+            for column, day in enumerate(week):
+                if day == 0:
+                    ttk.Label(self.days_frame, text="").grid(
+                        row=row_index,
+                        column=column,
+                        sticky="nsew",
+                        padx=3,
+                        pady=3,
+                    )
+                    continue
+                ttk.Button(
+                    self.days_frame,
+                    text=str(day),
+                    width=7,
+                    command=lambda day=day: self.select_day(day),
+                ).grid(row=row_index, column=column, sticky="nsew", padx=3, pady=3, ipady=5)
+
+        for column in range(7):
+            self.days_frame.columnconfigure(column, weight=1)
+        for row in range(7):
+            self.days_frame.rowconfigure(row, weight=1)
+
+    def apply_year_month(self) -> None:
+        self.current_month = date(int(self.year_var.get()), int(self.month_var.get()), 1)
+        self.render_calendar()
+
+    def shift_month(self, offset: int) -> None:
+        month_index = self.current_month.month - 1 + offset
+        year = self.current_month.year + month_index // 12
+        month = month_index % 12 + 1
+        self.current_month = date(year, month, 1)
+        self.render_calendar()
+
+    def select_day(self, day: int) -> None:
+        self.selected_date = date(self.current_month.year, self.current_month.month, day)
+        self.dialog.destroy()
+
+    def select_today(self) -> None:
+        self.selected_date = date.today()
+        self.dialog.destroy()
+
+    def show(self) -> str | None:
+        self.root.wait_window(self.dialog)
+        if self.selected_date is None:
+            return None
+        return self.selected_date.isoformat()
+
+    @staticmethod
+    def parse_initial_date(value: str) -> date:
+        try:
+            parsed = date.fromisoformat(value.strip())
+            return date(parsed.year, parsed.month, 1)
+        except ValueError:
+            today = date.today()
+            return date(today.year, today.month, 1)
+
+
+class ElecheckDataApp:
+    all_areas_label = "全部"
+
+    def __init__(self, root, repository: ElecheckDataRepository) -> None:
+        self.root = root
+        self.repository = repository
+        self.summary_var = StringVar(value="Ready")
+
+        self.clear_area_var = StringVar()
+        today = date.today()
+        self.clear_start_date_var = StringVar(value=(today - timedelta(days=7)).isoformat())
+        self.clear_end_date_var = StringVar(value=today.isoformat())
+        self.clear_filter_area_var = StringVar()
+        self.clear_filter_start_date_var = StringVar()
+        self.clear_filter_end_date_var = StringVar()
+        self.clear_filter_endpoint_var = StringVar()
+        self.clear_filter_metric_var = StringVar()
+        self.clear_filter_time96_var = StringVar()
+        self.clear_earliest_date_hint_var = StringVar(value="请选择地区以查看最早可用日期")
+        self.clear_authorization_var = StringVar()
+        self.clear_crawl_button: ttk.Button | None = None
+        self.clear_full_crawl_button: ttk.Button | None = None
+        self.clear_crawl_dialog: Toplevel | None = None
+        self.clear_crawl_message_var = StringVar()
+        self.clear_crawl_detail_var = StringVar()
+        self.clear_crawl_progress_var = DoubleVar(value=0.0)
+        self.clear_crawl_pause_button: ttk.Button | None = None
+        self.clear_crawl_pause_event: threading.Event | None = None
+        self.clear_crawl_stop_event: threading.Event | None = None
+        self.clear_crawl_abandon_event: threading.Event | None = None
+
+        self.purchasing_month_var = StringVar()
+        self.purchasing_province_var = StringVar()
+        self.purchasing_kind_var = StringVar()
+        self.purchasing_metric_var = StringVar()
+        self.purchasing_authorization_var = StringVar()
+        self.purchasing_collect_button: ttk.Button | None = None
+        self.purchasing_collect_dialog: Toplevel | None = None
+        self.purchasing_collect_message_var = StringVar()
+        self.purchasing_collect_detail_var = StringVar()
+        self.purchasing_collect_progress_var = DoubleVar(value=0.0)
+
+        self.mechanism_region_var = StringVar()
+        self.mechanism_category_var = StringVar()
+        self.mechanism_collect_button: ttk.Button | None = None
+        self.mechanism_collect_dialog: Toplevel | None = None
+        self.mechanism_collect_message_var = StringVar()
+        self.mechanism_collect_detail_var = StringVar()
+        self.mechanism_collect_progress_var = DoubleVar(value=0.0)
+
+        self.result_rows: dict[str, list[sqlite3.Row]] = {
+            "clear": [],
+            "purchasing": [],
+            "mechanism": [],
+        }
+
+        self.build_layout()
+        self.load_filter_values()
+        self.refresh_clear_price()
+        self.refresh_purchasing()
+        self.refresh_mechanism()
+
+    def pick_date(self, target_var: StringVar) -> None:
+        selected = DatePickerDialog(self.root, target_var.get()).show()
+        if selected:
+            target_var.set(selected)
+            if target_var is self.clear_start_date_var:
+                self.update_clear_price_earliest_hint(adjust_start_date=False)
+
+    def build_layout(self) -> None:
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(fill=BOTH, expand=True, padx=8, pady=8)
+
+        self.clear_tree, self.clear_raw_text = self.build_clear_price_tab(notebook)
+        self.purchasing_tree, self.purchasing_raw_text = self.build_purchasing_tab(notebook)
+        self.mechanism_tree, self.mechanism_raw_text = self.build_mechanism_tab(notebook)
+
+        status_bar = ttk.Frame(self.root)
+        status_bar.pack(fill=X, side="bottom")
+        ttk.Label(status_bar, textvariable=self.summary_var, anchor=W).pack(fill=X, padx=8, pady=4)
+
+    def build_clear_price_tab(self, notebook: ttk.Notebook):
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="现货价格")
+
+        crawl_bar = ttk.Frame(frame, style="Toolbar.TFrame")
+        crawl_bar.pack(fill=X)
+        ttk.Label(crawl_bar, text="地区").pack(side=LEFT, padx=(0, 6))
+        self.clear_area_combo = ttk.Combobox(crawl_bar, textvariable=self.clear_area_var, width=16)
+        self.clear_area_combo.pack(side=LEFT, padx=(0, 8))
+        self.clear_area_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.update_clear_price_earliest_hint(),
+        )
+        self.clear_area_combo.bind(
+            "<FocusOut>",
+            lambda _event: self.update_clear_price_earliest_hint(adjust_start_date=False),
+        )
+        ttk.Label(crawl_bar, text="开始日期").pack(side=LEFT, padx=(0, 6))
+        ttk.Entry(
+            crawl_bar,
+            textvariable=self.clear_start_date_var,
+            width=12,
+            state="readonly",
+        ).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(
+            crawl_bar,
+            text="选择",
+            width=5,
+            command=lambda: self.pick_date(self.clear_start_date_var),
+        ).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Label(
+            crawl_bar,
+            textvariable=self.clear_earliest_date_hint_var,
+            foreground="#666666",
+        ).pack(side=LEFT, padx=(0, 10))
+        ttk.Label(crawl_bar, text="结束日期").pack(side=LEFT, padx=(0, 6))
+        ttk.Entry(
+            crawl_bar,
+            textvariable=self.clear_end_date_var,
+            width=12,
+            state="readonly",
+        ).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(
+            crawl_bar,
+            text="选择",
+            width=5,
+            command=lambda: self.pick_date(self.clear_end_date_var),
+        ).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Label(crawl_bar, text="authorization").pack(side=LEFT, padx=(0, 6))
+        ttk.Entry(crawl_bar, textvariable=self.clear_authorization_var, width=16, show="*").pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        self.clear_crawl_button = ttk.Button(
+            crawl_bar,
+            text="开始采集",
+            command=self.start_clear_price_crawl,
+        )
+        self.clear_crawl_button.pack(side=LEFT)
+        self.clear_full_crawl_button = ttk.Button(
+            crawl_bar,
+            text="爬取全部数据",
+            command=self.start_clear_price_full_coverage_crawl,
+        )
+        self.clear_full_crawl_button.pack(side=LEFT, padx=(6, 0))
+
+        toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
+        toolbar.pack(fill=X)
+
+        ttk.Label(toolbar, text="筛选地区").pack(side=LEFT, padx=(0, 3))
+        self.clear_filter_area_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.clear_filter_area_var,
+            width=12,
+        )
+        self.clear_filter_area_combo.pack(side=LEFT, padx=(0, 5))
+        ttk.Label(toolbar, text="日期起").pack(side=LEFT, padx=(0, 3))
+        ttk.Entry(
+            toolbar,
+            textvariable=self.clear_filter_start_date_var,
+            width=10,
+            state="readonly",
+        ).pack(side=LEFT, padx=(0, 2))
+        ttk.Button(
+            toolbar,
+            text="选择",
+            width=4,
+            command=lambda: self.pick_date(self.clear_filter_start_date_var),
+        ).pack(side=LEFT, padx=(0, 5))
+        ttk.Label(toolbar, text="日期止").pack(side=LEFT, padx=(0, 3))
+        ttk.Entry(
+            toolbar,
+            textvariable=self.clear_filter_end_date_var,
+            width=10,
+            state="readonly",
+        ).pack(side=LEFT, padx=(0, 2))
+        ttk.Button(
+            toolbar,
+            text="选择",
+            width=4,
+            command=lambda: self.pick_date(self.clear_filter_end_date_var),
+        ).pack(side=LEFT, padx=(0, 5))
+        ttk.Label(toolbar, text="结果接口").pack(side=LEFT, padx=(0, 3))
+        self.clear_endpoint_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.clear_filter_endpoint_var,
+            values=["", "detail", "statistics"],
+            width=8,
+            state="readonly",
+        )
+        self.clear_endpoint_combo.pack(side=LEFT, padx=(0, 5))
+        ttk.Label(toolbar, text="结果指标").pack(side=LEFT, padx=(0, 3))
+        self.clear_metric_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.clear_filter_metric_var,
+            width=13,
+        )
+        self.clear_metric_combo.pack(side=LEFT, padx=(0, 5))
+        ttk.Label(toolbar, text="时点").pack(side=LEFT, padx=(0, 3))
+        self.clear_time96_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.clear_filter_time96_var,
+            width=6,
+        )
+        self.clear_time96_combo.pack(side=LEFT, padx=(0, 5))
+        ttk.Button(toolbar, text="刷新", width=6, command=self.refresh_clear_price).pack(side=LEFT)
+        ttk.Button(toolbar, text="重置", width=6, command=self.reset_clear_price).pack(
+            side=LEFT,
+            padx=(4, 0),
+        )
+        ttk.Button(
+            toolbar,
+            text="导出",
+            width=6,
+            command=lambda: self.export_rows("clear"),
+        ).pack(
+            side=LEFT,
+            padx=(4, 0),
+        )
+        ttk.Button(
+            toolbar,
+            text="清空数据",
+            width=8,
+            command=self.clear_all_clear_price_records,
+        ).pack(side=LEFT, padx=(4, 0))
+
+        columns = ("date", "endpoint", "area_code", "time96", "metric", "value", "unit")
+        tree, raw_text = self.build_result_panel(frame, columns, self.on_select_clear_price)
+        headings = {
+            "date": ("日期", 110),
+            "endpoint": ("接口", 80),
+            "area_code": ("地区编码", 120),
+            "time96": ("时点", 80),
+            "metric": ("指标", 190),
+            "value": ("数值", 110),
+            "unit": ("单位", 90),
+        }
+        self.configure_tree_columns(tree, headings)
+        return tree, raw_text
+
+    def build_purchasing_tab(self, notebook: ttk.Notebook):
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="代理购电价格")
+        toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
+        toolbar.pack(fill=X)
+
+        ttk.Label(toolbar, text="月份").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_month_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.purchasing_month_var,
+            width=12,
+        )
+        self.purchasing_month_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Label(toolbar, text="省份").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_province_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.purchasing_province_var,
+            width=14,
+        )
+        self.purchasing_province_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Label(toolbar, text="类型").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_kind_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.purchasing_kind_var,
+            width=18,
+        )
+        self.purchasing_kind_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Label(toolbar, text="指标").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_metric_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.purchasing_metric_var,
+            width=24,
+        )
+        self.purchasing_metric_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Button(toolbar, text="搜索", command=self.refresh_purchasing).pack(side=LEFT)
+        ttk.Button(toolbar, text="重置", command=self.reset_purchasing).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(toolbar, text="导出 CSV", command=lambda: self.export_rows("purchasing")).pack(
+            side=LEFT,
+            padx=(8, 0),
+        )
+
+        collect_toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
+        collect_toolbar.pack(fill=X)
+        ttk.Label(collect_toolbar, text="authorization").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(
+            collect_toolbar,
+            textvariable=self.purchasing_authorization_var,
+            width=16,
+            show="*",
+        ).pack(side=LEFT, padx=(0, 6))
+        self.purchasing_collect_button = ttk.Button(
+            collect_toolbar,
+            text="采集全部",
+            width=8,
+            command=self.start_purchasing_collect_all,
+        )
+        self.purchasing_collect_button.pack(side=LEFT, padx=(0, 4))
+        ttk.Button(
+            collect_toolbar,
+            text="清空数据",
+            width=8,
+            command=self.clear_all_purchasing_records,
+        ).pack(side=LEFT, padx=(0, 4))
+
+        columns = ("month", "province", "kind", "metric", "value", "statistic", "related")
+        tree, raw_text = self.build_result_panel(frame, columns, self.on_select_purchasing)
+        headings = {
+            "month": ("月份", 90),
+            "province": ("省份", 100),
+            "kind": ("数据类型", 150),
+            "metric": ("指标", 190),
+            "value": ("数值", 100),
+            "statistic": ("统计", 100),
+            "related": ("关联省份", 100),
+        }
+        self.configure_tree_columns(tree, headings)
+        return tree, raw_text
+
+    def build_mechanism_tab(self, notebook: ttk.Notebook):
+        frame = ttk.Frame(notebook)
+        notebook.add(frame, text="增量机制电价")
+        toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
+        toolbar.pack(fill=X)
+
+        ttk.Label(toolbar, text="地区").pack(side=LEFT, padx=(0, 6))
+        self.mechanism_region_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.mechanism_region_var,
+            width=16,
+        )
+        self.mechanism_region_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Label(toolbar, text="电源类型").pack(side=LEFT, padx=(0, 6))
+        self.mechanism_category_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.mechanism_category_var,
+            width=16,
+        )
+        self.mechanism_category_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Button(toolbar, text="搜索", command=self.refresh_mechanism).pack(side=LEFT)
+        ttk.Button(toolbar, text="重置", command=self.reset_mechanism).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(toolbar, text="导出 CSV", command=lambda: self.export_rows("mechanism")).pack(
+            side=LEFT,
+            padx=(8, 0),
+        )
+        self.mechanism_collect_button = ttk.Button(
+            toolbar,
+            text="采集全部",
+            width=8,
+            command=self.start_mechanism_collect_all,
+        )
+        self.mechanism_collect_button.pack(side=LEFT, padx=(8, 0))
+        ttk.Button(
+            toolbar,
+            text="清空数据",
+            width=8,
+            command=self.clear_all_mechanism_records,
+        ).pack(side=LEFT, padx=(4, 0))
+
+        columns = ("region_name", "region", "category", "price", "clear_price", "unit")
+        tree, raw_text = self.build_result_panel(frame, columns, self.on_select_mechanism)
+        headings = {
+            "region_name": ("地区", 120),
+            "region": ("地区标识", 110),
+            "category": ("电源类型", 140),
+            "price": ("燃煤基准价", 110),
+            "clear_price": ("26年增量机制电价", 140),
+            "unit": ("单位", 90),
+        }
+        self.configure_tree_columns(tree, headings)
+        return tree, raw_text
+
+    def build_result_panel(self, parent: ttk.Frame, columns: tuple[str, ...], select_callback):
+        main = ttk.PanedWindow(parent, orient="vertical")
+        main.pack(fill=BOTH, expand=True, padx=8, pady=(0, 8))
+
+        table_frame = ttk.Frame(main)
+        detail_frame = ttk.Frame(main)
+        main.add(table_frame, weight=4)
+        main.add(detail_frame, weight=1)
+
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+        scroll = ttk.Scrollbar(table_frame, orient=VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side=LEFT, fill=BOTH, expand=True)
+        scroll.pack(side=RIGHT, fill=Y)
+        tree.bind("<<TreeviewSelect>>", select_callback)
+
+        raw_text = __import__("tkinter").Text(detail_frame, wrap="word", height=6, padx=10, pady=8)
+        raw_scroll = ttk.Scrollbar(detail_frame, orient=VERTICAL, command=raw_text.yview)
+        raw_text.configure(yscrollcommand=raw_scroll.set)
+        raw_text.pack(side=LEFT, fill=BOTH, expand=True)
+        raw_scroll.pack(side=RIGHT, fill=Y)
+        raw_text.configure(state="disabled")
+        return tree, raw_text
+
+    def configure_tree_columns(self, tree: ttk.Treeview, headings: dict[str, tuple[str, int]]) -> None:
+        for column, (label, width) in headings.items():
+            tree.heading(column, text=label)
+            tree.column(column, width=width, minwidth=max(70, width // 2), anchor="center")
+
+    def load_filter_values(self) -> None:
+        area_options = self.repository.area_options()
+        if area_options:
+            self.clear_area_combo["values"] = ["", self.all_areas_label] + area_options
+            self.clear_filter_area_combo["values"] = ["", self.all_areas_label] + area_options
+        else:
+            fallback_area_values = [""] + self.repository.distinct_values(
+                "elecheck_clear_price_records",
+                "area_code",
+            )
+            self.clear_area_combo["values"] = fallback_area_values
+            self.clear_filter_area_combo["values"] = fallback_area_values
+        self.clear_metric_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_clear_price_records",
+            "metric",
+        )
+        self.clear_time96_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_clear_price_records",
+            "time96",
+        )
+        self.purchasing_month_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_purchasing_records",
+            "data_month",
+        )
+        self.purchasing_province_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_purchasing_records",
+            "province_name",
+        )
+        self.purchasing_kind_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_purchasing_records",
+            "data_kind",
+        )
+        self.purchasing_metric_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_purchasing_records",
+            "metric",
+        )
+        self.mechanism_region_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_mechanism_electricity_price_records",
+            "region_name",
+        )
+        self.mechanism_category_combo["values"] = [""] + self.repository.distinct_values(
+            "elecheck_mechanism_electricity_price_records",
+            "category",
+        )
+        self.update_clear_full_crawl_button_text()
+        self.update_clear_price_earliest_hint(adjust_start_date=False)
+
+    def update_clear_full_crawl_button_text(self) -> None:
+        if self.clear_full_crawl_button is None:
+            return
+        latest_dates = self.repository.clear_price_latest_daily_dates_by_area()
+        button_text = "更新全部数据" if latest_dates else "爬取全部数据"
+        self.clear_full_crawl_button.configure(text=button_text)
+
+    def update_clear_price_earliest_hint(self, adjust_start_date: bool = True) -> None:
+        area_selection = self.clear_area_var.get().strip()
+        if not area_selection:
+            self.clear_earliest_date_hint_var.set("请选择地区以查看最早可用日期")
+            return
+        if area_selection == self.all_areas_label:
+            self.clear_earliest_date_hint_var.set("全部地区：开始采集使用所选日期；全量/更新请点右侧按钮")
+            return
+
+        try:
+            earliest_date = self.repository.earliest_clear_price_date(area_selection)
+        except ValueError:
+            self.clear_earliest_date_hint_var.set("未找到该地区的最早可用日期")
+            return
+
+        if not earliest_date:
+            self.clear_earliest_date_hint_var.set("该地区尚未探测最早可用日期")
+            return
+
+        self.clear_earliest_date_hint_var.set(f"最早可选：{earliest_date}")
+        if adjust_start_date and self.clear_start_date_var.get() < earliest_date:
+            self.clear_start_date_var.set(earliest_date)
+
+    def refresh_clear_price(self) -> None:
+        area_code = ""
+        area_selection = self.clear_filter_area_var.get().strip()
+        if area_selection and area_selection != self.all_areas_label:
+            try:
+                area_code = self.repository.resolve_area_code(area_selection)
+            except ValueError:
+                area_code = area_selection
+        rows = self.repository.search_clear_price(
+            area_code=area_code,
+            endpoint=self.clear_filter_endpoint_var.get().strip(),
+            metric=self.clear_filter_metric_var.get().strip(),
+            time96=self.clear_filter_time96_var.get().strip(),
+            start_date=self.clear_filter_start_date_var.get().strip(),
+            end_date=self.clear_filter_end_date_var.get().strip(),
+        )
+        self.result_rows["clear"] = rows
+        self.clear_tree.delete(*self.clear_tree.get_children())
+        for index, row in enumerate(rows):
+            self.clear_tree.insert(
+                "",
+                END,
+                iid=str(index),
+                values=(
+                    self.format_date_range(row["start_date"], row["end_date"]),
+                    row["endpoint"] or "",
+                    row["area_code"] or "",
+                    row["time96"] or "",
+                    row["metric"] or "",
+                    self.format_value(row["value"]),
+                    row["unit"] or "",
+                ),
+            )
+        self.update_summary("现货价格", rows)
+        self.show_first_row(self.clear_tree, rows, self.clear_raw_text)
+
+    def start_clear_price_crawl(self) -> None:
+        area_selection = self.clear_area_var.get().strip()
+        start_date = self.clear_start_date_var.get().strip()
+        end_date = self.clear_end_date_var.get().strip()
+        authorization = self.clear_authorization_var.get().strip()
+
+        if not area_selection:
+            messagebox.showerror("缺少地区", "请选择地区，或直接输入 area_code。")
+            return
+        if not start_date or not end_date:
+            messagebox.showerror("缺少日期", "请填写开始日期和结束日期，格式为 YYYY-MM-DD。")
+            return
+
+        try:
+            targets = self.build_clear_price_crawl_targets(area_selection, start_date, end_date)
+        except ValueError as exc:
+            messagebox.showerror("地区错误", str(exc))
+            return
+
+        self.begin_clear_price_crawl(targets, start_date, end_date, authorization)
+
+    def start_clear_price_full_coverage_crawl(self) -> None:
+        end_date = self.clear_end_date_var.get().strip()
+        authorization = self.clear_authorization_var.get().strip()
+        if not end_date:
+            messagebox.showerror("缺少日期", "请填写结束日期，格式为 YYYY-MM-DD。")
+            return
+        latest_dates = self.repository.clear_price_latest_daily_dates_by_area()
+        is_update = bool(latest_dates)
+        action_text = "更新全部数据" if is_update else "爬取全部数据"
+        confirm_message = (
+            "将从各地区已采集到的最新日期往前一天开始，逐日更新到当前选择的结束日期。\n\n"
+            if is_update
+            else "将按照每个地区的最早可用日期，逐日采集到当前选择的结束日期。\n\n"
+        )
+        if not messagebox.askyesno(
+            f"确认{action_text}",
+            f"{confirm_message}结束日期：{end_date}\n\n确认继续吗？",
+        ):
+            return
+
+        try:
+            targets = self.build_clear_price_full_coverage_targets(
+                end_date,
+                latest_dates=latest_dates,
+            )
+        except ValueError as exc:
+            messagebox.showerror("全量采集错误", str(exc))
+            return
+
+        detail_override = (
+            f"更新全部数据：从各地区已采最新日期往前一天采集至 {end_date}"
+            if is_update
+            else f"爬取全部数据：按各地区最早可用日期采集至 {end_date}"
+        )
+        self.begin_clear_price_crawl(targets, "", end_date, authorization, detail_override)
+
+    def begin_clear_price_crawl(
+        self,
+        targets: list[dict[str, str]],
+        start_date: str,
+        end_date: str,
+        authorization: str,
+        detail_override: str | None = None,
+    ) -> None:
+        if self.clear_crawl_button is not None:
+            self.clear_crawl_button.configure(state="disabled")
+        if self.clear_full_crawl_button is not None:
+            self.clear_full_crawl_button.configure(state="disabled")
+        self.summary_var.set("正在采集现货价格数据...")
+        self.show_clear_price_crawl_dialog(targets, start_date, end_date, detail_override)
+        self.clear_crawl_pause_event = threading.Event()
+        self.clear_crawl_stop_event = threading.Event()
+        self.clear_crawl_abandon_event = threading.Event()
+
+        thread = threading.Thread(
+            target=self.clear_price_crawl_worker,
+            args=(targets, authorization),
+            daemon=True,
+        )
+        thread.start()
+
+    def build_clear_price_crawl_targets(
+        self,
+        area_selection: str,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, str]]:
+        if date.fromisoformat(start_date) > date.fromisoformat(end_date):
+            raise ValueError("开始日期不能晚于结束日期。")
+
+        if area_selection != self.all_areas_label:
+            area_code = self.repository.resolve_area_code(area_selection)
+            return [
+                {
+                    "area_name": area_selection,
+                    "area_code": area_code,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                }
+            ]
+
+        return self.build_clear_price_all_area_range_targets(start_date, end_date)
+
+    def build_clear_price_all_area_range_targets(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> list[dict[str, str]]:
+        areas = self.repository.clear_price_area_targets()
+        if not areas:
+            raise ValueError("没有可采集的地区。请先运行 powertrade init-db。")
+
+        targets = []
+        for area in areas:
+            area_name = str(area["area_name"])
+            area_code = str(area["area_code"])
+            targets.append(
+                {
+                    "area_name": area_name,
+                    "area_code": area_code,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                }
+            )
+        return targets
+
+    def build_clear_price_full_coverage_targets(
+        self,
+        end_date: str,
+        *,
+        latest_dates: dict[str, str] | None = None,
+    ) -> list[dict[str, str]]:
+        date.fromisoformat(end_date)
+        areas = self.repository.clear_price_area_targets()
+        if not areas:
+            raise ValueError("没有可采集的地区。请先运行 powertrade init-db。")
+
+        latest_dates = latest_dates or {}
+        targets = []
+        missing_earliest = []
+        skipped_after_end = []
+        for area in areas:
+            area_name = str(area["area_name"])
+            area_code = str(area["area_code"])
+            earliest_date = area["earliest_clear_price_date"]
+            if not earliest_date:
+                missing_earliest.append(f"{area_name}({area_code})")
+                continue
+            if area_code in latest_dates:
+                target_start = date.fromisoformat(latest_dates[area_code]) - timedelta(days=1)
+                earliest = date.fromisoformat(str(earliest_date))
+                if target_start < earliest:
+                    target_start = earliest
+                target_start_date = target_start.isoformat()
+            else:
+                target_start_date = str(earliest_date)
+            if date.fromisoformat(target_start_date) > date.fromisoformat(end_date):
+                skipped_after_end.append(f"{area_name}({area_code})")
+                continue
+            targets.append(
+                {
+                    "area_name": area_name,
+                    "area_code": area_code,
+                    "start_date": target_start_date,
+                    "end_date": end_date,
+                }
+            )
+
+        if missing_earliest:
+            preview = "、".join(missing_earliest[:8])
+            suffix = "..." if len(missing_earliest) > 8 else ""
+            raise ValueError(f"以下地区缺少最早可用日期，无法全覆盖采集：{preview}{suffix}")
+        if not targets:
+            preview = "、".join(skipped_after_end[:8])
+            suffix = "..." if len(skipped_after_end) > 8 else ""
+            raise ValueError(f"没有可采集的地区。以下地区最早可用日期晚于结束日期：{preview}{suffix}")
+        return targets
+
+    def show_clear_price_crawl_dialog(
+        self,
+        targets: list[dict[str, str]],
+        start_date: str,
+        end_date: str,
+        detail_override: str | None = None,
+    ) -> None:
+        if self.clear_crawl_dialog is not None and self.clear_crawl_dialog.winfo_exists():
+            self.clear_crawl_dialog.destroy()
+
+        dialog = Toplevel(self.root)
+        dialog.title("正在采集现货价格")
+        dialog.geometry("520x230")
+        dialog.resizable(False, False)
+        dialog.protocol("WM_DELETE_WINDOW", self.abandon_clear_price_crawl)
+
+        if len(targets) == 1:
+            label = f"{targets[0]['area_name']} {targets[0]['area_code']}"
+        else:
+            label = f"全部地区（{len(targets)} 个）"
+        self.clear_crawl_message_var.set(f"正在采集 {label} 的现货价格数据...")
+        if detail_override is not None:
+            detail = detail_override
+        elif len(targets) == 1:
+            detail = f"日期范围：{targets[0]['start_date']} 至 {targets[0]['end_date']}"
+        elif len({target["start_date"] for target in targets}) == 1:
+            detail = f"全部地区日期范围：{start_date} 至 {end_date}"
+        else:
+            detail = f"全部地区全覆盖：按各地区最早可用日期采集至 {end_date}"
+        self.clear_crawl_detail_var.set(detail)
+        self.clear_crawl_progress_var.set(0.0)
+        ttk.Label(dialog, textvariable=self.clear_crawl_message_var, wraplength=460).pack(
+            side=TOP,
+            fill=X,
+            padx=18,
+            pady=(18, 6),
+        )
+        ttk.Label(dialog, textvariable=self.clear_crawl_detail_var, wraplength=480).pack(
+            side=TOP,
+            fill=X,
+            padx=18,
+            pady=(0, 8),
+        )
+        ttk.Progressbar(
+            dialog,
+            mode="determinate",
+            maximum=100,
+            variable=self.clear_crawl_progress_var,
+        ).pack(fill=X, padx=18, pady=(0, 14))
+
+        button_bar = ttk.Frame(dialog)
+        button_bar.pack(fill=X, padx=18, pady=(0, 14))
+        self.clear_crawl_pause_button = ttk.Button(
+            button_bar,
+            text="暂停",
+            command=self.toggle_clear_price_crawl_pause,
+        )
+        self.clear_crawl_pause_button.pack(side=LEFT)
+        ttk.Button(button_bar, text="结束并保存", command=self.stop_clear_price_crawl).pack(
+            side=LEFT,
+            padx=(8, 0),
+        )
+        ttk.Button(button_bar, text="放弃采集", command=self.abandon_clear_price_crawl).pack(
+            side=LEFT,
+            padx=(8, 0),
+        )
+        ttk.Label(button_bar, text="可最小化窗口，采集会继续。").pack(side=RIGHT)
+
+        self.clear_crawl_dialog = dialog
+
+    def toggle_clear_price_crawl_pause(self) -> None:
+        if self.clear_crawl_pause_event is None:
+            return
+        if self.clear_crawl_pause_event.is_set():
+            self.clear_crawl_pause_event.clear()
+            if self.clear_crawl_pause_button is not None:
+                self.clear_crawl_pause_button.configure(text="暂停")
+            self.update_clear_price_crawl_progress(message="继续采集")
+        else:
+            self.clear_crawl_pause_event.set()
+            if self.clear_crawl_pause_button is not None:
+                self.clear_crawl_pause_button.configure(text="继续")
+            self.update_clear_price_crawl_progress(message="采集已暂停")
+
+    def stop_clear_price_crawl(self) -> None:
+        if self.clear_crawl_stop_event is not None:
+            self.clear_crawl_stop_event.set()
+        self.update_clear_price_crawl_progress(message="正在结束采集，将保存已采集数据...")
+
+    def abandon_clear_price_crawl(self) -> None:
+        if self.clear_crawl_abandon_event is not None:
+            self.clear_crawl_abandon_event.set()
+        if self.clear_crawl_stop_event is not None:
+            self.clear_crawl_stop_event.set()
+        self.update_clear_price_crawl_progress(message="正在放弃后续采集，已写入数据会保留...")
+
+    def update_clear_price_crawl_progress(
+        self,
+        *,
+        message: str,
+        detail: str | None = None,
+        percent: float | None = None,
+    ) -> None:
+        self.clear_crawl_message_var.set(message)
+        if detail is not None:
+            self.clear_crawl_detail_var.set(detail)
+        if percent is not None:
+            self.clear_crawl_progress_var.set(percent)
+        self.summary_var.set(message)
+
+    def clear_price_crawl_worker(
+        self,
+        targets: list[dict[str, str]],
+        authorization: str,
+    ) -> None:
+        try:
+            pause_event = self.clear_crawl_pause_event
+            stop_event = self.clear_crawl_stop_event
+            abandon_event = self.clear_crawl_abandon_event
+            resolved_authorization = resolve_elecheck_authorization(authorization)
+            if resolved_authorization:
+                if authorization:
+                    cache_elecheck_authorization(resolved_authorization)
+                set_elecheck_authorization_for_current_process(resolved_authorization)
+            client = ElecheckClient(authorization=resolved_authorization)
+            area_jobs = []
+            for target in targets:
+                spider = ElecheckClearPriceSpider(
+                    client=client,
+                    area_code=target["area_code"],
+                    start_date=target["start_date"],
+                    end_date=target["end_date"],
+                    daily=True,
+                )
+                area_jobs.append((target, spider, list(spider.iter_request_date_ranges())))
+
+            total_ranges = sum(len(request_ranges) for _target, _spider, request_ranges in area_jobs)
+            completed_ranges = 0
+            record_count = 0
+            written = 0
+            stopped_early = False
+
+            for area_index, (target, spider, request_ranges) in enumerate(area_jobs, start=1):
+                area_label = f"{target['area_name']} {target['area_code']}"
+                if stop_event is not None and stop_event.is_set():
+                    stopped_early = True
+                    break
+
+                for request_start_date, request_end_date in request_ranges:
+                    while pause_event is not None and pause_event.is_set():
+                        if abandon_event is not None and abandon_event.is_set():
+                            break
+                        sleep(0.2)
+                    if abandon_event is not None and abandon_event.is_set():
+                        stopped_early = True
+                        break
+
+                    date_label = self.format_date_range(
+                        request_start_date.isoformat(),
+                        request_end_date.isoformat(),
+                    )
+                    self.root.after(
+                        0,
+                        lambda area_label=area_label,
+                        area_index=area_index,
+                        date_label=date_label,
+                        completed_ranges=completed_ranges,
+                        record_count=record_count,
+                        written=written: self.update_clear_price_crawl_progress(
+                            message=f"正在采集 {area_label}",
+                            detail=(
+                                f"地区 {area_index}/{len(area_jobs)} | 日期 {date_label} | "
+                                f"进度 {completed_ranges}/{total_ranges} | "
+                                f"已抓取 {record_count} 条 | 已写入 {written} 条"
+                            ),
+                            percent=(completed_ranges / total_ranges * 100)
+                            if total_ranges
+                            else 0,
+                        ),
+                    )
+
+                    records = list(
+                        spider.crawl_date_range(
+                            request_start_date=request_start_date,
+                            request_end_date=request_end_date,
+                        )
+                    )
+                    record_count += len(records)
+                    if abandon_event is not None and abandon_event.is_set():
+                        stopped_early = True
+                        break
+
+                    written += upsert_elecheck_clear_price_records(records)
+                    completed_ranges += 1
+                    self.root.after(
+                        0,
+                        lambda area_index=area_index,
+                        completed_ranges=completed_ranges,
+                        record_count=record_count,
+                        written=written: self.update_clear_price_crawl_progress(
+                            message="现货价格采集中...",
+                            detail=(
+                                f"地区 {area_index}/{len(area_jobs)} | "
+                                f"进度 {completed_ranges}/{total_ranges} | "
+                                f"已抓取 {record_count} 条 | 已写入 {written} 条"
+                            ),
+                            percent=(completed_ranges / total_ranges * 100)
+                            if total_ranges
+                            else 100,
+                        ),
+                    )
+
+                    if stop_event is not None and stop_event.is_set():
+                        stopped_early = True
+                        break
+
+                if abandon_event is not None and abandon_event.is_set():
+                    break
+                if stop_event is not None and stop_event.is_set():
+                    break
+
+            client.close()
+            if abandon_event is not None and abandon_event.is_set():
+                self.root.after(
+                    0,
+                    lambda record_count=record_count, written=written: (
+                        self.on_clear_price_crawl_abandoned(record_count, written)
+                    ),
+                )
+                return
+
+        except ElecheckUnauthorizedError:
+            self.root.after(0, self.on_clear_price_unauthorized)
+        except Exception as exc:
+            message = str(exc)
+            self.root.after(0, lambda message=message: self.on_clear_price_crawl_error(message))
+        else:
+            self.root.after(
+                0,
+                lambda record_count=record_count, written=written, stopped_early=stopped_early: (
+                    self.on_clear_price_crawl_success(
+                    record_count,
+                    written,
+                    stopped_early,
+                    )
+                ),
+            )
+
+    def on_clear_price_unauthorized(self) -> None:
+        self.finish_clear_price_crawl()
+        messagebox.showerror(
+            "授权已过期",
+            "授权已过期，请联系管理员更新授权文件。",
+        )
+        self.summary_var.set("现货价格采集失败：授权已过期，请联系管理员更新授权文件。")
+
+    def on_clear_price_crawl_error(self, message: str) -> None:
+        self.finish_clear_price_crawl()
+        messagebox.showerror("现货价格采集失败", message)
+        self.summary_var.set("现货价格采集失败。")
+
+    def on_clear_price_crawl_success(
+        self,
+        record_count: int,
+        written: int,
+        stopped_early: bool = False,
+    ) -> None:
+        self.finish_clear_price_crawl()
+        self.load_filter_values()
+        self.refresh_clear_price()
+        status = "已结束并保存" if stopped_early else "采集完成"
+        self.summary_var.set(f"现货价格{status}：抓取 {record_count} 条，写入/更新 {written} 条。")
+        messagebox.showinfo(
+            status,
+            f"现货价格{status}。\n\n抓取记录：{record_count}\n写入/更新：{written}",
+        )
+
+    def on_clear_price_crawl_abandoned(self, record_count: int, written: int) -> None:
+        self.finish_clear_price_crawl()
+        self.load_filter_values()
+        self.refresh_clear_price()
+        self.summary_var.set(
+            f"已放弃后续采集：本次抓取 {record_count} 条，已写入/更新 {written} 条。"
+        )
+        messagebox.showinfo(
+            "已放弃采集",
+            (
+                "已停止后续现货价格采集。\n\n"
+                f"本次抓取记录：{record_count}\n"
+                f"已写入/更新：{written}"
+            ),
+        )
+
+    def finish_clear_price_crawl(self) -> None:
+        if self.clear_crawl_button is not None:
+            self.clear_crawl_button.configure(state="normal")
+        if self.clear_full_crawl_button is not None:
+            self.clear_full_crawl_button.configure(state="normal")
+        if self.clear_crawl_dialog is not None and self.clear_crawl_dialog.winfo_exists():
+            self.clear_crawl_dialog.destroy()
+        self.clear_crawl_dialog = None
+        self.clear_crawl_pause_button = None
+        self.clear_crawl_pause_event = None
+        self.clear_crawl_stop_event = None
+        self.clear_crawl_abandon_event = None
+
+    def refresh_purchasing(self) -> None:
+        rows = self.repository.search_purchasing(
+            data_month=self.purchasing_month_var.get().strip(),
+            province_name=self.purchasing_province_var.get().strip(),
+            data_kind=self.purchasing_kind_var.get().strip(),
+            metric=self.purchasing_metric_var.get().strip(),
+        )
+        self.result_rows["purchasing"] = rows
+        self.purchasing_tree.delete(*self.purchasing_tree.get_children())
+        for index, row in enumerate(rows):
+            self.purchasing_tree.insert(
+                "",
+                END,
+                iid=str(index),
+                values=(
+                    row["data_month"] or "",
+                    row["province_name"] or "",
+                    row["data_kind"] or "",
+                    row["metric"] or "",
+                    self.format_value(row["value"]),
+                    row["statistic"] or "",
+                    row["related_province_name"] or "",
+                ),
+            )
+        self.update_summary("代理购电价格", rows)
+        self.show_first_row(self.purchasing_tree, rows, self.purchasing_raw_text)
+
+    def refresh_mechanism(self) -> None:
+        rows = self.repository.search_mechanism(
+            region_name=self.mechanism_region_var.get().strip(),
+            category=self.mechanism_category_var.get().strip(),
+        )
+        self.result_rows["mechanism"] = rows
+        self.mechanism_tree.delete(*self.mechanism_tree.get_children())
+        for index, row in enumerate(rows):
+            self.mechanism_tree.insert(
+                "",
+                END,
+                iid=str(index),
+                values=(
+                    row["region_name"] or "",
+                    row["region"] or "",
+                    row["category"] or "",
+                    self.format_value(row["price"]),
+                    self.format_value(row["clear_price"]),
+                    row["unit"] or "",
+                ),
+            )
+        self.update_summary("增量机制电价", rows)
+        self.show_first_row(self.mechanism_tree, rows, self.mechanism_raw_text)
+
+    def reset_clear_price(self) -> None:
+        self.clear_filter_area_var.set("")
+        self.clear_filter_endpoint_var.set("")
+        self.clear_filter_metric_var.set("")
+        self.clear_filter_time96_var.set("")
+        self.clear_filter_start_date_var.set("")
+        self.clear_filter_end_date_var.set("")
+        self.refresh_clear_price()
+
+    def clear_all_clear_price_records(self) -> None:
+        if not messagebox.askyesno(
+            "确认清空",
+            "将删除 elecheck_clear_price_records 中的所有现货价格数据。\n\n确认继续吗？",
+        ):
+            return
+
+        try:
+            deleted = self.repository.delete_clear_price_records()
+        except Exception as exc:
+            messagebox.showerror("清空失败", str(exc))
+            self.summary_var.set("清空现货价格数据失败。")
+            return
+
+        self.load_filter_values()
+        self.refresh_clear_price()
+        self.summary_var.set(f"已清空现货价格数据，删除 {deleted} 条记录。")
+        messagebox.showinfo("清空完成", f"已删除 {deleted} 条现货价格记录。")
+
+    def start_purchasing_collect_all(self) -> None:
+        if not messagebox.askyesno(
+            "确认采集",
+            (
+                "将从 2024-02 起采集全国代理购电价格月度大表，直到当前最新可用月份。\n\n"
+                "重复采集到相同数据时会更新原记录，不会插入重复记录。\n\n确认继续吗？"
+            ),
+        ):
+            return
+
+        if self.purchasing_collect_button is not None:
+            self.purchasing_collect_button.configure(state="disabled")
+        self.show_purchasing_collect_dialog()
+        self.summary_var.set("正在采集代理购电价格数据...")
+        thread = threading.Thread(
+            target=self.purchasing_collect_all_worker,
+            args=(self.purchasing_authorization_var.get().strip(),),
+            daemon=True,
+        )
+        thread.start()
+
+    def show_purchasing_collect_dialog(self) -> None:
+        if (
+            self.purchasing_collect_dialog is not None
+            and self.purchasing_collect_dialog.winfo_exists()
+        ):
+            self.purchasing_collect_dialog.destroy()
+
+        dialog = Toplevel(self.root)
+        dialog.title("正在采集代理购电价格")
+        dialog.geometry("520x190")
+        dialog.resizable(False, False)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.iconify)
+        self.purchasing_collect_message_var.set("正在准备采集代理购电价格数据...")
+        self.purchasing_collect_detail_var.set("范围：2024-02 至最新可用月份")
+        self.purchasing_collect_progress_var.set(0.0)
+        ttk.Label(dialog, textvariable=self.purchasing_collect_message_var, wraplength=460).pack(
+            fill=X,
+            padx=18,
+            pady=(18, 8),
+        )
+        ttk.Label(dialog, textvariable=self.purchasing_collect_detail_var, wraplength=480).pack(
+            fill=X,
+            padx=18,
+            pady=(0, 12),
+        )
+        ttk.Progressbar(
+            dialog,
+            mode="determinate",
+            maximum=100,
+            variable=self.purchasing_collect_progress_var,
+        ).pack(fill=X, padx=18, pady=(0, 14))
+        ttk.Label(dialog, text="可最小化窗口，采集会继续。").pack(anchor=W, padx=18)
+        self.purchasing_collect_dialog = dialog
+
+    def update_purchasing_collect_progress(
+        self,
+        *,
+        message: str,
+        detail: str | None = None,
+        percent: float | None = None,
+    ) -> None:
+        self.purchasing_collect_message_var.set(message)
+        if detail is not None:
+            self.purchasing_collect_detail_var.set(detail)
+        if percent is not None:
+            self.purchasing_collect_progress_var.set(percent)
+        self.summary_var.set(message)
+
+    def purchasing_collect_all_worker(self, authorization: str) -> None:
+        client = None
+        try:
+            resolved_authorization = resolve_elecheck_authorization(authorization)
+            if resolved_authorization:
+                if authorization:
+                    cache_elecheck_authorization(resolved_authorization)
+                set_elecheck_authorization_for_current_process(resolved_authorization)
+            client = ElecheckClient(authorization=resolved_authorization)
+            spider = ElecheckPurchasingNationalRangeSpider(client=client)
+            months = list(spider.iter_months(spider.start_month, spider.end_month))
+            total_months = len(months)
+            record_count = 0
+            written = 0
+
+            for month_index, data_month in enumerate(months, start=1):
+                self.root.after(
+                    0,
+                    lambda month_index=month_index, data_month=data_month: (
+                        self.update_purchasing_collect_progress(
+                            message=f"正在采集代理购电价格 {data_month}",
+                            detail=f"月份 {month_index}/{total_months} | 已抓取 {record_count} 条 | 已写入/更新 {written} 条",
+                            percent=((month_index - 1) / total_months * 100)
+                            if total_months
+                            else 0,
+                        )
+                    ),
+                )
+                data = client.fetch_purchasing_list(
+                    province="",
+                    latest_data_month=data_month,
+                )
+                latest_data_month = str(data.get("latestDataMonth") or data_month)
+                records = []
+                for row in data.get("tableDataList") or []:
+                    records.extend(spider.table_row_to_records(row, latest_data_month))
+                for row in data.get("topDataList") or []:
+                    records.extend(spider.top_row_to_records(row, latest_data_month))
+
+                record_count += len(records)
+                written += upsert_elecheck_purchasing_records(records)
+                self.root.after(
+                    0,
+                    lambda month_index=month_index,
+                    data_month=data_month,
+                    record_count=record_count,
+                    written=written: self.update_purchasing_collect_progress(
+                        message=f"代理购电价格采集中：已完成 {data_month}",
+                        detail=f"月份 {month_index}/{total_months} | 已抓取 {record_count} 条 | 已写入/更新 {written} 条",
+                        percent=(month_index / total_months * 100) if total_months else 100,
+                    ),
+                )
+        except ElecheckUnauthorizedError:
+            self.root.after(0, self.on_purchasing_collect_unauthorized)
+        except Exception as exc:
+            message = str(exc)
+            self.root.after(0, lambda message=message: self.on_purchasing_collect_error(message))
+        else:
+            self.root.after(
+                0,
+                lambda record_count=record_count, written=written: (
+                    self.on_purchasing_collect_success(record_count, written)
+                ),
+            )
+        finally:
+            if client is not None:
+                client.close()
+
+    def on_purchasing_collect_unauthorized(self) -> None:
+        self.finish_purchasing_collect()
+        messagebox.showerror(
+            "授权已过期",
+            "授权已过期，请联系管理员更新授权文件。",
+        )
+        self.summary_var.set("代理购电价格采集失败：授权已过期，请联系管理员更新授权文件。")
+
+    def on_purchasing_collect_error(self, message: str) -> None:
+        self.finish_purchasing_collect()
+        messagebox.showerror("代理购电价格采集失败", message)
+        self.summary_var.set("代理购电价格采集失败。")
+
+    def on_purchasing_collect_success(self, record_count: int, written: int) -> None:
+        self.finish_purchasing_collect()
+        self.load_filter_values()
+        self.refresh_purchasing()
+        self.summary_var.set(
+            f"代理购电价格采集完成：抓取 {record_count} 条，写入/更新 {written} 条。"
+        )
+        messagebox.showinfo(
+            "采集完成",
+            f"代理购电价格采集完成。\n\n抓取记录：{record_count}\n写入/更新：{written}",
+        )
+
+    def finish_purchasing_collect(self) -> None:
+        if self.purchasing_collect_button is not None:
+            self.purchasing_collect_button.configure(state="normal")
+        if (
+            self.purchasing_collect_dialog is not None
+            and self.purchasing_collect_dialog.winfo_exists()
+        ):
+            self.purchasing_collect_dialog.destroy()
+        self.purchasing_collect_dialog = None
+
+    def clear_all_purchasing_records(self) -> None:
+        if not messagebox.askyesno(
+            "确认清空",
+            "将删除 elecheck_purchasing_records 中的所有代理购电价格数据。\n\n确认继续吗？",
+        ):
+            return
+
+        try:
+            deleted = self.repository.delete_purchasing_records()
+        except Exception as exc:
+            messagebox.showerror("清空失败", str(exc))
+            self.summary_var.set("清空代理购电价格数据失败。")
+            return
+
+        self.load_filter_values()
+        self.refresh_purchasing()
+        self.summary_var.set(f"已清空代理购电价格数据，删除 {deleted} 条记录。")
+        messagebox.showinfo("清空完成", f"已删除 {deleted} 条代理购电价格记录。")
+
+    def start_mechanism_collect_all(self) -> None:
+        if not messagebox.askyesno(
+            "确认采集",
+            (
+                "将采集全部增量机制电价数据，并写入本地数据库。\n\n"
+                "重复采集到相同地区、相同电源类型的数据时会更新原记录。\n\n确认继续吗？"
+            ),
+        ):
+            return
+
+        if self.mechanism_collect_button is not None:
+            self.mechanism_collect_button.configure(state="disabled")
+        self.show_mechanism_collect_dialog()
+        self.summary_var.set("正在采集增量机制电价数据...")
+        thread = threading.Thread(target=self.mechanism_collect_all_worker, daemon=True)
+        thread.start()
+
+    def show_mechanism_collect_dialog(self) -> None:
+        if (
+            self.mechanism_collect_dialog is not None
+            and self.mechanism_collect_dialog.winfo_exists()
+        ):
+            self.mechanism_collect_dialog.destroy()
+
+        dialog = Toplevel(self.root)
+        dialog.title("正在采集增量机制电价")
+        dialog.geometry("520x190")
+        dialog.resizable(False, False)
+        dialog.protocol("WM_DELETE_WINDOW", dialog.iconify)
+        self.mechanism_collect_message_var.set("正在准备采集增量机制电价数据...")
+        self.mechanism_collect_detail_var.set("范围：全部地区、全部电源类型")
+        self.mechanism_collect_progress_var.set(0.0)
+        ttk.Label(dialog, textvariable=self.mechanism_collect_message_var, wraplength=460).pack(
+            fill=X,
+            padx=18,
+            pady=(18, 8),
+        )
+        ttk.Label(dialog, textvariable=self.mechanism_collect_detail_var, wraplength=480).pack(
+            fill=X,
+            padx=18,
+            pady=(0, 12),
+        )
+        ttk.Progressbar(
+            dialog,
+            mode="determinate",
+            maximum=100,
+            variable=self.mechanism_collect_progress_var,
+        ).pack(fill=X, padx=18, pady=(0, 14))
+        ttk.Label(dialog, text="可最小化窗口，采集会继续。").pack(anchor=W, padx=18)
+        self.mechanism_collect_dialog = dialog
+
+    def update_mechanism_collect_progress(
+        self,
+        *,
+        message: str,
+        detail: str | None = None,
+        percent: float | None = None,
+    ) -> None:
+        self.mechanism_collect_message_var.set(message)
+        if detail is not None:
+            self.mechanism_collect_detail_var.set(detail)
+        if percent is not None:
+            self.mechanism_collect_progress_var.set(percent)
+        self.summary_var.set(message)
+
+    def mechanism_collect_all_worker(self) -> None:
+        client = None
+        try:
+            resolved_authorization = resolve_elecheck_authorization("")
+            if resolved_authorization:
+                set_elecheck_authorization_for_current_process(resolved_authorization)
+            client = ElecheckClient(authorization=resolved_authorization)
+            spider = ElecheckMechanismElectricityPriceSpider(client=client)
+            self.root.after(
+                0,
+                lambda: self.update_mechanism_collect_progress(
+                    message="正在请求增量机制电价接口...",
+                    detail="正在从 Elecheck 获取全部列表",
+                    percent=20,
+                ),
+            )
+            records = list(spider.crawl())
+            self.root.after(
+                0,
+                lambda record_count=len(records): self.update_mechanism_collect_progress(
+                    message="正在写入增量机制电价数据...",
+                    detail=f"已抓取 {record_count} 条，正在写入/更新数据库",
+                    percent=70,
+                ),
+            )
+            written = upsert_elecheck_mechanism_electricity_price_records(records)
+        except ElecheckUnauthorizedError:
+            self.root.after(0, self.on_mechanism_collect_unauthorized)
+        except Exception as exc:
+            message = str(exc)
+            self.root.after(0, lambda message=message: self.on_mechanism_collect_error(message))
+        else:
+            self.root.after(
+                0,
+                lambda record_count=len(records), written=written: (
+                    self.on_mechanism_collect_success(record_count, written)
+                ),
+            )
+        finally:
+            if client is not None:
+                client.close()
+
+    def on_mechanism_collect_unauthorized(self) -> None:
+        self.finish_mechanism_collect()
+        messagebox.showerror(
+            "授权已过期",
+            "授权已过期，请联系管理员更新授权文件。",
+        )
+        self.summary_var.set("增量机制电价采集失败：授权已过期，请联系管理员更新授权文件。")
+
+    def on_mechanism_collect_error(self, message: str) -> None:
+        self.finish_mechanism_collect()
+        messagebox.showerror("增量机制电价采集失败", message)
+        self.summary_var.set("增量机制电价采集失败。")
+
+    def on_mechanism_collect_success(self, record_count: int, written: int) -> None:
+        self.finish_mechanism_collect()
+        self.load_filter_values()
+        self.refresh_mechanism()
+        self.summary_var.set(
+            f"增量机制电价采集完成：抓取 {record_count} 条，写入/更新 {written} 条。"
+        )
+        messagebox.showinfo(
+            "采集完成",
+            f"增量机制电价采集完成。\n\n抓取记录：{record_count}\n写入/更新：{written}",
+        )
+
+    def finish_mechanism_collect(self) -> None:
+        if self.mechanism_collect_button is not None:
+            self.mechanism_collect_button.configure(state="normal")
+        if (
+            self.mechanism_collect_dialog is not None
+            and self.mechanism_collect_dialog.winfo_exists()
+        ):
+            self.mechanism_collect_dialog.destroy()
+        self.mechanism_collect_dialog = None
+
+    def clear_all_mechanism_records(self) -> None:
+        if not messagebox.askyesno(
+            "确认清空",
+            (
+                "将删除 elecheck_mechanism_electricity_price_records "
+                "中的所有增量机制电价数据。\n\n确认继续吗？"
+            ),
+        ):
+            return
+
+        try:
+            deleted = self.repository.delete_mechanism_records()
+        except Exception as exc:
+            messagebox.showerror("清空失败", str(exc))
+            self.summary_var.set("清空增量机制电价数据失败。")
+            return
+
+        self.load_filter_values()
+        self.refresh_mechanism()
+        self.summary_var.set(f"已清空增量机制电价数据，删除 {deleted} 条记录。")
+        messagebox.showinfo("清空完成", f"已删除 {deleted} 条增量机制电价记录。")
+
+    def reset_purchasing(self) -> None:
+        self.purchasing_month_var.set("")
+        self.purchasing_province_var.set("")
+        self.purchasing_kind_var.set("")
+        self.purchasing_metric_var.set("")
+        self.refresh_purchasing()
+
+    def reset_mechanism(self) -> None:
+        self.mechanism_region_var.set("")
+        self.mechanism_category_var.set("")
+        self.refresh_mechanism()
+
+    def on_select_clear_price(self, _event) -> None:
+        self.show_selected_raw(self.clear_tree, self.result_rows["clear"], self.clear_raw_text)
+
+    def on_select_purchasing(self, _event) -> None:
+        self.show_selected_raw(self.purchasing_tree, self.result_rows["purchasing"], self.purchasing_raw_text)
+
+    def on_select_mechanism(self, _event) -> None:
+        self.show_selected_raw(self.mechanism_tree, self.result_rows["mechanism"], self.mechanism_raw_text)
+
+    def show_first_row(self, tree: ttk.Treeview, rows: list[sqlite3.Row], raw_text) -> None:
+        if not rows:
+            self.set_text(raw_text, "没有匹配数据。")
+            return
+        tree.selection_set("0")
+        tree.focus("0")
+        self.set_text(raw_text, self.describe_row(rows[0]))
+
+    def show_selected_raw(self, tree: ttk.Treeview, rows: list[sqlite3.Row], raw_text) -> None:
+        selection = tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if 0 <= index < len(rows):
+            self.set_text(raw_text, self.describe_row(rows[index]))
+
+    def describe_row(self, row: sqlite3.Row) -> str:
+        data = dict(row)
+        raw_json = data.pop("raw_json", None)
+        lines = [f"{key}: {value if value not in (None, '') else '-'}" for key, value in data.items()]
+        lines.extend(["", "raw_json", self.format_json(raw_json)])
+        return "\n".join(lines)
+
+    def export_rows(self, key: str) -> None:
+        output_path = asksaveasfilename(
+            title="导出 Elecheck CSV",
+            initialfile=f"elecheck_{key}.csv",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not output_path:
+            return
+
+        try:
+            export_spec = self.build_export_spec(key)
+        except ValueError as exc:
+            messagebox.showerror("导出失败", str(exc))
+            return
+
+        self.show_elecheck_export_dialog(output_path)
+        thread = threading.Thread(
+            target=self.export_rows_worker,
+            args=(Path(output_path), export_spec),
+            daemon=True,
+        )
+        thread.start()
+
+    def build_export_spec(self, key: str) -> dict[str, object]:
+        if key == "clear":
+            area_code = ""
+            area_selection = self.clear_filter_area_var.get().strip()
+            if area_selection and area_selection != self.all_areas_label:
+                area_code = self.repository.resolve_area_code(area_selection)
+            where = []
+            params: list[object] = []
+            if area_code:
+                where.append("area_code = ?")
+                params.append(area_code)
+            if self.clear_filter_endpoint_var.get().strip():
+                where.append("endpoint = ?")
+                params.append(self.clear_filter_endpoint_var.get().strip())
+            if self.clear_filter_metric_var.get().strip():
+                where.append("metric = ?")
+                params.append(self.clear_filter_metric_var.get().strip())
+            if self.clear_filter_time96_var.get().strip():
+                where.append("time96 = ?")
+                params.append(self.clear_filter_time96_var.get().strip())
+            if self.clear_filter_start_date_var.get().strip():
+                where.append("start_date >= ?")
+                params.append(self.clear_filter_start_date_var.get().strip())
+            if self.clear_filter_end_date_var.get().strip():
+                where.append("start_date <= ?")
+                params.append(self.clear_filter_end_date_var.get().strip())
+            return {
+                "table_name": "elecheck_clear_price_records",
+                "columns": [
+                    "id",
+                    "endpoint",
+                    "area_code",
+                    "start_date",
+                    "end_date",
+                    "time96",
+                    "metric",
+                    "value",
+                    "unit",
+                    "currency",
+                    "collected_at",
+                    "raw_json",
+                ],
+                "where": where,
+                "params": params,
+                "order_by": "start_date DESC, end_date DESC, endpoint, time96, metric",
+            }
+        if key == "purchasing":
+            where = []
+            params = []
+            if self.purchasing_month_var.get().strip():
+                where.append("data_month = ?")
+                params.append(self.purchasing_month_var.get().strip())
+            if self.purchasing_province_var.get().strip():
+                where.append("province_name = ?")
+                params.append(self.purchasing_province_var.get().strip())
+            if self.purchasing_kind_var.get().strip():
+                where.append("data_kind = ?")
+                params.append(self.purchasing_kind_var.get().strip())
+            if self.purchasing_metric_var.get().strip():
+                where.append("metric = ?")
+                params.append(self.purchasing_metric_var.get().strip())
+            return {
+                "table_name": "elecheck_purchasing_records",
+                "columns": [
+                    "id",
+                    "endpoint",
+                    "data_kind",
+                    "data_month",
+                    "province_name",
+                    "metric",
+                    "value",
+                    "unit",
+                    "diff_value",
+                    "statistic",
+                    "related_province_name",
+                    "collected_at",
+                    "raw_json",
+                ],
+                "where": where,
+                "params": params,
+                "order_by": "data_month DESC, province_name, data_kind, metric, statistic",
+            }
+        if key == "mechanism":
+            where = []
+            params = []
+            if self.mechanism_region_var.get().strip():
+                where.append("region_name = ?")
+                params.append(self.mechanism_region_var.get().strip())
+            if self.mechanism_category_var.get().strip():
+                where.append("category = ?")
+                params.append(self.mechanism_category_var.get().strip())
+            return {
+                "table_name": "elecheck_mechanism_electricity_price_records",
+                "columns": [
+                    "id",
+                    "region_name",
+                    "region",
+                    "category",
+                    "price",
+                    "clear_price",
+                    "unit",
+                    "collected_at",
+                    "raw_json",
+                ],
+                "where": where,
+                "params": params,
+                "order_by": "region_name, category",
+            }
+        raise ValueError(f"Unsupported export key: {key}")
+
+    def show_elecheck_export_dialog(self, output_path: str) -> None:
+        self.export_dialog = Toplevel(self.root)
+        self.export_dialog.title("正在导出 CSV")
+        self.export_dialog.geometry("500x180")
+        self.export_dialog.resizable(False, False)
+        self.export_message_var = StringVar(value="正在导出全量 CSV...")
+        self.export_detail_var = StringVar(value=f"保存到：{output_path}")
+        ttk.Label(self.export_dialog, textvariable=self.export_message_var, wraplength=440).pack(
+            fill=X,
+            padx=18,
+            pady=(18, 8),
+        )
+        ttk.Label(self.export_dialog, textvariable=self.export_detail_var, wraplength=460).pack(
+            fill=X,
+            padx=18,
+            pady=(0, 12),
+        )
+        ttk.Progressbar(self.export_dialog, mode="indeterminate").pack(fill=X, padx=18)
+        ttk.Label(self.export_dialog, text="可最小化窗口，导出会继续。").pack(
+            anchor=W,
+            padx=18,
+            pady=(12, 0),
+        )
+
+    def export_rows_worker(self, output_path: Path, export_spec: dict[str, object]) -> None:
+        try:
+            written = self.repository.export_query_to_csv(
+                output_path=output_path,
+                table_name=str(export_spec["table_name"]),
+                columns=list(export_spec["columns"]),
+                where=list(export_spec["where"]),
+                params=list(export_spec["params"]),
+                order_by=str(export_spec["order_by"]),
+                progress=lambda row_count: self.root.after(
+                    0,
+                    lambda row_count=row_count: self.update_elecheck_export_progress(row_count),
+                ),
+            )
+        except PermissionError:
+            self.root.after(
+                0,
+                lambda: self.on_elecheck_export_error(
+                    (
+                        "没有权限写入这个 CSV 文件。\n\n"
+                        "请确认目标文件没有被 Excel/WPS 打开，或换一个可写的保存位置后重试。\n\n"
+                        f"路径：{output_path}"
+                    )
+                ),
+            )
+        except OSError as exc:
+            self.root.after(0, lambda exc=exc: self.on_elecheck_export_error(f"写入 CSV 时出错：\n\n{exc}"))
+        else:
+            self.root.after(0, lambda: self.on_elecheck_export_success(written, output_path))
+
+    def update_elecheck_export_progress(self, row_count: int) -> None:
+        if hasattr(self, "export_message_var"):
+            self.export_message_var.set(f"正在导出全量 CSV，已写入 {row_count} 行...")
+        self.summary_var.set(f"CSV 导出中：已写入 {row_count} 行。")
+
+    def on_elecheck_export_success(self, row_count: int, output_path: Path) -> None:
+        if hasattr(self, "export_dialog") and self.export_dialog.winfo_exists():
+            self.export_dialog.destroy()
+        self.summary_var.set(f"已导出 {row_count} 条记录到 {output_path}")
+        messagebox.showinfo("导出完成", f"已导出 {row_count} 条记录。\n\n{output_path}")
+
+    def on_elecheck_export_error(self, message: str) -> None:
+        if hasattr(self, "export_dialog") and self.export_dialog.winfo_exists():
+            self.export_dialog.destroy()
+        messagebox.showerror("导出失败", message)
+        self.summary_var.set("CSV 导出失败。")
+
+    def update_summary(self, section: str, rows: list[sqlite3.Row]) -> None:
+        self.summary_var.set(f"{section}：显示 {len(rows)} 条记录。默认最多显示 1000 条。")
+
+    def set_text(self, text_widget, content: str) -> None:
+        text_widget.configure(state="normal")
+        text_widget.delete("1.0", END)
+        text_widget.insert("1.0", content)
+        text_widget.configure(state="disabled")
+
+    @staticmethod
+    def format_date_range(start: str | None, end: str | None) -> str:
+        if start == end:
+            return start or ""
+        return f"{start or '?'} -> {end or '?'}"
+
+    @staticmethod
+    def format_value(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, float):
+            return f"{value:.6g}"
+        return str(value)
+
+    @staticmethod
+    def format_json(value: str | None) -> str:
+        if not value:
+            return "{}"
+        try:
+            return json.dumps(json.loads(value), ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            return value
+
+
+def launch_gui() -> None:
+    db_path = resolve_sqlite_path()
+    if not db_path.exists():
+        raise FileNotFoundError(f"Database does not exist: {db_path}")
+    root = Tk()
+    root.title("Powertrade Crawler 数据浏览器")
+    root.geometry("1280x800")
+    root.minsize(1060, 680)
+
+    style = ttk.Style()
+    style.configure("Treeview", rowheight=28)
+    style.configure("TButton", padding=(10, 5))
+    style.configure("Toolbar.TFrame", padding=8)
+
+    notebook = ttk.Notebook(root)
+    notebook.pack(fill=BOTH, expand=True)
+
+    gridstatus_tab = ttk.Frame(notebook)
+    elecheck_tab = ttk.Frame(notebook)
+    notebook.add(gridstatus_tab, text="GridStatus")
+    notebook.add(elecheck_tab, text="Elecheck 易能电易查")
+
+    GridStatusMetadataApp(
+        gridstatus_tab,
+        GridStatusMetadataRepository(db_path),
+        configure_window=False,
+    )
+    ElecheckDataApp(elecheck_tab, ElecheckDataRepository(db_path))
+    root.mainloop()

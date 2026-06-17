@@ -1,0 +1,47 @@
+{
+  "requests": [
+    {
+      "name": "gridstatus_datasets",
+      "type": "datasets",
+      "params": {
+        "limit": 1000
+      }
+    },
+    {
+      "name": "gridstatus_caiso_fuel_mix",
+      "type": "dataset_query",
+      "dataset": "caiso_fuel_mix",
+      "params": {
+        "limit": 1000
+      }
+    },
+    {
+      "name": "gridstatus_ercot_load",
+      "type": "dataset_query",
+      "dataset": "ercot_load",
+      "params": {
+        "start_time": "2023-04-21T00:00Z",
+        "end_time": "2023-04-22T00:00Z",
+        "return_format": "csv",
+        "limit": 1000
+      }
+    },
+    {
+      "name": "gridstatus_pjm_lmp_day_ahead_hourly_pseg",
+      "type": "dataset_location_query",
+      "dataset": "pjm_lmp_day_ahead_hourly",
+      "location": "PSEG",
+      "params": {
+        "limit": 1000
+      }
+    },
+    {
+      "name": "gridstatus_nyiso_fuel_mix_updates",
+      "type": "dataset_updates",
+      "dataset": "nyiso_fuel_mix",
+      "params": {
+        "limit": 1000
+      }
+    }
+  ]
+}

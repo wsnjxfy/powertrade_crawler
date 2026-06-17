@@ -1,0 +1,15 @@
+.venv/
+.venv_pack/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.env
+data/
+build/
+dist/
+exports/
+work/
+*.egg-info/
+node_modules/
+.browser-profiles/
