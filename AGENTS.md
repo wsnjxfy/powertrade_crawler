@@ -296,6 +296,26 @@ elecheck_mechanism_electricity_price_records
 - 采集全部时会请求 Elecheck 增量机制电价列表接口，一次性抓取全部地区和全部电源类型记录。
 - GUI 表头按业务口径显示：`price` 显示为 `燃煤基准价`，`clear_price` 显示为 `26年增量机制电价`。
 
+### 6.4 抓包适配环境 / Packet-Capture Compatibility
+
+中文：
+
+Elecheck 接口最初通过微信小程序抓包确认。当前已经验证可用的抓包组合是：
+
+```text
+微信 Windows 版 3.9.12
+WMPF version: 14315
+WMPFDebugger
+```
+
+注意事项：
+
+- 当前这个微信 / WMPF 版本组合是适配可用的，后续需要重新抓包时优先保持该环境，不要随意升级微信或 WMPF 插件。
+- 曾遇到 `version config not found: 19921`，说明较新的 WMPF 19921 当时不在 WMPFDebugger 支持列表中。
+- 曾遇到 `version config not found: 14185`，说明微信 3.9.12 初始对应的 WMPF 14185 也不适配。
+- 后来通过微信内置命令更新 WMPF 插件后变为 14315，WMPFDebugger 成功注入并能在 DevTools Network 中抓到 Elecheck 请求。
+- 若未来需要重新抓包，先确认终端日志出现类似 `script loaded, WMPF version: 14315` 和 `miniapp client connected`，再分析 Network 请求。
+
 English:
 
 Elecheck currently has a main GUI page named `Elecheck 易能电易查` with three tabs:
@@ -309,6 +329,7 @@ The main implementation points are:
 - Clear price uses `elecheck_clear_price`, stores data in `elecheck_clear_price_records`, and uses `elecheck_area_records.earliest_clear_price_date` to guide valid date choices.
 - Purchasing price uses several purchasing spiders, with the GUI primarily using `elecheck_purchasing_national_range`. Data starts from `2024-02` and is stored in `elecheck_purchasing_records`.
 - Mechanism electricity price uses `elecheck_mechanism_electricity_price` and stores data in `elecheck_mechanism_electricity_price_records`.
+- Packet capture for Elecheck was validated with WeChat for Windows 3.9.12, WMPF version 14315, and WMPFDebugger. Keep this known-good setup when recapturing mini-program traffic. WMPF 19921 and 14185 previously failed with `version config not found`.
 
 ## 7. Authorization 逻辑 / Authorization Logic
 
