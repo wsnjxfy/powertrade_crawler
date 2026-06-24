@@ -45,6 +45,36 @@ class GridStatusRecord(BaseModel):
         return "|".join([self.request_name, self.row_key])
 
 
+class EntsoeRecord(BaseModel):
+    dataset: str
+    category: str
+    title_en: str
+    title_zh: str
+    row_key: str
+    document_type: str | None = None
+    process_type: str | None = None
+    business_type: str | None = None
+    area: str | None = None
+    in_domain: str | None = None
+    out_domain: str | None = None
+    time_series_id: str | None = None
+    psr_type: str | None = None
+    interval_start_utc: str | None = None
+    interval_end_utc: str | None = None
+    position: int | None = None
+    resolution: str | None = None
+    value: float | None = None
+    value_field: str | None = None
+    unit: str | None = None
+    currency: str | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+    collected_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @property
+    def natural_key(self) -> str:
+        return "|".join([self.dataset, self.row_key])
+
+
 class GridStatusDatasetMetadataRecord(BaseModel):
     # GridStatus 数据集的唯一编号，例如 caiso_fuel_mix 或 spp_load_forecast_by_baa。
     # 后续查询具体数据时，会把它放进 /v1/datasets/{dataset_id}/query。

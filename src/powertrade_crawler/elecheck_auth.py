@@ -1,15 +1,16 @@
 import json
-import os
 from pathlib import Path
 
-from powertrade_crawler.config import get_settings
-
-
-ELECHECK_AUTHORIZATION_ENV = "ELECHECK_AUTHORIZATION"
+from powertrade_crawler.credentials import (
+    get_credential,
+    get_credentials_path,
+    save_credential,
+    set_process_credential,
+)
 
 
 def get_elecheck_authorization_cache_path() -> Path:
-    return Path("data") / ".elecheck_authorization_cache.json"
+    return get_credentials_path()
 
 
 def get_valid_cached_elecheck_authorization(
@@ -18,18 +19,19 @@ def get_valid_cached_elecheck_authorization(
 ) -> str | None:
     _ = now
     path = cache_path or get_elecheck_authorization_cache_path()
-    if not path.exists():
-        return None
+    authorization = get_credential(
+        "elecheck_authorization",
+        path=path,
+    )
+    if authorization or not cache_path or not path.exists():
+        return authorization
 
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        authorization = payload.get("authorization")
+        legacy_payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, TypeError):
         return None
-
-    if not authorization:
-        return None
-    return str(authorization)
+    legacy_authorization = legacy_payload.get("authorization")
+    return str(legacy_authorization).strip() if legacy_authorization else None
 
 
 def cache_elecheck_authorization(
@@ -38,34 +40,23 @@ def cache_elecheck_authorization(
     now: object | None = None,
 ) -> Path:
     _ = now
-    path = cache_path or get_elecheck_authorization_cache_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(
-            {"authorization": authorization},
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    return save_credential(
+        "elecheck_authorization",
+        authorization,
+        path=cache_path or get_elecheck_authorization_cache_path(),
     )
-    return path
 
 
 def resolve_elecheck_authorization(
     authorization_override: str | None = None,
     cache_path: Path | None = None,
 ) -> str | None:
-    settings = get_settings()
-    authorization = (
-        authorization_override
-        or settings.elecheck_authorization
-        or get_valid_cached_elecheck_authorization(cache_path)
+    return get_credential(
+        "elecheck_authorization",
+        override=authorization_override,
+        path=cache_path or get_elecheck_authorization_cache_path(),
     )
-    if not authorization:
-        return None
-    return authorization.strip()
 
 
 def set_elecheck_authorization_for_current_process(authorization: str) -> None:
-    os.environ[ELECHECK_AUTHORIZATION_ENV] = authorization
-    get_settings.cache_clear()
+    set_process_credential("elecheck_authorization", authorization)

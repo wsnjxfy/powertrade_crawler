@@ -115,11 +115,10 @@ python -c "import json; from powertrade_crawler.storage import get_session, Gzpe
 
 ## 6. GridStatus API 爬虫
 
-GridStatus 使用官方 API，不爬网页前端。API key 不写进代码，请放到 `.env`：
+GridStatus 使用官方 API，不爬网页前端。API key 统一保存到不会提交 Git 的鉴权目录：
 
-```env
-GRIDSTATUS_API_KEY=你的 GridStatus API key
-GRIDSTATUS_MIN_INTERVAL_SECONDS=1.1
+```powershell
+powertrade set-credential gridstatus
 ```
 
 初始化数据库：
@@ -207,5 +206,73 @@ GridStatus 时间参数统一使用 UTC。当前客户端会保证请求间隔�
 1. 在 `src/powertrade_crawler/spiders/` 下新增一个文件，例如 `caiso.py`。
 2. 继承 `BaseSpider`，实现 `crawl()` 方法，返回标准化后的数据模型。
 3. 在 `src/powertrade_crawler/registry.py` 里注册这个 spider。
+
+## 8. ENTSO-E Transparency Platform 爬虫
+
+ENTSO-E 建议使用官方 Transparency Platform REST API，不直接抓网页前端。
+
+使用隐藏输入命令保存 ENTSO-E token：
+
+```powershell
+powertrade set-credential entsoe
+```
+
+Elecheck authorization 同样保存在统一鉴权文件中：
+
+```powershell
+powertrade set-credential elecheck
+```
+
+查看三种凭据是否已经配置，不会显示具体内容：
+
+```powershell
+powertrade credentials-status
+```
+
+凭据统一保存在 `.auth/credentials.json`：
+
+```json
+{
+  "gridstatus_api_key": "",
+  "elecheck_authorization": "",
+  "entsoe_security_token": ""
+}
+```
+
+`.auth/` 整个目录已加入 `.gitignore`，不会上传到远程仓库。`.env` 只保存请求间隔、超时和数据库地址等非敏感配置。
+
+当前已经实现日前电价、负荷、发电、跨境交换、平衡和停运等常用数据：
+
+```powershell
+powertrade entsoe-datasets
+powertrade entsoe-areas
+powertrade entsoe-describe entsoe_actual_total_load
+```
+
+示例：
+
+```powershell
+powertrade crawl entsoe_day_ahead_prices --area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+```
+
+也可以直接传 EIC：
+
+```powershell
+powertrade crawl entsoe_day_ahead_prices --area-code 10Y1001A1001A82H --start-date 2026-06-01 --end-date 2026-06-02
+```
+
+API 使用的核心参数：
+
+- `documentType=A44`：Price Document，用于日日前价格。
+- `contract_MarketAgreement.type=A01`：日拍卖 / day-ahead。
+- `in_Domain` / `out_Domain`：Bidding Zone 的 EIC code。
+- `periodStart` / `periodEnd`：UTC 时间，格式 `yyyyMMddHHmm`。
+- `securityToken`：ENTSO-E 账号生成的 API token。
+
+完整的中英文调用说明、每个数据集的固定 API 参数、PSR 发电类型和跨境方向说明见：
+
+```text
+docs/ENTSOE_API_GUIDE.md
+```
 
 

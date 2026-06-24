@@ -10,9 +10,8 @@ class Settings(BaseSettings):
     request_timeout_seconds: int = 20
     request_retry_times: int = 2
     user_agent: str = "powertrade-crawler/0.1"
-    gridstatus_api_key: str | None = None
     gridstatus_min_interval_seconds: float = 1.1
-    elecheck_authorization: str | None = None
+    entsoe_min_interval_seconds: float = 0.25
     elecheck_area_code: str = "320000000000"
     elecheck_start_date: str | None = None
     elecheck_end_date: str | None = None

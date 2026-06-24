@@ -26,6 +26,7 @@ from powertrade_crawler.models import (
     ElecheckMechanismElectricityPriceRecord,
     ElecheckPurchasingProvinceRecord,
     ElecheckPurchasingRecord,
+    EntsoeRecord,
     GridStatusDatasetMetadataRecord,
     GridStatusRecord,
     GzpecNewsRecord,
@@ -98,6 +99,42 @@ class GridStatusRecordRow(Base):
     interval_start_utc: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     interval_end_utc: Mapped[str | None] = mapped_column(String(40), nullable=True)
     record_time_utc: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    raw_json: Mapped[str] = mapped_column(Text)
+    collected_at: Mapped[DateTime] = mapped_column(DateTime)
+
+
+class EntsoeRecordRow(Base):
+    __tablename__ = "entsoe_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset",
+            "row_key",
+            name="uq_entsoe_dataset_row_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    dataset: Mapped[str] = mapped_column(String(160), index=True)
+    category: Mapped[str] = mapped_column(String(80), index=True)
+    title_en: Mapped[str] = mapped_column(String(240))
+    title_zh: Mapped[str] = mapped_column(String(240))
+    row_key: Mapped[str] = mapped_column(String(64), index=True)
+    document_type: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    process_type: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    business_type: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    area: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    in_domain: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    out_domain: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    time_series_id: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    psr_type: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    interval_start_utc: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    interval_end_utc: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    position: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    resolution: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_field: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(20), nullable=True)
     raw_json: Mapped[str] = mapped_column(Text)
     collected_at: Mapped[DateTime] = mapped_column(DateTime)
 
@@ -753,6 +790,32 @@ def upsert_records(records: list[MarketRecord]) -> int:
                 row.raw_json = json.dumps(record.raw, ensure_ascii=False)
                 row.collected_at = record.collected_at
                 written += 1
+        session.commit()
+    return written
+
+
+def upsert_entsoe_records(records: list[EntsoeRecord]) -> int:
+    import json
+
+    if not records:
+        return 0
+
+    written = 0
+    with get_session() as session:
+        for record in records:
+            row = (
+                session.query(EntsoeRecordRow)
+                .filter_by(dataset=record.dataset, row_key=record.row_key)
+                .one_or_none()
+            )
+            values = record.model_dump(exclude={"raw"})
+            values["raw_json"] = json.dumps(record.raw, ensure_ascii=False)
+            if row is None:
+                session.add(EntsoeRecordRow(**values))
+            else:
+                for field, value in values.items():
+                    setattr(row, field, value)
+            written += 1
         session.commit()
     return written
 

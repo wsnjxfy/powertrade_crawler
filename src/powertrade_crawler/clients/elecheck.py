@@ -5,6 +5,7 @@ import httpx
 from loguru import logger
 
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.elecheck_auth import resolve_elecheck_authorization
 
 
 class ElecheckUnauthorizedError(RuntimeError):
@@ -20,7 +21,7 @@ class ElecheckClient:
 
     def __init__(self, authorization: str | None = None) -> None:
         settings = get_settings()
-        self.authorization = authorization or settings.elecheck_authorization
+        self.authorization = resolve_elecheck_authorization(authorization)
 
         self.retry_times = settings.request_retry_times
         self.client = httpx.Client(

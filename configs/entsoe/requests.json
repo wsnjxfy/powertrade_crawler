@@ -1,0 +1,383 @@
+{
+  "requests": [
+    {
+      "name": "entsoe_day_ahead_prices",
+      "category": "market",
+      "title_en": "Day-ahead Energy Prices",
+      "title_zh": "日前电价",
+      "meaning_en": "Cleared day-ahead wholesale electricity prices for each market time unit in a bidding zone.",
+      "meaning_zh": "报价区内每个市场时段的日前批发电力出清价格，用于分析现货价格水平、峰谷价差和价格波动。",
+      "domain_mode": "same_pair",
+      "params": {
+        "documentType": "A44",
+        "contract_MarketAgreement.Type": "A01"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_actual_total_load",
+      "category": "load",
+      "title_en": "Actual Total Load",
+      "title_zh": "实际总负荷",
+      "meaning_en": "Measured total electricity demand in a bidding zone or control area.",
+      "meaning_zh": "报价区或控制区实际发生的总用电负荷，可用于负荷曲线、峰值需求和供需平衡分析。",
+      "domain_mode": "single",
+      "domain_parameter": "outBiddingZone_Domain",
+      "params": {
+        "documentType": "A65",
+        "processType": "A16"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_day_ahead_load_forecast",
+      "category": "load",
+      "title_en": "Day-ahead Total Load Forecast",
+      "title_zh": "日前总负荷预测",
+      "meaning_en": "The system operator's day-ahead forecast of total electricity demand.",
+      "meaning_zh": "系统运营商在日前阶段发布的总负荷预测，可与实际负荷比较以衡量预测误差。",
+      "domain_mode": "single",
+      "domain_parameter": "outBiddingZone_Domain",
+      "params": {
+        "documentType": "A65",
+        "processType": "A01"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_week_ahead_load_forecast",
+      "category": "load",
+      "title_en": "Week-ahead Total Load Forecast",
+      "title_zh": "周前总负荷预测",
+      "meaning_en": "Forecast total electricity demand for the coming week.",
+      "meaning_zh": "未来一周的总负荷预测，适用于周度运行计划和需求趋势分析。",
+      "domain_mode": "single",
+      "domain_parameter": "outBiddingZone_Domain",
+      "params": {
+        "documentType": "A65",
+        "processType": "A31"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_month_ahead_load_forecast",
+      "category": "load",
+      "title_en": "Month-ahead Total Load Forecast",
+      "title_zh": "月前总负荷预测",
+      "meaning_en": "Forecast total electricity demand for the coming month.",
+      "meaning_zh": "未来一个月的总负荷预测，适用于月度电量安排和中期需求判断。",
+      "domain_mode": "single",
+      "domain_parameter": "outBiddingZone_Domain",
+      "params": {
+        "documentType": "A65",
+        "processType": "A32"
+      },
+      "chunk_days": 366
+    },
+    {
+      "name": "entsoe_year_ahead_load_forecast",
+      "category": "load",
+      "title_en": "Year-ahead Total Load Forecast",
+      "title_zh": "年前总负荷预测",
+      "meaning_en": "Long-term forecast of total electricity demand for the coming year.",
+      "meaning_zh": "未来一年的长期总负荷预测，适用于年度供需平衡和资源充裕度研究。",
+      "domain_mode": "single",
+      "domain_parameter": "outBiddingZone_Domain",
+      "params": {
+        "documentType": "A65",
+        "processType": "A33"
+      },
+      "chunk_days": 366
+    },
+    {
+      "name": "entsoe_year_ahead_forecast_margin",
+      "category": "load",
+      "title_en": "Year-ahead Forecast Margin",
+      "title_zh": "年前容量裕度预测",
+      "meaning_en": "Expected margin between available generation resources and demand.",
+      "meaning_zh": "预计可用发电资源与负荷需求之间的裕度，用于判断年度电力充裕性风险。",
+      "domain_mode": "single",
+      "domain_parameter": "outBiddingZone_Domain",
+      "params": {
+        "documentType": "A70",
+        "processType": "A33"
+      },
+      "chunk_days": 366
+    },
+    {
+      "name": "entsoe_installed_capacity_by_type",
+      "category": "generation",
+      "title_en": "Installed Capacity per Production Type",
+      "title_zh": "按发电类型划分的装机容量",
+      "meaning_en": "Installed generation capacity grouped by production source such as nuclear, gas, wind, solar, and hydro.",
+      "meaning_zh": "按核电、燃气、风电、光伏、水电等能源类型统计的装机容量，用于研究电源结构。",
+      "domain_mode": "single",
+      "domain_parameter": "in_Domain",
+      "params": {
+        "documentType": "A68",
+        "processType": "A33"
+      },
+      "chunk_days": 366
+    },
+    {
+      "name": "entsoe_actual_generation_by_type",
+      "category": "generation",
+      "title_en": "Actual Generation per Production Type",
+      "title_zh": "按发电类型划分的实际发电量",
+      "meaning_en": "Actual electricity generation grouped by production source for each time interval.",
+      "meaning_zh": "每个时段按能源类型统计的实际发电功率或电量，可用于分析电源结构和新能源占比。",
+      "domain_mode": "single",
+      "domain_parameter": "in_Domain",
+      "params": {
+        "documentType": "A75",
+        "processType": "A16"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_actual_generation_by_unit",
+      "category": "generation",
+      "title_en": "Actual Generation per Generation Unit",
+      "title_zh": "按发电机组划分的实际发电量",
+      "meaning_en": "Actual output of individual generation units where publication rules permit.",
+      "meaning_zh": "在披露规则允许时提供单台发电机组的实际出力，用于机组运行和停启状态研究。",
+      "domain_mode": "single",
+      "domain_parameter": "in_Domain",
+      "params": {
+        "documentType": "A73",
+        "processType": "A16"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_day_ahead_generation_forecast",
+      "category": "generation",
+      "title_en": "Day-ahead Generation Forecast",
+      "title_zh": "日前发电预测",
+      "meaning_en": "Day-ahead forecast of aggregate generation in the selected area.",
+      "meaning_zh": "所选区域日前阶段的总发电预测，可与负荷预测和实际发电数据结合分析。",
+      "domain_mode": "single",
+      "domain_parameter": "in_Domain",
+      "params": {
+        "documentType": "A71",
+        "processType": "A01"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_wind_solar_forecast",
+      "category": "generation",
+      "title_en": "Wind and Solar Generation Forecast",
+      "title_zh": "风电和光伏发电预测",
+      "meaning_en": "Forecast generation from wind and solar production types, identified by PSR type.",
+      "meaning_zh": "按PSR能源类型区分的风电和光伏预测出力，用于新能源预测误差及消纳分析。",
+      "domain_mode": "single",
+      "domain_parameter": "in_Domain",
+      "params": {
+        "documentType": "A69",
+        "processType": "A01"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_water_reservoirs",
+      "category": "generation",
+      "title_en": "Water Reservoirs and Hydro Storage",
+      "title_zh": "水库与水电储能",
+      "meaning_en": "Stored energy or filling information for water reservoirs and hydro storage plants.",
+      "meaning_zh": "水库及水电储能设施的蓄能或库容信息，用于水电可用性和季节性能源储备分析。",
+      "domain_mode": "single",
+      "domain_parameter": "in_Domain",
+      "params": {
+        "documentType": "A72",
+        "processType": "A16"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_cross_border_physical_flows",
+      "category": "transmission",
+      "title_en": "Cross-border Physical Flows",
+      "title_zh": "跨境物理潮流",
+      "meaning_en": "Measured physical electricity flow from one domain to another.",
+      "meaning_zh": "两个区域之间实际测量的电力物理潮流，方向由输入区域和输出区域共同确定。",
+      "domain_mode": "border",
+      "params": {
+        "documentType": "A11"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_commercial_schedules",
+      "category": "transmission",
+      "title_en": "Commercial Schedules",
+      "title_zh": "跨境商业计划交换",
+      "meaning_en": "Scheduled commercial electricity exchange between two domains.",
+      "meaning_zh": "两个区域之间市场参与者计划执行的商业电力交换，与实际物理潮流可能不同。",
+      "domain_mode": "border",
+      "params": {
+        "documentType": "A09"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_forecasted_transfer_capacity",
+      "category": "transmission",
+      "title_en": "Forecasted Transfer Capacity",
+      "title_zh": "预测跨境传输容量",
+      "meaning_en": "Forecast transfer capacity available on a border for the selected market horizon.",
+      "meaning_zh": "指定市场周期内跨区联络线预计可用的传输容量，用于跨区交易能力分析。",
+      "domain_mode": "border",
+      "params": {
+        "documentType": "A61",
+        "contract_MarketAgreement.Type": "A01"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_offered_transfer_capacity",
+      "category": "market",
+      "title_en": "Day-ahead Offered Transfer Capacity",
+      "title_zh": "日前可供交易的跨境容量",
+      "meaning_en": "Transfer capacity offered to the day-ahead market on a border.",
+      "meaning_zh": "跨区边界向日前市场提供的可交易传输容量，反映市场耦合可利用的网络空间。",
+      "domain_mode": "border",
+      "params": {
+        "documentType": "A31",
+        "auction.Type": "A01",
+        "contract_MarketAgreement.Type": "A01"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_imbalance_prices",
+      "category": "balancing",
+      "title_en": "Imbalance Prices",
+      "title_zh": "不平衡价格",
+      "meaning_en": "Settlement prices applied to positive or negative system and balance-responsible-party imbalances.",
+      "meaning_zh": "对系统或平衡责任方正负不平衡电量进行结算的价格，用于平衡成本和偏差风险分析。",
+      "domain_mode": "single",
+      "domain_parameter": "controlArea_Domain",
+      "params": {
+        "documentType": "A85"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_total_imbalance_volumes",
+      "category": "balancing",
+      "title_en": "Total Imbalance Volumes",
+      "title_zh": "总不平衡电量",
+      "meaning_en": "Total positive and negative imbalance volumes in a control area.",
+      "meaning_zh": "控制区内正、负不平衡电量的总量，用于判断系统实时供需偏差。",
+      "domain_mode": "single",
+      "domain_parameter": "controlArea_Domain",
+      "params": {
+        "documentType": "A86"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_activated_balancing_energy_prices",
+      "category": "balancing",
+      "title_en": "Prices of Activated Balancing Energy",
+      "title_zh": "已激活平衡能源价格",
+      "meaning_en": "Prices paid for balancing energy that was activated by the system operator.",
+      "meaning_zh": "系统运营商实际激活的平衡能源对应价格，用于研究实时调节资源成本。",
+      "domain_mode": "single",
+      "domain_parameter": "controlArea_Domain",
+      "params": {
+        "documentType": "A84",
+        "processType": "A16",
+        "businessType": "A96"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_contracted_reserves",
+      "category": "balancing",
+      "title_en": "Volumes and Prices of Contracted Reserves",
+      "title_zh": "已签约备用容量及价格",
+      "meaning_en": "Procured reserve capacity volumes and prices for balancing services.",
+      "meaning_zh": "为平衡服务采购的备用容量数量及价格，用于辅助服务采购成本分析。",
+      "domain_mode": "single",
+      "domain_parameter": "controlArea_Domain",
+      "params": {
+        "documentType": "A81",
+        "businessType": "B95",
+        "Type_MarketAgreement.Type": "A01",
+        "processType": "A52"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_production_unit_outages",
+      "category": "outages",
+      "title_en": "Unavailability of Production Units",
+      "title_zh": "生产单元不可用情况",
+      "meaning_en": "Planned and unplanned reductions in the availability of production units.",
+      "meaning_zh": "生产单元计划或非计划不可用及可用能力下降信息，用于判断潜在供应缺口。",
+      "domain_mode": "single",
+      "domain_parameter": "BiddingZone_Domain",
+      "params": {
+        "documentType": "A77"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_generation_unit_outages",
+      "category": "outages",
+      "title_en": "Unavailability of Generation Units",
+      "title_zh": "发电机组不可用情况",
+      "meaning_en": "Detailed planned and unplanned generation-unit outages where disclosure thresholds are met.",
+      "meaning_zh": "达到披露门槛的发电机组计划及非计划停运信息，可用于机组可用率和供应风险分析。",
+      "domain_mode": "single",
+      "domain_parameter": "BiddingZone_Domain",
+      "params": {
+        "documentType": "A80"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_consumption_unit_outages",
+      "category": "outages",
+      "title_en": "Aggregated Unavailability of Consumption Units",
+      "title_zh": "用电单元聚合不可用情况",
+      "meaning_en": "Aggregated unavailability of large consumption units.",
+      "meaning_zh": "大型用电单元不可用能力的聚合披露，用于分析工业负荷中断对系统需求的影响。",
+      "domain_mode": "single",
+      "domain_parameter": "BiddingZone_Domain",
+      "params": {
+        "documentType": "A76"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_transmission_outages",
+      "category": "outages",
+      "title_en": "Unavailability of Transmission Infrastructure",
+      "title_zh": "输电基础设施不可用情况",
+      "meaning_en": "Planned and unplanned outages affecting transmission infrastructure between domains.",
+      "meaning_zh": "影响两个区域之间输电基础设施的计划和非计划停运，用于评估跨区容量约束。",
+      "domain_mode": "border",
+      "params": {
+        "documentType": "A78"
+      },
+      "chunk_days": 31
+    },
+    {
+      "name": "entsoe_offshore_grid_outages",
+      "category": "outages",
+      "title_en": "Unavailability of Offshore Grid Infrastructure",
+      "title_zh": "海上电网基础设施不可用情况",
+      "meaning_en": "Outages affecting offshore grid infrastructure and connected offshore generation.",
+      "meaning_zh": "海上电网基础设施及其连接海上发电资源的停运信息，用于海上风电送出风险分析。",
+      "domain_mode": "single",
+      "domain_parameter": "BiddingZone_Domain",
+      "params": {
+        "documentType": "A79"
+      },
+      "chunk_days": 31
+    }
+  ]
+}

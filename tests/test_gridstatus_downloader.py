@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.credentials import clear_process_credentials, set_process_credential
 from powertrade_crawler.gridstatus_downloader import (
     download_dataset_csv_adaptive,
     parse_gridstatus_time,
@@ -22,7 +23,7 @@ def make_payload(rows, cursor: str | None = None):
 
 
 def test_adaptive_downloader_pages_each_time_window(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("GRIDSTATUS_API_KEY", "test-key")
+    set_process_credential("gridstatus_api_key", "test-key")
     get_settings.cache_clear()
 
     calls = []
@@ -66,6 +67,7 @@ def test_adaptive_downloader_pages_each_time_window(tmp_path: Path, monkeypatch)
         window_seconds=3600,
         fetch_json=fake_fetch,
     )
+    clear_process_credentials()
 
     with output_path.open(newline="", encoding="utf-8-sig") as file:
         rows = list(csv.DictReader(file))
@@ -86,7 +88,7 @@ def test_parse_gridstatus_time_accepts_z_suffix():
 
 
 def test_adaptive_downloader_uses_custom_download_time_range(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("GRIDSTATUS_API_KEY", "test-key")
+    set_process_credential("gridstatus_api_key", "test-key")
     get_settings.cache_clear()
 
     calls = []
@@ -109,13 +111,14 @@ def test_adaptive_downloader_uses_custom_download_time_range(tmp_path: Path, mon
         batch_pause_seconds=0,
         fetch_json=fake_fetch,
     )
+    clear_process_credentials()
 
     assert "start_time=2024-01-02T00%3A00%3A00Z" in calls[0]
     assert "end_time=2024-01-03T00%3A00%3A00Z" in calls[0]
 
 
 def test_adaptive_downloader_can_write_sqlite_database(tmp_path: Path, monkeypatch):
-    monkeypatch.setenv("GRIDSTATUS_API_KEY", "test-key")
+    set_process_credential("gridstatus_api_key", "test-key")
     get_settings.cache_clear()
 
     def fake_fetch(_url: str) -> dict:
@@ -149,6 +152,7 @@ def test_adaptive_downloader_can_write_sqlite_database(tmp_path: Path, monkeypat
         output_format="sqlite",
         fetch_json=fake_fetch,
     )
+    clear_process_credentials()
 
     assert result.rows_written == 2
     with sqlite3.connect(output_path) as connection:

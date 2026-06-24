@@ -7,6 +7,7 @@ import httpx
 from loguru import logger
 
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.credentials import get_credential
 
 
 class GridStatusClient:
@@ -14,10 +15,13 @@ class GridStatusClient:
 
     def __init__(self) -> None:
         settings = get_settings()
-        if not settings.gridstatus_api_key:
-            raise RuntimeError("GRIDSTATUS_API_KEY is required in .env to use GridStatus crawlers.")
+        api_key = get_credential("gridstatus_api_key")
+        if not api_key:
+            raise RuntimeError(
+                "GridStatus API key is required in .auth/credentials.json."
+            )
 
-        self.api_key = settings.gridstatus_api_key
+        self.api_key = api_key
         self.min_interval_seconds = settings.gridstatus_min_interval_seconds
         self.retry_times = settings.request_retry_times
         self.last_request_at = 0.0

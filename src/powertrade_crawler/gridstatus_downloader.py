@@ -13,6 +13,7 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import httpx
 
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.credentials import get_credential
 
 
 GRIDSTATUS_QUERY_BASE_URL = "https://api.gridstatus.io/v1/datasets/{dataset_id}/query"
@@ -173,10 +174,11 @@ def download_dataset_csv_adaptive(
     fetch_json: FetchJson | None = None,
     control: DownloadControl | None = None,
 ) -> DownloadResult:
-    settings = get_settings()
-    api_key = settings.gridstatus_api_key
+    api_key = get_credential("gridstatus_api_key")
     if not api_key:
-        raise ValueError("GRIDSTATUS_API_KEY is required to download GridStatus CSV data.")
+        raise ValueError(
+            "GridStatus API key is required in .auth/credentials.json."
+        )
 
     dataset_id = str(metadata["dataset_id"])
     start = parse_gridstatus_time(

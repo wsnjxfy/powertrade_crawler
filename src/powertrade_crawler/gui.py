@@ -29,6 +29,7 @@ from tkinter import ttk
 
 from powertrade_crawler.clients.elecheck import ElecheckClient, ElecheckUnauthorizedError
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.credentials import get_credential, save_credential
 from powertrade_crawler.elecheck_auth import (
     cache_elecheck_authorization,
     resolve_elecheck_authorization,
@@ -67,24 +68,12 @@ def resolve_sqlite_path() -> Path:
 
 
 def has_usable_gridstatus_api_key() -> bool:
-    api_key = (get_settings().gridstatus_api_key or "").strip()
+    api_key = (get_credential("gridstatus_api_key") or "").strip()
     return bool(api_key and api_key != GRIDSTATUS_API_KEY_PLACEHOLDER)
 
 
-def save_gridstatus_api_key(api_key: str, env_path: Path = Path(".env")) -> None:
-    lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.exists() else []
-    output_lines = []
-    wrote_key = False
-    for line in lines:
-        if line.startswith("GRIDSTATUS_API_KEY="):
-            output_lines.append(f"GRIDSTATUS_API_KEY={api_key}")
-            wrote_key = True
-        else:
-            output_lines.append(line)
-    if not wrote_key:
-        output_lines.append(f"GRIDSTATUS_API_KEY={api_key}")
-    env_path.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
-    get_settings.cache_clear()
+def save_gridstatus_api_key(api_key: str, credential_path: Path | None = None) -> None:
+    save_credential("gridstatus_api_key", api_key, path=credential_path)
 
 
 def suggested_download_range(metadata: dict[str, object]) -> tuple[str, str]:
@@ -514,8 +503,11 @@ class GridStatusMetadataApp:
             return
         if not self.ensure_gridstatus_api_key():
             return
-        if not get_settings().gridstatus_api_key:
-            messagebox.showerror("缺少 API key", "请先在 .env 中设置 GRIDSTATUS_API_KEY。")
+        if not get_credential("gridstatus_api_key"):
+            messagebox.showerror(
+                "缺少 API key",
+                "请先在 .auth/credentials.json 中设置 GridStatus API key。",
+            )
             return
 
         self.show_download_options(dict(self.current_row))
@@ -528,7 +520,10 @@ class GridStatusMetadataApp:
 
         save_gridstatus_api_key(api_key.strip())
         self.summary_var.set("GridStatus API key 已更换。")
-        messagebox.showinfo("API key 已更换", "新的 GridStatus API key 已保存到当前目录的 .env 文件。")
+        messagebox.showinfo(
+            "API key 已更换",
+            "新的 GridStatus API key 已保存到 .auth/credentials.json。",
+        )
 
     def ensure_gridstatus_api_key(self) -> bool:
         if has_usable_gridstatus_api_key():
@@ -955,7 +950,7 @@ class GridStatusMetadataApp:
     @staticmethod
     def build_api_url(row: sqlite3.Row) -> str:
         params = {"limit": 1000}
-        api_key = (get_settings().gridstatus_api_key or "").strip()
+        api_key = (get_credential("gridstatus_api_key") or "").strip()
         if api_key and api_key != GRIDSTATUS_API_KEY_PLACEHOLDER:
             params["api_key"] = api_key
         return f"{GRIDSTATUS_QUERY_BASE_URL.format(dataset_id=row['dataset_id'])}?{urlencode(params)}"
@@ -967,7 +962,7 @@ class GridStatusMetadataApp:
             "download": "true",
             "limit": 1000,
         }
-        api_key = (get_settings().gridstatus_api_key or "").strip()
+        api_key = (get_credential("gridstatus_api_key") or "").strip()
         if api_key and api_key != GRIDSTATUS_API_KEY_PLACEHOLDER:
             params["api_key"] = api_key
         return f"{GRIDSTATUS_QUERY_BASE_URL.format(dataset_id=row['dataset_id'])}?{urlencode(params)}"

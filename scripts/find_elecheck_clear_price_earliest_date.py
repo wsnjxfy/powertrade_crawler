@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--authorization",
-        help="Raw Elecheck authorization JWT. If omitted, .env/cache will be used.",
+        help="Raw Elecheck authorization JWT. If omitted, .auth/credentials.json is used.",
     )
     parser.add_argument(
         "--sleep-seconds",
