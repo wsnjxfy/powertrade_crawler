@@ -16,8 +16,17 @@ def prepare_runtime_files(base_dir: Path) -> None:
     import os
 
     os.chdir(base_dir)
+    bundled_dir = Path(getattr(sys, "_MEIPASS", base_dir))
+    bundled_configs = bundled_dir / "configs"
+    runtime_configs = base_dir / "configs"
+    if not runtime_configs.exists() and bundled_configs.exists():
+        shutil.copytree(bundled_configs, runtime_configs)
+
     env_path = base_dir / ".env"
     env_example_path = base_dir / ".env.example"
+    bundled_env_example_path = bundled_dir / ".env.example"
+    if not env_example_path.exists() and bundled_env_example_path.exists():
+        shutil.copyfile(bundled_env_example_path, env_example_path)
     if not env_path.exists() and env_example_path.exists():
         shutil.copyfile(env_example_path, env_path)
     (base_dir / "data").mkdir(exist_ok=True)
@@ -42,8 +51,8 @@ def main() -> int:
                 "软件启动时遇到问题。\n\n"
                 f"{exc}\n\n"
                 "请确认软件目录可写，并且不要直接在压缩包内运行。\n"
-                "如需采集 Elecheck 数据，请让管理员更新同目录 .env 文件中的 "
-                "ELECHECK_AUTHORIZATION。"
+                "如需采集需要鉴权的数据，请使用 powertrade set-credential "
+                "或让管理员更新同目录 .auth\\credentials.json。"
             ),
         )
         return 1

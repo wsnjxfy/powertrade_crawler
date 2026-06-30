@@ -1,0 +1,4536 @@
+{
+  "generated_at_utc": "2026-06-29T13:33:25Z",
+  "period_start": "2026-06-01",
+  "period_end": "2026-06-02",
+  "area_scope": "candidates",
+  "pair_count": 124,
+  "note": "has_data/no_data is based on this probe window. ENTSO-E availability can vary by date, direction, and dataset.",
+  "areas": {
+    "AL": {
+      "eic": "10YAL-KESH-----5"
+    },
+    "AT": {
+      "eic": "10YAT-APG------L"
+    },
+    "BA": {
+      "eic": "10YBA-JPCC-----D"
+    },
+    "BE": {
+      "eic": "10YBE----------2"
+    },
+    "BG": {
+      "eic": "10YCA-BULGARIA-R"
+    },
+    "CH": {
+      "eic": "10YCH-SWISSGRIDZ"
+    },
+    "CZ": {
+      "eic": "10YCZ-CEPS-----N"
+    },
+    "DE-LU": {
+      "eic": "10Y1001A1001A82H"
+    },
+    "DK1": {
+      "eic": "10YDK-1--------W"
+    },
+    "DK2": {
+      "eic": "10YDK-2--------M"
+    },
+    "EE": {
+      "eic": "10Y1001A1001A39I"
+    },
+    "ES": {
+      "eic": "10YES-REE------0"
+    },
+    "FI": {
+      "eic": "10YFI-1--------U"
+    },
+    "FR": {
+      "eic": "10YFR-RTE------C"
+    },
+    "GB": {
+      "eic": "10YGB----------A"
+    },
+    "GR": {
+      "eic": "10YGR-HTSO-----Y"
+    },
+    "HR": {
+      "eic": "10YHR-HEP------M"
+    },
+    "HU": {
+      "eic": "10YHU-MAVIR----U"
+    },
+    "IE-SEM": {
+      "eic": "10Y1001A1001A59C"
+    },
+    "IT-CENTRE-NORTH": {
+      "eic": "10Y1001A1001A70O"
+    },
+    "IT-CENTRE-SOUTH": {
+      "eic": "10Y1001A1001A71M"
+    },
+    "IT-NORTH": {
+      "eic": "10Y1001A1001A73I"
+    },
+    "IT-SARDINIA": {
+      "eic": "10Y1001A1001A74G"
+    },
+    "IT-SICILY": {
+      "eic": "10Y1001A1001A75E"
+    },
+    "IT-SOUTH": {
+      "eic": "10Y1001A1001A788"
+    },
+    "LT": {
+      "eic": "10YLT-1001A0008Q"
+    },
+    "LV": {
+      "eic": "10YLV-1001A00074"
+    },
+    "ME": {
+      "eic": "10YCS-CG-TSO---S"
+    },
+    "MK": {
+      "eic": "10YMK-MEPSO----8"
+    },
+    "NL": {
+      "eic": "10YNL----------L"
+    },
+    "NO1": {
+      "eic": "10YNO-1--------2"
+    },
+    "NO2": {
+      "eic": "10YNO-2--------T"
+    },
+    "NO3": {
+      "eic": "10YNO-3--------J"
+    },
+    "NO4": {
+      "eic": "10YNO-4--------9"
+    },
+    "NO5": {
+      "eic": "10Y1001A1001A48H"
+    },
+    "PL": {
+      "eic": "10YPL-AREA-----S"
+    },
+    "PT": {
+      "eic": "10YPT-REN------W"
+    },
+    "RO": {
+      "eic": "10YRO-TEL------P"
+    },
+    "RS": {
+      "eic": "10YCS-SERBIATSOV"
+    },
+    "SE1": {
+      "eic": "10Y1001A1001A44P"
+    },
+    "SE2": {
+      "eic": "10Y1001A1001A45N"
+    },
+    "SE3": {
+      "eic": "10Y1001A1001A46L"
+    },
+    "SE4": {
+      "eic": "10Y1001A1001A47J"
+    },
+    "SI": {
+      "eic": "10YSI-ELES-----O"
+    },
+    "SK": {
+      "eic": "10YSK-SEPS-----K"
+    },
+    "TR": {
+      "eic": "10YTR-TEIAS----W"
+    }
+  },
+  "datasets": {
+    "entsoe_cross_border_physical_flows": {
+      "title_zh": "跨境物理潮流",
+      "title_en": "Cross-border Physical Flows",
+      "available_pairs": [
+        {
+          "in_area": "AT",
+          "out_area": "CH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 24
+        },
+        {
+          "in_area": "CH",
+          "out_area": "AT",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 1
+        },
+        {
+          "in_area": "AT",
+          "out_area": "CZ",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 79
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "AT",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 19
+        },
+        {
+          "in_area": "AT",
+          "out_area": "DE-LU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 96
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 96
+        },
+        {
+          "in_area": "AT",
+          "out_area": "HU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 1
+        },
+        {
+          "in_area": "HU",
+          "out_area": "AT",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 96
+        },
+        {
+          "in_area": "AT",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 1
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 96
+        },
+        {
+          "in_area": "AT",
+          "out_area": "SI",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YSI-ELES-----O",
+          "row_count": 1
+        },
+        {
+          "in_area": "SI",
+          "out_area": "AT",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 96
+        },
+        {
+          "in_area": "BE",
+          "out_area": "FR",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 96
+        },
+        {
+          "in_area": "FR",
+          "out_area": "BE",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YBE----------2",
+          "row_count": 1
+        },
+        {
+          "in_area": "BE",
+          "out_area": "GB",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YGB----------A",
+          "row_count": 47
+        },
+        {
+          "in_area": "GB",
+          "out_area": "BE",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YBE----------2",
+          "row_count": 52
+        },
+        {
+          "in_area": "BE",
+          "out_area": "NL",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YNL----------L",
+          "row_count": 24
+        },
+        {
+          "in_area": "NL",
+          "out_area": "BE",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YBE----------2",
+          "row_count": 1
+        },
+        {
+          "in_area": "CH",
+          "out_area": "DE-LU",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 96
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 96
+        },
+        {
+          "in_area": "CH",
+          "out_area": "FR",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 24
+        },
+        {
+          "in_area": "FR",
+          "out_area": "CH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 1
+        },
+        {
+          "in_area": "CH",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 15
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 17
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "DE-LU",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 52
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CZ",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 67
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "PL",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 79
+        },
+        {
+          "in_area": "PL",
+          "out_area": "CZ",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 20
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "SK",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YSK-SEPS-----K",
+          "row_count": 11
+        },
+        {
+          "in_area": "SK",
+          "out_area": "CZ",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 88
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "BE",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YBE----------2",
+          "row_count": 96
+        },
+        {
+          "in_area": "BE",
+          "out_area": "DE-LU",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 32
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 68
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 37
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-2--------M",
+          "row_count": 72
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 39
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 96
+        },
+        {
+          "in_area": "FR",
+          "out_area": "DE-LU",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 1
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNL----------L",
+          "row_count": 72
+        },
+        {
+          "in_area": "NL",
+          "out_area": "DE-LU",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 63
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 75
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DE-LU",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 30
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 52
+        },
+        {
+          "in_area": "PL",
+          "out_area": "DE-LU",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 96
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DK2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YDK-2--------M",
+          "row_count": 77
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DK1",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 42
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "NO2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 89
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DK1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 25
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "SE3",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 33
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 71
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "SE4",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A47J",
+          "row_count": 96
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YDK-2--------M",
+          "row_count": 5
+        },
+        {
+          "in_area": "EE",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YFI-1--------U",
+          "row_count": 96
+        },
+        {
+          "in_area": "FI",
+          "out_area": "EE",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A39I",
+          "row_count": 3
+        },
+        {
+          "in_area": "EE",
+          "out_area": "LV",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 17
+        },
+        {
+          "in_area": "LV",
+          "out_area": "EE",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10Y1001A1001A39I",
+          "row_count": 84
+        },
+        {
+          "in_area": "ES",
+          "out_area": "FR",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 73
+        },
+        {
+          "in_area": "FR",
+          "out_area": "ES",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YES-REE------0",
+          "row_count": 21
+        },
+        {
+          "in_area": "ES",
+          "out_area": "PT",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YPT-REN------W",
+          "row_count": 22
+        },
+        {
+          "in_area": "PT",
+          "out_area": "ES",
+          "in_domain": "10YPT-REN------W",
+          "out_domain": "10YES-REE------0",
+          "row_count": 73
+        },
+        {
+          "in_area": "FI",
+          "out_area": "SE1",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A44P",
+          "row_count": 96
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YFI-1--------U",
+          "row_count": 1
+        },
+        {
+          "in_area": "FR",
+          "out_area": "GB",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YGB----------A",
+          "row_count": 1
+        },
+        {
+          "in_area": "GB",
+          "out_area": "FR",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 24
+        },
+        {
+          "in_area": "FR",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 1
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 96
+        },
+        {
+          "in_area": "HR",
+          "out_area": "HU",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 76
+        },
+        {
+          "in_area": "HU",
+          "out_area": "HR",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YHR-HEP------M",
+          "row_count": 22
+        },
+        {
+          "in_area": "HR",
+          "out_area": "SI",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YSI-ELES-----O",
+          "row_count": 83
+        },
+        {
+          "in_area": "SI",
+          "out_area": "HR",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YHR-HEP------M",
+          "row_count": 25
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RO",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YRO-TEL------P",
+          "row_count": 68
+        },
+        {
+          "in_area": "RO",
+          "out_area": "HU",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 51
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RS",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 20
+        },
+        {
+          "in_area": "RS",
+          "out_area": "HU",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 18
+        },
+        {
+          "in_area": "HU",
+          "out_area": "SK",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YSK-SEPS-----K",
+          "row_count": 90
+        },
+        {
+          "in_area": "SK",
+          "out_area": "HU",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 13
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "SI",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YSI-ELES-----O",
+          "row_count": 86
+        },
+        {
+          "in_area": "SI",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 19
+        },
+        {
+          "in_area": "LT",
+          "out_area": "LV",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 96
+        },
+        {
+          "in_area": "LV",
+          "out_area": "LT",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10YLT-1001A0008Q",
+          "row_count": 1
+        },
+        {
+          "in_area": "LT",
+          "out_area": "PL",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 30
+        },
+        {
+          "in_area": "PL",
+          "out_area": "LT",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YLT-1001A0008Q",
+          "row_count": 79
+        },
+        {
+          "in_area": "ME",
+          "out_area": "RS",
+          "in_domain": "10YCS-CG-TSO---S",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 3
+        },
+        {
+          "in_area": "RS",
+          "out_area": "ME",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCS-CG-TSO---S",
+          "row_count": 24
+        },
+        {
+          "in_area": "MK",
+          "out_area": "RS",
+          "in_domain": "10YMK-MEPSO----8",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 1
+        },
+        {
+          "in_area": "RS",
+          "out_area": "MK",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YMK-MEPSO----8",
+          "row_count": 24
+        },
+        {
+          "in_area": "NL",
+          "out_area": "GB",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YGB----------A",
+          "row_count": 51
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NL",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNL----------L",
+          "row_count": 43
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO2",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 14
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 87
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO1",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 1
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO5",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A48H",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 1
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "SE3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 16
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 87
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO5",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A48H",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 1
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "GB",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YGB----------A",
+          "row_count": 1
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NO2",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO4",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-4--------9",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "NO3",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 1
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO5",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A48H",
+          "row_count": 1
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "SE2",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A45N",
+          "row_count": 1
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "SE1",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10Y1001A1001A44P",
+          "row_count": 1
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "NO4",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YNO-4--------9",
+          "row_count": 96
+        },
+        {
+          "in_area": "PL",
+          "out_area": "SE4",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A47J",
+          "row_count": 88
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 5
+        },
+        {
+          "in_area": "RO",
+          "out_area": "BG",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YCA-BULGARIA-R",
+          "row_count": 24
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RO",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YRO-TEL------P",
+          "row_count": 3
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BA",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YBA-JPCC-----D",
+          "row_count": 18
+        },
+        {
+          "in_area": "BA",
+          "out_area": "RS",
+          "in_domain": "10YBA-JPCC-----D",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 10
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BG",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCA-BULGARIA-R",
+          "row_count": 24
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RS",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 1
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10Y1001A1001A45N",
+          "row_count": 1
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE1",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A44P",
+          "row_count": 96
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 1
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A45N",
+          "row_count": 96
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE4",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A47J",
+          "row_count": 1
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 96
+        }
+      ],
+      "unavailable_pairs": [
+        {
+          "in_area": "FR",
+          "out_area": "NL",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item NET_CROSS_BORDER_PHYSICAL_FLOWS_R3 [12.1.G] (10YFR-RTE------C, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "FR",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item NET_CROSS_BORDER_PHYSICAL_FLOWS_R3 [12.1.G] (10YNL----------L, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        }
+      ],
+      "errors": []
+    },
+    "entsoe_commercial_schedules": {
+      "title_zh": "跨境商业计划交换",
+      "title_en": "Commercial Schedules",
+      "available_pairs": [
+        {
+          "in_area": "AT",
+          "out_area": "CH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 78
+        },
+        {
+          "in_area": "CH",
+          "out_area": "AT",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 83
+        },
+        {
+          "in_area": "AT",
+          "out_area": "CZ",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 113
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "AT",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 169
+        },
+        {
+          "in_area": "AT",
+          "out_area": "DE-LU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 84
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 185
+        },
+        {
+          "in_area": "AT",
+          "out_area": "HU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 93
+        },
+        {
+          "in_area": "HU",
+          "out_area": "AT",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 191
+        },
+        {
+          "in_area": "AT",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 109
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 101
+        },
+        {
+          "in_area": "AT",
+          "out_area": "SI",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YSI-ELES-----O",
+          "row_count": 72
+        },
+        {
+          "in_area": "SI",
+          "out_area": "AT",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 185
+        },
+        {
+          "in_area": "BE",
+          "out_area": "FR",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 191
+        },
+        {
+          "in_area": "FR",
+          "out_area": "BE",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YBE----------2",
+          "row_count": 56
+        },
+        {
+          "in_area": "BE",
+          "out_area": "GB",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YGB----------A",
+          "row_count": 35
+        },
+        {
+          "in_area": "GB",
+          "out_area": "BE",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YBE----------2",
+          "row_count": 36
+        },
+        {
+          "in_area": "BE",
+          "out_area": "NL",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YNL----------L",
+          "row_count": 192
+        },
+        {
+          "in_area": "NL",
+          "out_area": "BE",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YBE----------2",
+          "row_count": 96
+        },
+        {
+          "in_area": "CH",
+          "out_area": "DE-LU",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 26
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 116
+        },
+        {
+          "in_area": "CH",
+          "out_area": "FR",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 15
+        },
+        {
+          "in_area": "FR",
+          "out_area": "CH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 12
+        },
+        {
+          "in_area": "CH",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 66
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 78
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "DE-LU",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 108
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CZ",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 169
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "PL",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 121
+        },
+        {
+          "in_area": "PL",
+          "out_area": "CZ",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 157
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "SK",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YSK-SEPS-----K",
+          "row_count": 76
+        },
+        {
+          "in_area": "SK",
+          "out_area": "CZ",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YCZ-CEPS-----N",
+          "row_count": 188
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "BE",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YBE----------2",
+          "row_count": 149
+        },
+        {
+          "in_area": "BE",
+          "out_area": "DE-LU",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 118
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 160
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 122
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-2--------M",
+          "row_count": 169
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 109
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 192
+        },
+        {
+          "in_area": "FR",
+          "out_area": "DE-LU",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 16
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNL----------L",
+          "row_count": 124
+        },
+        {
+          "in_area": "NL",
+          "out_area": "DE-LU",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 165
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 98
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DE-LU",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 92
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 158
+        },
+        {
+          "in_area": "PL",
+          "out_area": "DE-LU",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 133
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DK2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YDK-2--------M",
+          "row_count": 83
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DK1",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 75
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "NO2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 81
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DK1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 52
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "SE3",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 95
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 48
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "SE4",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A47J",
+          "row_count": 137
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YDK-2--------M",
+          "row_count": 13
+        },
+        {
+          "in_area": "EE",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YFI-1--------U",
+          "row_count": 149
+        },
+        {
+          "in_area": "FI",
+          "out_area": "EE",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A39I",
+          "row_count": 4
+        },
+        {
+          "in_area": "EE",
+          "out_area": "LV",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 17
+        },
+        {
+          "in_area": "LV",
+          "out_area": "EE",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10Y1001A1001A39I",
+          "row_count": 171
+        },
+        {
+          "in_area": "ES",
+          "out_area": "FR",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 106
+        },
+        {
+          "in_area": "FR",
+          "out_area": "ES",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YES-REE------0",
+          "row_count": 125
+        },
+        {
+          "in_area": "ES",
+          "out_area": "PT",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YPT-REN------W",
+          "row_count": 37
+        },
+        {
+          "in_area": "PT",
+          "out_area": "ES",
+          "in_domain": "10YPT-REN------W",
+          "out_domain": "10YES-REE------0",
+          "row_count": 166
+        },
+        {
+          "in_area": "FI",
+          "out_area": "SE1",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A44P",
+          "row_count": 65
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YFI-1--------U",
+          "row_count": 2
+        },
+        {
+          "in_area": "FR",
+          "out_area": "GB",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YGB----------A",
+          "row_count": 3
+        },
+        {
+          "in_area": "GB",
+          "out_area": "FR",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 13
+        },
+        {
+          "in_area": "FR",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 21
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 31
+        },
+        {
+          "in_area": "HR",
+          "out_area": "HU",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 189
+        },
+        {
+          "in_area": "HU",
+          "out_area": "HR",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YHR-HEP------M",
+          "row_count": 67
+        },
+        {
+          "in_area": "HR",
+          "out_area": "SI",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YSI-ELES-----O",
+          "row_count": 192
+        },
+        {
+          "in_area": "SI",
+          "out_area": "HR",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YHR-HEP------M",
+          "row_count": 108
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RO",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YRO-TEL------P",
+          "row_count": 181
+        },
+        {
+          "in_area": "RO",
+          "out_area": "HU",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 101
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RS",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 37
+        },
+        {
+          "in_area": "RS",
+          "out_area": "HU",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 46
+        },
+        {
+          "in_area": "HU",
+          "out_area": "SK",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YSK-SEPS-----K",
+          "row_count": 138
+        },
+        {
+          "in_area": "SK",
+          "out_area": "HU",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 149
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "SI",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YSI-ELES-----O",
+          "row_count": 85
+        },
+        {
+          "in_area": "SI",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 81
+        },
+        {
+          "in_area": "LT",
+          "out_area": "LV",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 181
+        },
+        {
+          "in_area": "LV",
+          "out_area": "LT",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10YLT-1001A0008Q",
+          "row_count": 96
+        },
+        {
+          "in_area": "LT",
+          "out_area": "PL",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 45
+        },
+        {
+          "in_area": "PL",
+          "out_area": "LT",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YLT-1001A0008Q",
+          "row_count": 57
+        },
+        {
+          "in_area": "ME",
+          "out_area": "RS",
+          "in_domain": "10YCS-CG-TSO---S",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 46
+        },
+        {
+          "in_area": "RS",
+          "out_area": "ME",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCS-CG-TSO---S",
+          "row_count": 47
+        },
+        {
+          "in_area": "MK",
+          "out_area": "RS",
+          "in_domain": "10YMK-MEPSO----8",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 30
+        },
+        {
+          "in_area": "RS",
+          "out_area": "MK",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YMK-MEPSO----8",
+          "row_count": 39
+        },
+        {
+          "in_area": "NL",
+          "out_area": "GB",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YGB----------A",
+          "row_count": 36
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NL",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNL----------L",
+          "row_count": 32
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO2",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 17
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 29
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 26
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO1",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 2
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO5",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A48H",
+          "row_count": 48
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 4
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "SE3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 4
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YNO-1--------2",
+          "row_count": 96
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO5",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A48H",
+          "row_count": 48
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 2
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "GB",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YGB----------A",
+          "row_count": 2
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NO2",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 38
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO4",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-4--------9",
+          "row_count": 48
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "NO3",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 2
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO5",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A48H",
+          "row_count": 9
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 23
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "SE2",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A45N",
+          "row_count": 16
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10YNO-3--------J",
+          "row_count": 16
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "SE1",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10Y1001A1001A44P",
+          "row_count": 7
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "NO4",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YNO-4--------9",
+          "row_count": 34
+        },
+        {
+          "in_area": "PL",
+          "out_area": "SE4",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A47J",
+          "row_count": 33
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 27
+        },
+        {
+          "in_area": "RO",
+          "out_area": "BG",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YCA-BULGARIA-R",
+          "row_count": 173
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RO",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YRO-TEL------P",
+          "row_count": 135
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BA",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YBA-JPCC-----D",
+          "row_count": 29
+        },
+        {
+          "in_area": "BA",
+          "out_area": "RS",
+          "in_domain": "10YBA-JPCC-----D",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 46
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BG",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCA-BULGARIA-R",
+          "row_count": 24
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RS",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 16
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10Y1001A1001A45N",
+          "row_count": 4
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE1",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A44P",
+          "row_count": 101
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 2
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A45N",
+          "row_count": 120
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE4",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A47J",
+          "row_count": 4
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10Y1001A1001A46L",
+          "row_count": 120
+        }
+      ],
+      "unavailable_pairs": [
+        {
+          "in_area": "FR",
+          "out_area": "NL",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item COMMERCIAL_SCHEDULES [12.1.F] (10YFR-RTE------C, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "FR",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item COMMERCIAL_SCHEDULES [12.1.F] (10YNL----------L, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        }
+      ],
+      "errors": []
+    },
+    "entsoe_forecasted_transfer_capacity": {
+      "title_zh": "预测跨境传输容量",
+      "title_en": "Forecasted Transfer Capacity",
+      "available_pairs": [
+        {
+          "in_area": "AT",
+          "out_area": "CH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 3
+        },
+        {
+          "in_area": "CH",
+          "out_area": "AT",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 3
+        },
+        {
+          "in_area": "AT",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 7
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 12
+        },
+        {
+          "in_area": "BE",
+          "out_area": "GB",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YGB----------A",
+          "row_count": 3
+        },
+        {
+          "in_area": "GB",
+          "out_area": "BE",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YBE----------2",
+          "row_count": 5
+        },
+        {
+          "in_area": "BE",
+          "out_area": "NL",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YNL----------L",
+          "row_count": 24
+        },
+        {
+          "in_area": "NL",
+          "out_area": "BE",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YBE----------2",
+          "row_count": 3
+        },
+        {
+          "in_area": "CH",
+          "out_area": "DE-LU",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 2
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 3
+        },
+        {
+          "in_area": "CH",
+          "out_area": "FR",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 1
+        },
+        {
+          "in_area": "FR",
+          "out_area": "CH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 1
+        },
+        {
+          "in_area": "CH",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 7
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 13
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 10
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 1
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNL----------L",
+          "row_count": 17
+        },
+        {
+          "in_area": "NL",
+          "out_area": "DE-LU",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 18
+        },
+        {
+          "in_area": "ES",
+          "out_area": "FR",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 7
+        },
+        {
+          "in_area": "FR",
+          "out_area": "ES",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YES-REE------0",
+          "row_count": 4
+        },
+        {
+          "in_area": "ES",
+          "out_area": "PT",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YPT-REN------W",
+          "row_count": 7
+        },
+        {
+          "in_area": "PT",
+          "out_area": "ES",
+          "in_domain": "10YPT-REN------W",
+          "out_domain": "10YES-REE------0",
+          "row_count": 7
+        },
+        {
+          "in_area": "FR",
+          "out_area": "GB",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YGB----------A",
+          "row_count": 1
+        },
+        {
+          "in_area": "GB",
+          "out_area": "FR",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 1
+        },
+        {
+          "in_area": "FR",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 7
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 12
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RS",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 1
+        },
+        {
+          "in_area": "RS",
+          "out_area": "HU",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YHU-MAVIR----U",
+          "row_count": 1
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "SI",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YSI-ELES-----O",
+          "row_count": 12
+        },
+        {
+          "in_area": "SI",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 6
+        },
+        {
+          "in_area": "ME",
+          "out_area": "RS",
+          "in_domain": "10YCS-CG-TSO---S",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 1
+        },
+        {
+          "in_area": "RS",
+          "out_area": "ME",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCS-CG-TSO---S",
+          "row_count": 1
+        },
+        {
+          "in_area": "MK",
+          "out_area": "RS",
+          "in_domain": "10YMK-MEPSO----8",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 1
+        },
+        {
+          "in_area": "RS",
+          "out_area": "MK",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YMK-MEPSO----8",
+          "row_count": 1
+        },
+        {
+          "in_area": "NL",
+          "out_area": "GB",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YGB----------A",
+          "row_count": 12
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NL",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNL----------L",
+          "row_count": 12
+        },
+        {
+          "in_area": "RO",
+          "out_area": "BG",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YCA-BULGARIA-R",
+          "row_count": 19
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RO",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YRO-TEL------P",
+          "row_count": 15
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BA",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YBA-JPCC-----D",
+          "row_count": 1
+        },
+        {
+          "in_area": "BA",
+          "out_area": "RS",
+          "in_domain": "10YBA-JPCC-----D",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 2
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BG",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCA-BULGARIA-R",
+          "row_count": 1
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RS",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YCS-SERBIATSOV",
+          "row_count": 1
+        }
+      ],
+      "unavailable_pairs": [
+        {
+          "in_area": "AT",
+          "out_area": "CZ",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YAT-APG------L, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "AT",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YCZ-CEPS-----N, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "DE-LU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YAT-APG------L, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A82H, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "HU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YAT-APG------L, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "AT",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YHU-MAVIR----U, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "SI",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YAT-APG------L, 10YSI-ELES-----O) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SI",
+          "out_area": "AT",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YSI-ELES-----O, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "FR",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YBE----------2, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "BE",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YFR-RTE------C, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "DE-LU",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YCZ-CEPS-----N, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CZ",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A82H, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "PL",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YCZ-CEPS-----N, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "CZ",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YPL-AREA-----S, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "SK",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YSK-SEPS-----K",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YCZ-CEPS-----N, 10YSK-SEPS-----K) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SK",
+          "out_area": "CZ",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YSK-SEPS-----K, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "BE",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A82H, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "DE-LU",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YBE----------2, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A82H, 10YDK-2--------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YDK-2--------M, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A82H, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "DE-LU",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YFR-RTE------C, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A82H, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DE-LU",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-2--------T, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A82H, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "DE-LU",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YPL-AREA-----S, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DK2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YDK-1--------W, 10YDK-2--------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DK1",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YDK-2--------M, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "NO2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YDK-1--------W, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DK1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-2--------T, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "SE3",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YDK-1--------W, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A46L, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "SE4",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YDK-2--------M, 10Y1001A1001A47J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A47J, 10YDK-2--------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "EE",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YFI-1--------U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A39I, 10YFI-1--------U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FI",
+          "out_area": "EE",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A39I",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YFI-1--------U, 10Y1001A1001A39I) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "EE",
+          "out_area": "LV",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YLV-1001A00074",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A39I, 10YLV-1001A00074) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "LV",
+          "out_area": "EE",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10Y1001A1001A39I",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YLV-1001A00074, 10Y1001A1001A39I) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FI",
+          "out_area": "SE1",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YFI-1--------U, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YFI-1--------U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A44P, 10YFI-1--------U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "NL",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YFR-RTE------C, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "FR",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNL----------L, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HR",
+          "out_area": "HU",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YHR-HEP------M, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "HR",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YHR-HEP------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YHU-MAVIR----U, 10YHR-HEP------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HR",
+          "out_area": "SI",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YHR-HEP------M, 10YSI-ELES-----O) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SI",
+          "out_area": "HR",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YHR-HEP------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YSI-ELES-----O, 10YHR-HEP------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RO",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YRO-TEL------P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YHU-MAVIR----U, 10YRO-TEL------P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RO",
+          "out_area": "HU",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YRO-TEL------P, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "SK",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YSK-SEPS-----K",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YHU-MAVIR----U, 10YSK-SEPS-----K) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SK",
+          "out_area": "HU",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YSK-SEPS-----K, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "LT",
+          "out_area": "LV",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YLV-1001A00074",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YLT-1001A0008Q, 10YLV-1001A00074) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "LV",
+          "out_area": "LT",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10YLT-1001A0008Q",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YLV-1001A00074, 10YLT-1001A0008Q) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "LT",
+          "out_area": "PL",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YLT-1001A0008Q, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "LT",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YLT-1001A0008Q",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YPL-AREA-----S, 10YLT-1001A0008Q) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO2",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-1--------2, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-2--------T, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-1--------2, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO1",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-3--------J, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO5",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-1--------2, 10Y1001A1001A48H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A48H, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "SE3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-1--------2, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A46L, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO5",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-2--------T, 10Y1001A1001A48H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A48H, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "GB",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-2--------T, 10YGB----------A) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NO2",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YGB----------A, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO4",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-4--------9",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-3--------J, 10YNO-4--------9) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "NO3",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-4--------9, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO5",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-3--------J, 10Y1001A1001A48H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A48H, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "SE2",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-3--------J, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A45N, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "SE1",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YNO-4--------9, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "NO4",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YNO-4--------9",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A44P, 10YNO-4--------9) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "SE4",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10YPL-AREA-----S, 10Y1001A1001A47J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A47J, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A44P, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE1",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A45N, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A45N, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A46L, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE4",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A46L, 10Y1001A1001A47J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item FORECASTED_TRANSFER_CAPACITIES_EXPLICIT [11.1] (10Y1001A1001A47J, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        }
+      ],
+      "errors": []
+    },
+    "entsoe_offered_transfer_capacity": {
+      "title_zh": "日前可供交易的跨境容量",
+      "title_en": "Day-ahead Offered Transfer Capacity",
+      "available_pairs": [
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 25
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 2
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 25
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DE-LU",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 2
+        },
+        {
+          "in_area": "EE",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YFI-1--------U",
+          "row_count": 2
+        },
+        {
+          "in_area": "FI",
+          "out_area": "EE",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A39I",
+          "row_count": 2
+        },
+        {
+          "in_area": "EE",
+          "out_area": "LV",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 2
+        },
+        {
+          "in_area": "LV",
+          "out_area": "EE",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10Y1001A1001A39I",
+          "row_count": 2
+        },
+        {
+          "in_area": "ES",
+          "out_area": "FR",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 12
+        },
+        {
+          "in_area": "FR",
+          "out_area": "ES",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YES-REE------0",
+          "row_count": 8
+        },
+        {
+          "in_area": "ES",
+          "out_area": "PT",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YPT-REN------W",
+          "row_count": 12
+        },
+        {
+          "in_area": "PT",
+          "out_area": "ES",
+          "in_domain": "10YPT-REN------W",
+          "out_domain": "10YES-REE------0",
+          "row_count": 11
+        },
+        {
+          "in_area": "LT",
+          "out_area": "LV",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 38
+        },
+        {
+          "in_area": "LV",
+          "out_area": "LT",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10YLT-1001A0008Q",
+          "row_count": 38
+        },
+        {
+          "in_area": "LT",
+          "out_area": "PL",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 22
+        },
+        {
+          "in_area": "PL",
+          "out_area": "LT",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YLT-1001A0008Q",
+          "row_count": 39
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "GB",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YGB----------A",
+          "row_count": 2
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NO2",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 2
+        },
+        {
+          "in_area": "PL",
+          "out_area": "SE4",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A47J",
+          "row_count": 2
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 13
+        },
+        {
+          "in_area": "RO",
+          "out_area": "BG",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YCA-BULGARIA-R",
+          "row_count": 38
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RO",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YRO-TEL------P",
+          "row_count": 36
+        }
+      ],
+      "unavailable_pairs": [
+        {
+          "in_area": "AT",
+          "out_area": "CH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YAT-APG------L, 10YCH-SWISSGRIDZ) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CH",
+          "out_area": "AT",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCH-SWISSGRIDZ, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "CZ",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YAT-APG------L, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "AT",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCZ-CEPS-----N, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "DE-LU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YAT-APG------L, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "HU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YAT-APG------L, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "AT",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YHU-MAVIR----U, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A73I",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YAT-APG------L, 10Y1001A1001A73I) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A73I, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "SI",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YAT-APG------L, 10YSI-ELES-----O) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SI",
+          "out_area": "AT",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YSI-ELES-----O, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "FR",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YBE----------2, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "BE",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YFR-RTE------C, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "GB",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YBE----------2, 10YGB----------A) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "GB",
+          "out_area": "BE",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YGB----------A, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "NL",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YBE----------2, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "BE",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNL----------L, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CH",
+          "out_area": "DE-LU",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCH-SWISSGRIDZ, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YCH-SWISSGRIDZ) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CH",
+          "out_area": "FR",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCH-SWISSGRIDZ, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "CH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YFR-RTE------C, 10YCH-SWISSGRIDZ) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CH",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A73I",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCH-SWISSGRIDZ, 10Y1001A1001A73I) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A73I, 10YCH-SWISSGRIDZ) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "DE-LU",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCZ-CEPS-----N, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CZ",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "PL",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCZ-CEPS-----N, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "CZ",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YPL-AREA-----S, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "SK",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YSK-SEPS-----K",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCZ-CEPS-----N, 10YSK-SEPS-----K) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SK",
+          "out_area": "CZ",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YSK-SEPS-----K, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "BE",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "DE-LU",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YBE----------2, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YDK-2--------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YDK-2--------M, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "DE-LU",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YFR-RTE------C, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "DE-LU",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNL----------L, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A82H, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "DE-LU",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YPL-AREA-----S, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DK2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YDK-1--------W, 10YDK-2--------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DK1",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YDK-2--------M, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "NO2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YDK-1--------W, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DK1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-2--------T, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "SE3",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YDK-1--------W, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A46L, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "SE4",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YDK-2--------M, 10Y1001A1001A47J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A47J, 10YDK-2--------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FI",
+          "out_area": "SE1",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YFI-1--------U, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YFI-1--------U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A44P, 10YFI-1--------U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "GB",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YFR-RTE------C, 10YGB----------A) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "GB",
+          "out_area": "FR",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YGB----------A, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A73I",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YFR-RTE------C, 10Y1001A1001A73I) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A73I, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "NL",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YFR-RTE------C, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "FR",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNL----------L, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HR",
+          "out_area": "HU",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YHR-HEP------M, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "HR",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YHR-HEP------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YHU-MAVIR----U, 10YHR-HEP------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HR",
+          "out_area": "SI",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YHR-HEP------M, 10YSI-ELES-----O) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SI",
+          "out_area": "HR",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YHR-HEP------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YSI-ELES-----O, 10YHR-HEP------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RO",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YRO-TEL------P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YHU-MAVIR----U, 10YRO-TEL------P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RO",
+          "out_area": "HU",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YRO-TEL------P, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RS",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YHU-MAVIR----U, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "HU",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCS-SERBIATSOV, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "SK",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YSK-SEPS-----K",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YHU-MAVIR----U, 10YSK-SEPS-----K) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SK",
+          "out_area": "HU",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YSK-SEPS-----K, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "SI",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A73I, 10YSI-ELES-----O) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SI",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10Y1001A1001A73I",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YSI-ELES-----O, 10Y1001A1001A73I) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "ME",
+          "out_area": "RS",
+          "in_domain": "10YCS-CG-TSO---S",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCS-CG-TSO---S, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "ME",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCS-CG-TSO---S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCS-SERBIATSOV, 10YCS-CG-TSO---S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "MK",
+          "out_area": "RS",
+          "in_domain": "10YMK-MEPSO----8",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YMK-MEPSO----8, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "MK",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YMK-MEPSO----8",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCS-SERBIATSOV, 10YMK-MEPSO----8) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "GB",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNL----------L, 10YGB----------A) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NL",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YGB----------A, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO2",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-1--------2, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-2--------T, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-1--------2, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO1",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-3--------J, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO5",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-1--------2, 10Y1001A1001A48H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A48H, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "SE3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-1--------2, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A46L, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO5",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-2--------T, 10Y1001A1001A48H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A48H, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO4",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-4--------9",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-3--------J, 10YNO-4--------9) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "NO3",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-4--------9, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO5",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-3--------J, 10Y1001A1001A48H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A48H, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "SE2",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-3--------J, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A45N, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "SE1",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YNO-4--------9, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "NO4",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YNO-4--------9",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A44P, 10YNO-4--------9) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BA",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YBA-JPCC-----D",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCS-SERBIATSOV, 10YBA-JPCC-----D) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BA",
+          "out_area": "RS",
+          "in_domain": "10YBA-JPCC-----D",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YBA-JPCC-----D, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BG",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCA-BULGARIA-R",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCS-SERBIATSOV, 10YCA-BULGARIA-R) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RS",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10YCA-BULGARIA-R, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A44P, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE1",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A45N, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A45N, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A46L, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE4",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A46L, 10Y1001A1001A47J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item OFFERED_TRANSFER_CAPACITIES_IMPLICIT [11.1] (10Y1001A1001A47J, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        }
+      ],
+      "errors": []
+    },
+    "entsoe_transmission_outages": {
+      "title_zh": "输电基础设施不可用情况",
+      "title_en": "Unavailability of Transmission Infrastructure",
+      "available_pairs": [
+        {
+          "in_area": "AT",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 1045
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YAT-APG------L",
+          "row_count": 1051
+        },
+        {
+          "in_area": "CH",
+          "out_area": "DE-LU",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 6
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 5
+        },
+        {
+          "in_area": "CH",
+          "out_area": "FR",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 7
+        },
+        {
+          "in_area": "FR",
+          "out_area": "CH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 7
+        },
+        {
+          "in_area": "CH",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10Y1001A1001A73I",
+          "row_count": 3
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "CH",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "row_count": 13
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-1--------W",
+          "row_count": 2630
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 186
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YDK-2--------M",
+          "row_count": 82
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DE-LU",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 86
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 1
+        },
+        {
+          "in_area": "FR",
+          "out_area": "DE-LU",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 1
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNO-2--------T",
+          "row_count": 7
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DE-LU",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 7
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YPL-AREA-----S",
+          "row_count": 36
+        },
+        {
+          "in_area": "PL",
+          "out_area": "DE-LU",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A82H",
+          "row_count": 35
+        },
+        {
+          "in_area": "EE",
+          "out_area": "LV",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 7
+        },
+        {
+          "in_area": "LV",
+          "out_area": "EE",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10Y1001A1001A39I",
+          "row_count": 4
+        },
+        {
+          "in_area": "GB",
+          "out_area": "FR",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YFR-RTE------C",
+          "row_count": 67
+        },
+        {
+          "in_area": "LT",
+          "out_area": "LV",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YLV-1001A00074",
+          "row_count": 1
+        },
+        {
+          "in_area": "LV",
+          "out_area": "LT",
+          "in_domain": "10YLV-1001A00074",
+          "out_domain": "10YLT-1001A0008Q",
+          "row_count": 1
+        }
+      ],
+      "unavailable_pairs": [
+        {
+          "in_area": "AT",
+          "out_area": "DE-LU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YAT-APG------L, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "AT",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A82H, 10YAT-APG------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "GB",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YBE----------2, 10YGB----------A) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "GB",
+          "out_area": "BE",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YGB----------A, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "DE-LU",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCZ-CEPS-----N, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "CZ",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A82H, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "PL",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCZ-CEPS-----N, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "CZ",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YPL-AREA-----S, 10YCZ-CEPS-----N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "BE",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A82H, 10YBE----------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BE",
+          "out_area": "DE-LU",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YBE----------2, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DE-LU",
+          "out_area": "NL",
+          "in_domain": "10Y1001A1001A82H",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A82H, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "DE-LU",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10Y1001A1001A82H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNL----------L, 10Y1001A1001A82H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "DK2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YDK-1--------W, 10YDK-2--------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "DK1",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YDK-2--------M, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "SE3",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YDK-1--------W, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "DK1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A46L, 10YDK-1--------W) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "DK2",
+          "out_area": "SE4",
+          "in_domain": "10YDK-2--------M",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YDK-2--------M, 10Y1001A1001A47J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "EE",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A39I",
+          "out_domain": "10YFI-1--------U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A39I, 10YFI-1--------U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FI",
+          "out_area": "EE",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A39I",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YFI-1--------U, 10Y1001A1001A39I) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FI",
+          "out_area": "SE1",
+          "in_domain": "10YFI-1--------U",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YFI-1--------U, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "FR",
+          "out_area": "NL",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YFR-RTE------C, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "FR",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNL----------L, 10YFR-RTE------C) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HR",
+          "out_area": "HU",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YHR-HEP------M, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "HR",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YHR-HEP------M",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YHU-MAVIR----U, 10YHR-HEP------M) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RO",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YRO-TEL------P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YHU-MAVIR----U, 10YRO-TEL------P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RO",
+          "out_area": "HU",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YRO-TEL------P, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "RS",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YHU-MAVIR----U, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "HU",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCS-SERBIATSOV, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "HU",
+          "out_area": "SK",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YSK-SEPS-----K",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YHU-MAVIR----U, 10YSK-SEPS-----K) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SK",
+          "out_area": "HU",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YSK-SEPS-----K, 10YHU-MAVIR----U) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "SI",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A73I, 10YSI-ELES-----O) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "LT",
+          "out_area": "PL",
+          "in_domain": "10YLT-1001A0008Q",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YLT-1001A0008Q, 10YPL-AREA-----S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "PL",
+          "out_area": "LT",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10YLT-1001A0008Q",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YPL-AREA-----S, 10YLT-1001A0008Q) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "ME",
+          "out_area": "RS",
+          "in_domain": "10YCS-CG-TSO---S",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCS-CG-TSO---S, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "ME",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCS-CG-TSO---S",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCS-SERBIATSOV, 10YCS-CG-TSO---S) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "MK",
+          "out_area": "RS",
+          "in_domain": "10YMK-MEPSO----8",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YMK-MEPSO----8, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "MK",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YMK-MEPSO----8",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCS-SERBIATSOV, 10YMK-MEPSO----8) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NL",
+          "out_area": "GB",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNL----------L, 10YGB----------A) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NL",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YGB----------A, 10YNL----------L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-1--------2, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO1",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-3--------J, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A48H, 10YNO-1--------2) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "SE3",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-1--------2, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO5",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-2--------T, 10Y1001A1001A48H) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO2",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A48H, 10YNO-2--------T) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "GB",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-2--------T, 10YGB----------A) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "NO3",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-4--------9, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "SE2",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-3--------J, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A45N, 10YNO-3--------J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "NO4",
+          "out_area": "SE1",
+          "in_domain": "10YNO-4--------9",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YNO-4--------9, 10Y1001A1001A44P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "NO4",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YNO-4--------9",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A44P, 10YNO-4--------9) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RO",
+          "out_area": "BG",
+          "in_domain": "10YRO-TEL------P",
+          "out_domain": "10YCA-BULGARIA-R",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YRO-TEL------P, 10YCA-BULGARIA-R) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RO",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YRO-TEL------P",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCA-BULGARIA-R, 10YRO-TEL------P) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BA",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YBA-JPCC-----D",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCS-SERBIATSOV, 10YBA-JPCC-----D) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BA",
+          "out_area": "RS",
+          "in_domain": "10YBA-JPCC-----D",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YBA-JPCC-----D, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "RS",
+          "out_area": "BG",
+          "in_domain": "10YCS-SERBIATSOV",
+          "out_domain": "10YCA-BULGARIA-R",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCS-SERBIATSOV, 10YCA-BULGARIA-R) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "BG",
+          "out_area": "RS",
+          "in_domain": "10YCA-BULGARIA-R",
+          "out_domain": "10YCS-SERBIATSOV",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10YCA-BULGARIA-R, 10YCS-SERBIATSOV) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A44P, 10Y1001A1001A45N) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A45N, 10Y1001A1001A46L) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE4",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: 999 No matching data found for Data item UNAVAILABILITY_IN_TRANSMISSION_GRID [10.1.A, 10.1.B] (10Y1001A1001A46L, 10Y1001A1001A47J) and interval 2026-06-01T00:00:00Z/2026-06-02T00:00:00Z."
+        }
+      ],
+      "errors": [
+        {
+          "in_area": "AT",
+          "out_area": "CH",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCH-SWISSGRIDZ",
+          "reason": "ENTSO-E rejected request: A95 Critical disconnection in neighboring grid."
+        },
+        {
+          "in_area": "CH",
+          "out_area": "AT",
+          "in_domain": "10YCH-SWISSGRIDZ",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: A95 Critical disconnection in neighboring grid."
+        },
+        {
+          "in_area": "AT",
+          "out_area": "CZ",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: A95 Forecast of Yearly and Monthly Products incl. Maintenance Periods"
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "AT",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: A95 Forecast of Yearly and Monthly Products incl. Maintenance Periods"
+        },
+        {
+          "in_area": "AT",
+          "out_area": "HU",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YHU-MAVIR----U",
+          "reason": "ENTSO-E rejected request: A95 Forecast of Yearly and Monthly Products incl. Maintenance Periods"
+        },
+        {
+          "in_area": "HU",
+          "out_area": "AT",
+          "in_domain": "10YHU-MAVIR----U",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: A95 Forecast of Yearly and Monthly Products incl. Maintenance Periods"
+        },
+        {
+          "in_area": "AT",
+          "out_area": "SI",
+          "in_domain": "10YAT-APG------L",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: A95 Forecast of Yearly and Monthly Products incl. Maintenance Periods"
+        },
+        {
+          "in_area": "SI",
+          "out_area": "AT",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YAT-APG------L",
+          "reason": "ENTSO-E rejected request: A95 Forecast of Yearly and Monthly Products incl. Maintenance Periods"
+        },
+        {
+          "in_area": "BE",
+          "out_area": "FR",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: B19 ScheduledWorks"
+        },
+        {
+          "in_area": "FR",
+          "out_area": "BE",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: B19 ScheduledWorks"
+        },
+        {
+          "in_area": "BE",
+          "out_area": "NL",
+          "in_domain": "10YBE----------2",
+          "out_domain": "10YNL----------L",
+          "reason": "ENTSO-E rejected request: B19 ScheduledWorks"
+        },
+        {
+          "in_area": "NL",
+          "out_area": "BE",
+          "in_domain": "10YNL----------L",
+          "out_domain": "10YBE----------2",
+          "reason": "ENTSO-E rejected request: B19 ScheduledWorks"
+        },
+        {
+          "in_area": "CZ",
+          "out_area": "SK",
+          "in_domain": "10YCZ-CEPS-----N",
+          "out_domain": "10YSK-SEPS-----K",
+          "reason": "ENTSO-E rejected request: A95 Other reason"
+        },
+        {
+          "in_area": "SK",
+          "out_area": "CZ",
+          "in_domain": "10YSK-SEPS-----K",
+          "out_domain": "10YCZ-CEPS-----N",
+          "reason": "ENTSO-E rejected request: A95 Other reason"
+        },
+        {
+          "in_area": "DK1",
+          "out_area": "NO2",
+          "in_domain": "10YDK-1--------W",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "DK1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YDK-1--------W",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "DK2",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YDK-2--------M",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "ES",
+          "out_area": "FR",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: A95 Outaged line due to maintenance work"
+        },
+        {
+          "in_area": "FR",
+          "out_area": "ES",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YES-REE------0",
+          "reason": "ENTSO-E rejected request: A95 Outaged line due to maintenance work"
+        },
+        {
+          "in_area": "ES",
+          "out_area": "PT",
+          "in_domain": "10YES-REE------0",
+          "out_domain": "10YPT-REN------W",
+          "reason": "ENTSO-E rejected request: A95 Outaged line due to maintenance work"
+        },
+        {
+          "in_area": "PT",
+          "out_area": "ES",
+          "in_domain": "10YPT-REN------W",
+          "out_domain": "10YES-REE------0",
+          "reason": "ENTSO-E rejected request: A95 Outaged line due to maintenance work"
+        },
+        {
+          "in_area": "SE1",
+          "out_area": "FI",
+          "in_domain": "10Y1001A1001A44P",
+          "out_domain": "10YFI-1--------U",
+          "reason": "ENTSO-E GET failed after retries"
+        },
+        {
+          "in_area": "FR",
+          "out_area": "GB",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10YGB----------A",
+          "reason": "ENTSO-E GET failed after retries"
+        },
+        {
+          "in_area": "FR",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YFR-RTE------C",
+          "out_domain": "10Y1001A1001A73I",
+          "reason": "ENTSO-E rejected request: A95 Other"
+        },
+        {
+          "in_area": "IT-NORTH",
+          "out_area": "FR",
+          "in_domain": "10Y1001A1001A73I",
+          "out_domain": "10YFR-RTE------C",
+          "reason": "ENTSO-E rejected request: A95 Other"
+        },
+        {
+          "in_area": "HR",
+          "out_area": "SI",
+          "in_domain": "10YHR-HEP------M",
+          "out_domain": "10YSI-ELES-----O",
+          "reason": "ENTSO-E rejected request: B19 Foreseen Maintenance"
+        },
+        {
+          "in_area": "SI",
+          "out_area": "HR",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10YHR-HEP------M",
+          "reason": "ENTSO-E rejected request: B19 Foreseen Maintenance"
+        },
+        {
+          "in_area": "SI",
+          "out_area": "IT-NORTH",
+          "in_domain": "10YSI-ELES-----O",
+          "out_domain": "10Y1001A1001A73I",
+          "reason": "ENTSO-E GET failed after retries"
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO2",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "NO2",
+          "out_area": "NO1",
+          "in_domain": "10YNO-2--------T",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "NO1",
+          "out_area": "NO5",
+          "in_domain": "10YNO-1--------2",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "NO1",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10YNO-1--------2",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "GB",
+          "out_area": "NO2",
+          "in_domain": "10YGB----------A",
+          "out_domain": "10YNO-2--------T",
+          "reason": "ENTSO-E GET failed after retries"
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO4",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10YNO-4--------9",
+          "reason": "ENTSO-E GET failed after retries"
+        },
+        {
+          "in_area": "NO3",
+          "out_area": "NO5",
+          "in_domain": "10YNO-3--------J",
+          "out_domain": "10Y1001A1001A48H",
+          "reason": "ENTSO-E GET failed after retries"
+        },
+        {
+          "in_area": "NO5",
+          "out_area": "NO3",
+          "in_domain": "10Y1001A1001A48H",
+          "out_domain": "10YNO-3--------J",
+          "reason": "ENTSO-E GET failed after retries"
+        },
+        {
+          "in_area": "PL",
+          "out_area": "SE4",
+          "in_domain": "10YPL-AREA-----S",
+          "out_domain": "10Y1001A1001A47J",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "PL",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10YPL-AREA-----S",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "SE2",
+          "out_area": "SE1",
+          "in_domain": "10Y1001A1001A45N",
+          "out_domain": "10Y1001A1001A44P",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "SE3",
+          "out_area": "SE2",
+          "in_domain": "10Y1001A1001A46L",
+          "out_domain": "10Y1001A1001A45N",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        },
+        {
+          "in_area": "SE4",
+          "out_area": "SE3",
+          "in_domain": "10Y1001A1001A47J",
+          "out_domain": "10Y1001A1001A46L",
+          "reason": "ENTSO-E rejected request: A95 Aggregated Unavailability from NUCS."
+        }
+      ]
+    }
+  }
+}

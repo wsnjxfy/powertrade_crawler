@@ -5,7 +5,11 @@ a = Analysis(
     ['desktop_launcher.py'],
     pathex=['src'],
     binaries=[],
-    datas=[],
+    datas=[
+        ('configs', 'configs'),
+        ('.env.example', '.'),
+        ('EXE_README.txt', '.'),
+    ],
     hiddenimports=['powertrade_crawler.gui'],
     hookspath=[],
     hooksconfig={},

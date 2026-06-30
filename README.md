@@ -1,6 +1,13 @@
 # Powertrade Crawler
 
-一个面向国内外电力交易数据网站的可扩展爬虫项目骨架。
+一个面向国内外电力交易、电价和电力系统运行数据的本地采集、存储与浏览工具。
+
+当前已接入的数据源包括：
+
+- ENTSO-E Transparency Platform 欧洲电力数据。
+- GridStatus API。
+- 广州电力交易中心新闻。
+- 微信小程序“易能电易查”的多个业务接口。
 
 ## 1. 环境搭建
 
@@ -255,11 +262,76 @@ powertrade entsoe-describe entsoe_actual_total_load
 powertrade crawl entsoe_day_ahead_prices --area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
 ```
 
+其他常用数据集示例：
+
+```powershell
+powertrade crawl entsoe_actual_total_load --area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl entsoe_actual_generation_by_type --area DE-LU --psr-type B16 --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl entsoe_cross_border_physical_flows --in-area FR --out-area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+```
+
 也可以直接传 EIC：
 
 ```powershell
 powertrade crawl entsoe_day_ahead_prices --area-code 10Y1001A1001A82H --start-date 2026-06-01 --end-date 2026-06-02
 ```
+
+### ENTSO-E GUI 使用
+
+图形界面已接入 ENTSO-E。启动：
+
+```powershell
+powertrade gui
+```
+
+打开后选择顶部的 `ENTSO-E 欧洲` 页签。
+
+这个页签提供：
+
+- token 状态显示：只显示 `configured` 或 `missing`，不会显示 token 明文。
+- 数据集下拉框：数据来自 `configs/entsoe/requests.json`，当前 26 个配置化数据集已全部接入 GUI。
+- 数据集说明：显示中文说明、英文说明、参数含义和返回数据意义。
+- 区域选择：下拉显示中文名称，例如 `德国-卢森堡 (DE-LU)`；单区域数据使用 `区域`，跨境数据使用 `来源区域` 和 `目标区域`。
+- 全部区域：选择空白或 `全部区域` 时，执行爬取会展开为全部内置 area；跨境数据会展开为来源/目标组合，执行前会提示确认。
+- 跨境可用性：如果存在 `configs/entsoe/border_availability.json`，已探测的数据集会根据可用边界动态过滤来源/目标区域，不可用组合不会进入可选列表。
+- 日期选择：`start-date` 和 `end-date` 按 UTC 查询窗口发送，`end-date` 是不包含的结束边界。
+- `dry-run 预览`：只展示不含 `securityToken` 的请求参数，不访问接口，也不写数据库。
+- `执行爬取`：复用已有 spider/client/credentials/storage 逻辑，请求 ENTSO-E 并写入本地数据库。
+- 结果浏览：通用 ENTSO-E 数据从 `entsoe_records` 读取；兼容的 `entsoe_day_ahead_prices` 从 `market_records` 读取。
+- `导出数据`：按当前数据集、区域和日期筛选导出 CSV。
+- `清除数据`：按当前数据集、区域和日期筛选清除本地记录，执行前会二次确认。
+
+常用区域别名例如：
+
+```text
+DE-LU, FR, BE, NL, AT, CZ, PL, DK1, DK2, NO1, SE4
+```
+
+如果内置别名不适合某个控制区、报价区或特殊区域，CLI 可以直接使用 EIC 参数；GUI 当前主要提供中文可读的常用 area 下拉，真实数据可用性仍以 ENTSO-E API 返回为准。
+
+跨境数据可用性可以用脚本探测并刷新本地配置：
+
+```powershell
+python scripts/probe_entsoe_border_availability.py --dataset entsoe_cross_border_physical_flows
+```
+
+脚本会读取 `.auth/credentials.json` 中的 ENTSO-E token，但不会打印或写出 token。输出文件：
+
+```text
+configs/entsoe/border_availability.json
+```
+
+当前已探测 5 个跨境数据集在 `2026-06-01` 到 `2026-06-02` 窗口内的 124 个候选跨境方向：
+
+| 数据集 | 有数据 | 无数据 | 错误/超时 |
+|---|---:|---:|---:|
+| `entsoe_cross_border_physical_flows` | 122 | 2 | 0 |
+| `entsoe_commercial_schedules` | 122 | 2 | 0 |
+| `entsoe_forecasted_transfer_capacity` | 42 | 82 | 0 |
+| `entsoe_offered_transfer_capacity` | 22 | 102 | 0 |
+| `entsoe_transmission_outages` | 23 | 60 | 41 |
+
+这个结论只代表该探测窗口，跨境数据可用性可能随日期、方向和数据集变化。
 
 API 使用的核心参数：
 
@@ -268,6 +340,12 @@ API 使用的核心参数：
 - `in_Domain` / `out_Domain`：Bidding Zone 的 EIC code。
 - `periodStart` / `periodEnd`：UTC 时间，格式 `yyyyMMddHHmm`。
 - `securityToken`：ENTSO-E 账号生成的 API token。
+
+存储说明：
+
+- `entsoe_day_ahead_prices` 是兼容 spider，仍输出 `MarketRecord` 并写入 `market_records`。
+- 其他 ENTSO-E 配置化 spider 输出 `EntsoeRecord` 并写入 `entsoe_records`。
+- `raw_json` 会保留 ENTSO-E XML 解析后的原始上下文，便于以后解释复杂业务字段。
 
 完整的中英文调用说明、每个数据集的固定 API 参数、PSR 发电类型和跨境方向说明见：
 

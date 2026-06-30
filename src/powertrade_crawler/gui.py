@@ -29,7 +29,7 @@ from tkinter import ttk
 
 from powertrade_crawler.clients.elecheck import ElecheckClient, ElecheckUnauthorizedError
 from powertrade_crawler.config import get_settings
-from powertrade_crawler.credentials import get_credential, save_credential
+from powertrade_crawler.credentials import get_credential, get_project_root, save_credential
 from powertrade_crawler.elecheck_auth import (
     cache_elecheck_authorization,
     resolve_elecheck_authorization,
@@ -48,16 +48,76 @@ from powertrade_crawler.spiders.elecheck import (
     ElecheckMechanismElectricityPriceSpider,
     ElecheckPurchasingNationalRangeSpider,
 )
+from powertrade_crawler.models import EntsoeRecord, MarketRecord
+from powertrade_crawler.registry import get_spider
+from powertrade_crawler.spiders.entsoe import ENTSOE_BIDDING_ZONES, load_entsoe_request_configs
 from powertrade_crawler.storage import (
+    upsert_entsoe_records,
     upsert_elecheck_clear_price_records,
     upsert_elecheck_mechanism_electricity_price_records,
     upsert_elecheck_purchasing_records,
+    upsert_records,
 )
 
 
 GRIDSTATUS_QUERY_BASE_URL = "https://api.gridstatus.io/v1/datasets/{dataset_id}/query"
 GRIDSTATUS_API_KEY_PLACEHOLDER = "replace-with-your-gridstatus-api-key"
 GRIDSTATUS_API_KEY_SETTINGS_URL = "https://www.gridstatus.io/settings/api"
+ENTSOE_DAY_AHEAD_DATASET = "entsoe_day_ahead_prices"
+ENTSOE_TOKEN_PLACEHOLDER = "replace-with-your-entsoe-security-token"
+ENTSOE_ALL_AREAS_LABEL = "全部区域"
+ENTSOE_GB_PUBLICATION_STOP_DATE = date(2021, 6, 15)
+ENTSOE_BORDER_AVAILABILITY_PATH = (
+    get_project_root() / "configs" / "entsoe" / "border_availability.json"
+)
+ENTSOE_AREA_NAMES = {
+    "AL": "阿尔巴尼亚",
+    "AT": "奥地利",
+    "BA": "波黑",
+    "BE": "比利时",
+    "BG": "保加利亚",
+    "CH": "瑞士",
+    "CZ": "捷克",
+    "DE-LU": "德国-卢森堡",
+    "DK1": "丹麦西部",
+    "DK2": "丹麦东部",
+    "EE": "爱沙尼亚",
+    "ES": "西班牙",
+    "FI": "芬兰",
+    "FR": "法国",
+    "GB": "英国",
+    "GR": "希腊",
+    "HR": "克罗地亚",
+    "HU": "匈牙利",
+    "IE-SEM": "爱尔兰单一电力市场",
+    "IT-CENTRE-NORTH": "意大利中北部",
+    "IT-CENTRE-SOUTH": "意大利中南部",
+    "IT-NORTH": "意大利北部",
+    "IT-SARDINIA": "意大利撒丁岛",
+    "IT-SICILY": "意大利西西里岛",
+    "IT-SOUTH": "意大利南部",
+    "LT": "立陶宛",
+    "LV": "拉脱维亚",
+    "ME": "黑山",
+    "MK": "北马其顿",
+    "NL": "荷兰",
+    "NO1": "挪威 NO1",
+    "NO2": "挪威 NO2",
+    "NO3": "挪威 NO3",
+    "NO4": "挪威 NO4",
+    "NO5": "挪威 NO5",
+    "PL": "波兰",
+    "PT": "葡萄牙",
+    "RO": "罗马尼亚",
+    "RS": "塞尔维亚",
+    "SE1": "瑞典 SE1",
+    "SE2": "瑞典 SE2",
+    "SE3": "瑞典 SE3",
+    "SE4": "瑞典 SE4",
+    "SI": "斯洛文尼亚",
+    "SK": "斯洛伐克",
+    "TR": "土耳其",
+}
 
 
 def resolve_sqlite_path() -> Path:
@@ -1333,6 +1393,463 @@ class ElecheckDataRepository:
                     progress(row_count)
         progress(row_count)
         return row_count
+
+
+class EntsoeDataRepository:
+    def __init__(self, db_path: Path | None = None) -> None:
+        self.db_path = db_path or resolve_sqlite_path()
+
+    def connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    def table_exists(self, table_name: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table_name,),
+            ).fetchone()
+        return row is not None
+
+    def search(
+        self,
+        *,
+        dataset: str = "",
+        area: str = "",
+        in_domain: str = "",
+        out_domain: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        limit: int = 1000,
+    ) -> list[dict[str, object]]:
+        if dataset == ENTSOE_DAY_AHEAD_DATASET:
+            return self.search_day_ahead_prices(
+                area=area,
+                start_date=start_date,
+                end_date=end_date,
+                limit=limit,
+            )
+        return self.search_entsoe_records(
+            dataset=dataset,
+            area=area,
+            in_domain=in_domain,
+            out_domain=out_domain,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
+
+    def search_entsoe_records(
+        self,
+        *,
+        dataset: str = "",
+        area: str = "",
+        in_domain: str = "",
+        out_domain: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        limit: int = 1000,
+    ) -> list[dict[str, object]]:
+        if not self.table_exists("entsoe_records"):
+            return []
+
+        where = []
+        params: list[object] = []
+        if dataset:
+            where.append("dataset = ?")
+            params.append(dataset)
+        if area:
+            where.append("(area = ? OR in_domain = ? OR out_domain = ?)")
+            params.extend([area, area, area])
+        if in_domain:
+            where.append("in_domain = ?")
+            params.append(in_domain)
+        if out_domain:
+            where.append("out_domain = ?")
+            params.append(out_domain)
+        if start_date:
+            where.append("COALESCE(interval_start_utc, '') >= ?")
+            params.append(f"{start_date}T00:00Z")
+        if end_date:
+            where.append("COALESCE(interval_start_utc, '') < ?")
+            params.append(f"{end_date}T00:00Z")
+
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, dataset, category, title_zh, title_en, area, in_domain, out_domain,
+                       interval_start_utc, interval_end_utc, psr_type, value, value_field,
+                       unit, currency, resolution, document_type, process_type,
+                       business_type, raw_json, collected_at
+                FROM entsoe_records
+                {where_sql}
+                ORDER BY COALESCE(interval_start_utc, '') DESC, dataset, area
+                LIMIT ?
+                """,
+                [*params, limit],
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def search_day_ahead_prices(
+        self,
+        *,
+        area: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        limit: int = 1000,
+    ) -> list[dict[str, object]]:
+        if not self.table_exists("market_records"):
+            return []
+
+        where = [
+            "source = ?",
+            "market = ?",
+        ]
+        params: list[object] = [
+            "ENTSO-E Transparency Platform",
+            "day_ahead",
+        ]
+        if area:
+            where.append("region = ?")
+            params.append(area)
+        if start_date:
+            where.append("trade_date >= ?")
+            params.append(start_date)
+        if end_date:
+            where.append("trade_date < ?")
+            params.append(end_date)
+
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, region, trade_date, metric, value, unit, currency,
+                       raw_json, collected_at
+                FROM market_records
+                WHERE {' AND '.join(where)}
+                ORDER BY trade_date DESC, metric
+                LIMIT ?
+                """,
+                [*params, limit],
+            ).fetchall()
+
+        normalized_rows: list[dict[str, object]] = []
+        for row in rows:
+            raw = self.parse_json(row["raw_json"], {})
+            normalized_rows.append(
+                {
+                    "id": row["id"],
+                    "dataset": ENTSOE_DAY_AHEAD_DATASET,
+                    "category": "market",
+                    "title_zh": "日前电价",
+                    "title_en": "Day-ahead Energy Prices",
+                    "area": row["region"],
+                    "in_domain": raw.get("in_Domain"),
+                    "out_domain": raw.get("out_Domain"),
+                    "interval_start_utc": raw.get("interval_start_utc") or str(row["trade_date"]),
+                    "interval_end_utc": raw.get("interval_end_utc"),
+                    "psr_type": None,
+                    "value": row["value"],
+                    "value_field": "price",
+                    "unit": row["unit"],
+                    "currency": row["currency"],
+                    "resolution": raw.get("resolution"),
+                    "document_type": raw.get("documentType"),
+                    "process_type": raw.get("processType"),
+                    "business_type": raw.get("businessType"),
+                    "raw_json": row["raw_json"],
+                    "collected_at": row["collected_at"],
+                }
+            )
+        return normalized_rows
+
+    def delete_records(
+        self,
+        *,
+        dataset: str,
+        area: str = "",
+        in_domain: str = "",
+        out_domain: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if dataset == ENTSOE_DAY_AHEAD_DATASET:
+            return self.delete_day_ahead_prices(
+                area=area,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        return self.delete_entsoe_records(
+            dataset=dataset,
+            area=area,
+            in_domain=in_domain,
+            out_domain=out_domain,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def delete_entsoe_records(
+        self,
+        *,
+        dataset: str,
+        area: str = "",
+        in_domain: str = "",
+        out_domain: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if not self.table_exists("entsoe_records"):
+            return 0
+        where, params = self.build_entsoe_where(
+            dataset=dataset,
+            area=area,
+            in_domain=in_domain,
+            out_domain=out_domain,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        with self.connect() as connection:
+            cursor = connection.execute(
+                f"DELETE FROM entsoe_records WHERE {' AND '.join(where)}",
+                params,
+            )
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+            connection.commit()
+        return deleted
+
+    def delete_day_ahead_prices(
+        self,
+        *,
+        area: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if not self.table_exists("market_records"):
+            return 0
+        where, params = self.build_day_ahead_where(
+            area=area,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        with self.connect() as connection:
+            cursor = connection.execute(
+                f"DELETE FROM market_records WHERE {' AND '.join(where)}",
+                params,
+            )
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+            connection.commit()
+        return deleted
+
+    def export_records(
+        self,
+        *,
+        output_path: Path,
+        dataset: str,
+        area: str = "",
+        in_domain: str = "",
+        out_domain: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if dataset == ENTSOE_DAY_AHEAD_DATASET:
+            return self.export_day_ahead_prices(
+                output_path=output_path,
+                area=area,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        return self.export_entsoe_records(
+            output_path=output_path,
+            dataset=dataset,
+            area=area,
+            in_domain=in_domain,
+            out_domain=out_domain,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def export_entsoe_records(
+        self,
+        *,
+        output_path: Path,
+        dataset: str,
+        area: str = "",
+        in_domain: str = "",
+        out_domain: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if not self.table_exists("entsoe_records"):
+            return 0
+        columns = [
+            "id",
+            "dataset",
+            "category",
+            "title_zh",
+            "title_en",
+            "area",
+            "in_domain",
+            "out_domain",
+            "interval_start_utc",
+            "interval_end_utc",
+            "psr_type",
+            "value",
+            "value_field",
+            "unit",
+            "currency",
+            "resolution",
+            "document_type",
+            "process_type",
+            "business_type",
+            "raw_json",
+            "collected_at",
+        ]
+        where, params = self.build_entsoe_where(
+            dataset=dataset,
+            area=area,
+            in_domain=in_domain,
+            out_domain=out_domain,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return self.export_query(
+            output_path=output_path,
+            table_name="entsoe_records",
+            columns=columns,
+            where=where,
+            params=params,
+            order_by="COALESCE(interval_start_utc, '') DESC, dataset, area",
+        )
+
+    def export_day_ahead_prices(
+        self,
+        *,
+        output_path: Path,
+        area: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if not self.table_exists("market_records"):
+            return 0
+        columns = [
+            "id",
+            "source",
+            "market",
+            "region",
+            "trade_date",
+            "metric",
+            "value",
+            "unit",
+            "currency",
+            "raw_json",
+            "collected_at",
+        ]
+        where, params = self.build_day_ahead_where(
+            area=area,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return self.export_query(
+            output_path=output_path,
+            table_name="market_records",
+            columns=columns,
+            where=where,
+            params=params,
+            order_by="trade_date DESC, metric",
+        )
+
+    def export_query(
+        self,
+        *,
+        output_path: Path,
+        table_name: str,
+        columns: list[str],
+        where: list[str],
+        params: list[object],
+        order_by: str,
+    ) -> int:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        row_count = 0
+        with self.connect() as connection, output_path.open(
+            "w",
+            newline="",
+            encoding="utf-8-sig",
+        ) as file:
+            writer = csv.DictWriter(file, fieldnames=columns)
+            writer.writeheader()
+            cursor = connection.execute(
+                f"""
+                SELECT {", ".join(columns)}
+                FROM {table_name}
+                WHERE {' AND '.join(where)}
+                ORDER BY {order_by}
+                """,
+                params,
+            )
+            for row in cursor:
+                writer.writerow(dict(row))
+                row_count += 1
+        return row_count
+
+    def build_entsoe_where(
+        self,
+        *,
+        dataset: str,
+        area: str = "",
+        in_domain: str = "",
+        out_domain: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> tuple[list[str], list[object]]:
+        where = ["dataset = ?"]
+        params: list[object] = [dataset]
+        if area:
+            where.append("(area = ? OR in_domain = ? OR out_domain = ?)")
+            params.extend([area, area, area])
+        if in_domain:
+            where.append("in_domain = ?")
+            params.append(in_domain)
+        if out_domain:
+            where.append("out_domain = ?")
+            params.append(out_domain)
+        if start_date:
+            where.append("COALESCE(interval_start_utc, '') >= ?")
+            params.append(f"{start_date}T00:00Z")
+        if end_date:
+            where.append("COALESCE(interval_start_utc, '') < ?")
+            params.append(f"{end_date}T00:00Z")
+        return where, params
+
+    def build_day_ahead_where(
+        self,
+        *,
+        area: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> tuple[list[str], list[object]]:
+        where = ["source = ?", "market = ?"]
+        params: list[object] = ["ENTSO-E Transparency Platform", "day_ahead"]
+        if area:
+            where.append("region = ?")
+            params.append(area)
+        if start_date:
+            where.append("trade_date >= ?")
+            params.append(start_date)
+        if end_date:
+            where.append("trade_date < ?")
+            params.append(end_date)
+        return where, params
+
+    @staticmethod
+    def parse_json(value: str | None, default):
+        if not value:
+            return default
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return default
+
 
 class DatePickerDialog:
     def __init__(self, root, initial_value: str = "") -> None:
@@ -3192,6 +3709,957 @@ class ElecheckDataApp:
             return value
 
 
+class EntsoeDataApp:
+    parameter_meanings = {
+        "documentType": "数据文档/主题，例如 A44 价格、A65 负荷、A75 分类型实际发电。",
+        "processType": "数据阶段，例如 A16 实际、A01 日前、A31 周前、A32 月前、A33 年前。",
+        "businessType": "时间序列的具体业务含义，部分平衡和备用容量接口需要。",
+        "contract_MarketAgreement.Type": "市场合约周期类型，例如 A01 日前。",
+        "auction.Type": "拍卖周期类型，例如 A01 日前。",
+        "Type_MarketAgreement.Type": "备用容量等接口使用的市场合约周期类型。",
+        "in_Domain": "输入或来源区域 EIC。",
+        "out_Domain": "输出或目的区域 EIC。",
+        "outBiddingZone_Domain": "负荷等单区域接口使用的报价区 EIC。",
+        "controlArea_Domain": "平衡市场接口使用的控制区 EIC。",
+        "BiddingZone_Domain": "停运和不可用接口使用的报价区 EIC。",
+        "psrType": "电源/资源类型，例如 B16 光伏、B18 海上风电、B19 陆上风电。",
+        "periodStart": "查询开始时间，按 UTC 发送，格式 yyyyMMddHHmm。",
+        "periodEnd": "查询结束时间，按 UTC 发送，结束点不包含在区间内。",
+    }
+
+    output_meaning = (
+        "返回数据写入 entsoe_records；兼容数据集 entsoe_day_ahead_prices 写入 market_records。\n"
+        "通用结果中的 value 是自动识别的主数值，value_field 标明它来自 XML 的哪个字段；"
+        "raw_json 保留 document、series、period、point 四层原始上下文。"
+    )
+
+    def __init__(self, root, repository: EntsoeDataRepository) -> None:
+        self.root = root
+        self.repository = repository
+        self.configs = load_entsoe_request_configs()
+        self.config_by_name = {config["name"]: config for config in self.configs}
+        self.border_availability = self.load_border_availability()
+        self.dataset_options = [
+            f"{config['name']} | {config['title_zh']} / {config['title_en']}"
+            for config in self.configs
+        ]
+        self.area_options = ["", ENTSOE_ALL_AREAS_LABEL] + [
+            self.format_area_option(alias) for alias in sorted(ENTSOE_BIDDING_ZONES)
+        ]
+        today = date.today()
+
+        self.dataset_var = StringVar(value=self.dataset_options[0] if self.dataset_options else "")
+        self.dataset_count_var = StringVar(value=f"已接入 {len(self.configs)} 个数据集")
+        self.token_status_var = StringVar()
+        self.mode_hint_var = StringVar()
+        self.border_availability_var = StringVar()
+        self.area_var = StringVar(value=self.format_area_option("DE-LU"))
+        self.in_area_var = StringVar(value=self.format_area_option("FR"))
+        self.out_area_var = StringVar(value=self.format_area_option("DE-LU"))
+        self.start_date_var = StringVar(value=(today - timedelta(days=1)).isoformat())
+        self.end_date_var = StringVar(value=today.isoformat())
+        self.psr_type_var = StringVar()
+        self.extra_params_var = StringVar()
+        self.summary_var = StringVar(value="Ready")
+        self.result_rows: list[dict[str, object]] = []
+        self.collect_button: ttk.Button | None = None
+        self.area_combo: ttk.Combobox | None = None
+        self.in_area_combo: ttk.Combobox | None = None
+        self.out_area_combo: ttk.Combobox | None = None
+        self.collect_dialog: Toplevel | None = None
+        self.collect_message_var = StringVar()
+        self.collect_detail_var = StringVar()
+        self.last_gb_warning_key = ""
+
+        self.build_layout()
+        self.refresh_token_status()
+        self.update_dataset_description()
+        self.refresh_results()
+
+    def build_layout(self) -> None:
+        outer = ttk.Frame(self.root)
+        outer.pack(fill=BOTH, expand=True, padx=8, pady=8)
+
+        request_frame = ttk.Frame(outer, style="Toolbar.TFrame")
+        request_frame.pack(fill=X)
+        ttk.Label(request_frame, text="Token").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(request_frame, textvariable=self.token_status_var, width=12).pack(side=LEFT, padx=(0, 8))
+        ttk.Button(request_frame, text="刷新状态", command=self.refresh_token_status).pack(
+            side=LEFT,
+            padx=(0, 12),
+        )
+        ttk.Label(request_frame, textvariable=self.dataset_count_var, width=16).pack(side=LEFT, padx=(0, 12))
+
+        ttk.Label(request_frame, text="数据集").pack(side=LEFT, padx=(0, 6))
+        self.dataset_combo = ttk.Combobox(
+            request_frame,
+            textvariable=self.dataset_var,
+            values=self.dataset_options,
+            width=76,
+            state="readonly",
+        )
+        self.dataset_combo.pack(side=LEFT, padx=(0, 8))
+        self.dataset_combo.bind("<<ComboboxSelected>>", lambda _event: self.update_dataset_description())
+
+        form_frame = ttk.Frame(outer, style="Toolbar.TFrame")
+        form_frame.pack(fill=X)
+        ttk.Label(form_frame, textvariable=self.mode_hint_var, width=18).pack(side=LEFT, padx=(0, 8))
+        ttk.Label(form_frame, text="区域").pack(side=LEFT, padx=(0, 4))
+        self.area_combo = ttk.Combobox(
+            form_frame,
+            textvariable=self.area_var,
+            values=self.area_options,
+            width=24,
+        )
+        self.area_combo.pack(side=LEFT, padx=(0, 8))
+        self.area_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.maybe_warn_gb_after_publication_stop(),
+        )
+        self.area_combo.bind(
+            "<FocusOut>",
+            lambda _event: self.maybe_warn_gb_after_publication_stop(),
+        )
+        ttk.Label(form_frame, text="来源区域").pack(side=LEFT, padx=(0, 4))
+        self.in_area_combo = ttk.Combobox(
+            form_frame,
+            textvariable=self.in_area_var,
+            values=self.area_options,
+            width=24,
+        )
+        self.in_area_combo.pack(side=LEFT, padx=(0, 8))
+        self.in_area_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.on_border_area_changed(changed="in"),
+        )
+        self.in_area_combo.bind(
+            "<FocusOut>",
+            lambda _event: self.on_border_area_changed(changed="in"),
+        )
+        ttk.Label(form_frame, text="目标区域").pack(side=LEFT, padx=(0, 4))
+        self.out_area_combo = ttk.Combobox(
+            form_frame,
+            textvariable=self.out_area_var,
+            values=self.area_options,
+            width=24,
+        )
+        self.out_area_combo.pack(side=LEFT, padx=(0, 8))
+        self.out_area_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.on_border_area_changed(changed="out"),
+        )
+        self.out_area_combo.bind(
+            "<FocusOut>",
+            lambda _event: self.on_border_area_changed(changed="out"),
+        )
+        ttk.Label(form_frame, textvariable=self.border_availability_var, foreground="#666666").pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+
+        date_frame = ttk.Frame(outer, style="Toolbar.TFrame")
+        date_frame.pack(fill=X)
+        ttk.Label(date_frame, text="开始日期").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.start_date_var, width=12, state="readonly").pack(
+            side=LEFT,
+            padx=(0, 3),
+        )
+        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.start_date_var)).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Label(date_frame, text="结束日期").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.end_date_var, width=12, state="readonly").pack(
+            side=LEFT,
+            padx=(0, 3),
+        )
+        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.end_date_var)).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Label(date_frame, text="psrType").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.psr_type_var, width=8).pack(side=LEFT, padx=(0, 8))
+        ttk.Label(date_frame, text="额外参数").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.extra_params_var, width=26).pack(side=LEFT, padx=(0, 8))
+
+        action_frame = ttk.Frame(outer, style="Toolbar.TFrame")
+        action_frame.pack(fill=X)
+        ttk.Button(action_frame, text="dry-run 预览", command=self.preview_request).pack(side=LEFT)
+        self.collect_button = ttk.Button(action_frame, text="执行爬取", command=self.start_collect)
+        self.collect_button.pack(side=LEFT, padx=(8, 0))
+        ttk.Button(action_frame, text="刷新数据", command=self.refresh_results).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(action_frame, text="导出数据", command=self.export_records).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(action_frame, text="清除数据", command=self.clear_records).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(action_frame, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+
+        info_pane = ttk.PanedWindow(outer, orient="horizontal")
+        info_pane.pack(fill=BOTH, expand=True)
+        left = ttk.Frame(info_pane)
+        right = ttk.Frame(info_pane)
+        info_pane.add(left, weight=3)
+        info_pane.add(right, weight=5)
+
+        self.description_text = __import__("tkinter").Text(
+            left,
+            wrap="word",
+            width=54,
+            height=16,
+            padx=10,
+            pady=8,
+        )
+        description_scroll = ttk.Scrollbar(left, orient=VERTICAL, command=self.description_text.yview)
+        self.description_text.configure(yscrollcommand=description_scroll.set, state="disabled")
+        self.description_text.pack(side=LEFT, fill=BOTH, expand=True)
+        description_scroll.pack(side=RIGHT, fill=Y)
+
+        self.result_tree, self.raw_text = self.build_result_panel(right)
+
+        status_bar = ttk.Frame(outer)
+        status_bar.pack(fill=X, side="bottom")
+        ttk.Label(status_bar, textvariable=self.summary_var, anchor=W).pack(fill=X, padx=4, pady=4)
+
+    def build_result_panel(self, parent: ttk.Frame):
+        main = ttk.PanedWindow(parent, orient="vertical")
+        main.pack(fill=BOTH, expand=True)
+
+        table_frame = ttk.Frame(main)
+        detail_frame = ttk.Frame(main)
+        main.add(table_frame, weight=4)
+        main.add(detail_frame, weight=1)
+
+        columns = (
+            "dataset",
+            "area",
+            "start",
+            "value",
+            "field",
+            "unit",
+            "psr",
+        )
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+        headings = {
+            "dataset": ("数据集", 210),
+            "area": ("区域", 120),
+            "start": ("时段开始 UTC", 150),
+            "value": ("数值", 100),
+            "field": ("字段", 130),
+            "unit": ("单位", 90),
+            "psr": ("PSR", 70),
+        }
+        for column, (label, width) in headings.items():
+            tree.heading(column, text=label)
+            tree.column(column, width=width, minwidth=max(70, width // 2), anchor="center")
+        scroll = ttk.Scrollbar(table_frame, orient=VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side=LEFT, fill=BOTH, expand=True)
+        scroll.pack(side=RIGHT, fill=Y)
+        tree.bind("<<TreeviewSelect>>", self.on_select_result)
+
+        raw_text = __import__("tkinter").Text(detail_frame, wrap="word", height=7, padx=10, pady=8)
+        raw_scroll = ttk.Scrollbar(detail_frame, orient=VERTICAL, command=raw_text.yview)
+        raw_text.configure(yscrollcommand=raw_scroll.set, state="disabled")
+        raw_text.pack(side=LEFT, fill=BOTH, expand=True)
+        raw_scroll.pack(side=RIGHT, fill=Y)
+        return tree, raw_text
+
+    def pick_date(self, target_var: StringVar) -> None:
+        selected = DatePickerDialog(self.root, target_var.get()).show()
+        if selected:
+            target_var.set(selected)
+            self.maybe_warn_gb_after_publication_stop()
+
+    def refresh_token_status(self) -> None:
+        token = (get_credential("entsoe_security_token") or "").strip()
+        status = "configured" if token and token != ENTSOE_TOKEN_PLACEHOLDER else "missing"
+        self.token_status_var.set(status)
+
+    def selected_dataset_name(self) -> str:
+        value = self.dataset_var.get().strip()
+        return value.split("|", 1)[0].strip()
+
+    def selected_config(self) -> dict[str, object]:
+        dataset = self.selected_dataset_name()
+        return self.config_by_name[dataset]
+
+    @staticmethod
+    def load_border_availability() -> dict[str, object]:
+        if not ENTSOE_BORDER_AVAILABILITY_PATH.exists():
+            return {}
+        try:
+            payload = json.loads(ENTSOE_BORDER_AVAILABILITY_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError):
+            return {}
+        return payload if isinstance(payload, dict) else {}
+
+    def available_border_pairs(self, dataset: str | None = None) -> list[tuple[str, str]]:
+        dataset_name = dataset or self.selected_dataset_name()
+        datasets = self.border_availability.get("datasets")
+        if not isinstance(datasets, dict):
+            return []
+        dataset_payload = datasets.get(dataset_name)
+        if not isinstance(dataset_payload, dict):
+            return []
+        pairs = []
+        for pair in dataset_payload.get("available_pairs", []):
+            if not isinstance(pair, dict):
+                continue
+            in_area = str(pair.get("in_area") or "")
+            out_area = str(pair.get("out_area") or "")
+            if in_area and out_area:
+                pairs.append((in_area, out_area))
+        return sorted(set(pairs))
+
+    def border_pair_probe_stats(self, dataset: str | None = None) -> dict[str, int]:
+        dataset_name = dataset or self.selected_dataset_name()
+        datasets = self.border_availability.get("datasets")
+        if not isinstance(datasets, dict):
+            return {}
+        dataset_payload = datasets.get(dataset_name)
+        if not isinstance(dataset_payload, dict):
+            return {}
+        return {
+            "available": len(dataset_payload.get("available_pairs", [])),
+            "unavailable": len(dataset_payload.get("unavailable_pairs", [])),
+            "errors": len(dataset_payload.get("errors", [])),
+        }
+
+    def selected_area_alias(self, value: str) -> str | None:
+        value = value.strip()
+        if not value or value == ENTSOE_ALL_AREAS_LABEL:
+            return None
+        if value.endswith(")") and "(" in value:
+            value = value.rsplit("(", 1)[1].rstrip(")").strip()
+        normalized = value.upper()
+        if normalized in ENTSOE_BIDDING_ZONES:
+            return normalized
+        if normalized.startswith("10Y"):
+            return normalized
+        available = "、".join(self.area_options[:12])
+        raise ValueError(f"未知区域：{value}。请选择下拉中的中文区域；例如：{available}。")
+
+    def selected_area_aliases(self, value: str) -> list[str]:
+        alias = self.selected_area_alias(value)
+        if alias:
+            return [alias]
+        return sorted(ENTSOE_BIDDING_ZONES)
+
+    def selected_area_is_explicit_gb(self, value: str) -> bool:
+        return self.selected_area_alias(value) == "GB"
+
+    def selected_areas_include_gb(self) -> bool:
+        domain_mode = str(self.selected_config()["domain_mode"])
+        if domain_mode in {"single", "same_pair"}:
+            return self.selected_area_is_explicit_gb(self.area_var.get())
+        return (
+            self.selected_area_is_explicit_gb(self.in_area_var.get())
+            or self.selected_area_is_explicit_gb(self.out_area_var.get())
+        )
+
+    def selected_range_touches_gb_stopped_period(self) -> bool:
+        try:
+            end_date = date.fromisoformat(self.end_date_var.get().strip())
+        except ValueError:
+            return False
+        return end_date > ENTSOE_GB_PUBLICATION_STOP_DATE
+
+    def gb_warning_key(self) -> str:
+        config = self.selected_config()
+        if str(config["domain_mode"]) in {"single", "same_pair"}:
+            area_part = self.area_var.get().strip()
+        else:
+            area_part = f"{self.in_area_var.get().strip()}->{self.out_area_var.get().strip()}"
+        return "|".join(
+            [
+                self.selected_dataset_name(),
+                area_part,
+                self.start_date_var.get().strip(),
+                self.end_date_var.get().strip(),
+            ]
+        )
+
+    def maybe_warn_gb_after_publication_stop(self, *, block_action: bool = False) -> bool:
+        try:
+            includes_gb = self.selected_areas_include_gb()
+        except ValueError:
+            return True
+        if not includes_gb:
+            return True
+        if not self.selected_range_touches_gb_stopped_period():
+            return True
+        warning_key = self.gb_warning_key()
+        if block_action or warning_key != self.last_gb_warning_key:
+            messagebox.showwarning(
+                "英国 ENTSO-E 数据提示",
+                (
+                    "BZN|GB 的数据发布已在 2021-06-15 停止。\n\n"
+                    "之后的数据请在 Elexon 处查询。"
+                ),
+            )
+            self.last_gb_warning_key = warning_key
+        return not block_action
+
+    def selected_border_pairs(self) -> list[tuple[str, str]]:
+        available_pairs = self.available_border_pairs()
+        in_area = self.selected_area_alias(self.in_area_var.get())
+        out_area = self.selected_area_alias(self.out_area_var.get())
+        if not available_pairs:
+            in_areas = [in_area] if in_area else sorted(ENTSOE_BIDDING_ZONES)
+            out_areas = [out_area] if out_area else sorted(ENTSOE_BIDDING_ZONES)
+            return [
+                (source, target)
+                for source in in_areas
+                for target in out_areas
+                if source != target
+            ]
+        return [
+            (source, target)
+            for source, target in available_pairs
+            if (not in_area or source == in_area) and (not out_area or target == out_area)
+        ]
+
+    @staticmethod
+    def format_area_option(alias: str) -> str:
+        name = ENTSOE_AREA_NAMES.get(alias, alias)
+        return f"{name} ({alias})"
+
+    def update_border_area_options(self, changed: str | None = None) -> None:
+        if str(self.selected_config()["domain_mode"]) != "border":
+            self.border_availability_var.set("")
+            return
+
+        available_pairs = self.available_border_pairs()
+        if not available_pairs:
+            if self.in_area_combo is not None:
+                self.in_area_combo["values"] = self.area_options
+            if self.out_area_combo is not None:
+                self.out_area_combo["values"] = self.area_options
+            self.border_availability_var.set("未探测：显示全部区域")
+            return
+
+        selected_in = self.selected_area_alias(self.in_area_var.get())
+        selected_out = self.selected_area_alias(self.out_area_var.get())
+        source_aliases = sorted({source for source, target in available_pairs if not selected_out or target == selected_out})
+        target_aliases = sorted({target for source, target in available_pairs if not selected_in or source == selected_in})
+
+        in_values = ["", ENTSOE_ALL_AREAS_LABEL] + [self.format_area_option(alias) for alias in source_aliases]
+        out_values = ["", ENTSOE_ALL_AREAS_LABEL] + [self.format_area_option(alias) for alias in target_aliases]
+        if self.in_area_combo is not None:
+            self.in_area_combo["values"] = in_values
+        if self.out_area_combo is not None:
+            self.out_area_combo["values"] = out_values
+
+        if changed == "out" and self.in_area_var.get().strip() not in in_values:
+            self.in_area_var.set("")
+        if changed == "in" and self.out_area_var.get().strip() not in out_values:
+            self.out_area_var.set("")
+
+        stats = self.border_pair_probe_stats()
+        self.border_availability_var.set(
+            f"可用方向 {stats.get('available', 0)} | 无数据 {stats.get('unavailable', 0)} | 错误 {stats.get('errors', 0)}"
+        )
+
+    def on_border_area_changed(self, changed: str) -> None:
+        self.update_border_area_options(changed=changed)
+        self.maybe_warn_gb_after_publication_stop()
+
+    def update_dataset_description(self) -> None:
+        config = self.selected_config()
+        domain_mode = str(config["domain_mode"])
+        if domain_mode in {"single", "same_pair"}:
+            self.mode_hint_var.set("单区域/同区")
+            self.set_area_state(single_enabled=True, border_enabled=False)
+            self.border_availability_var.set("")
+        else:
+            self.mode_hint_var.set("跨境方向")
+            self.set_area_state(single_enabled=False, border_enabled=True)
+            self.update_border_area_options()
+
+        params = dict(config["params"])
+        lines = [
+            f"{config['title_zh']} / {config['title_en']}",
+            f"Command: {config['name']}",
+            f"Category: {config['category']}",
+            f"Domain mode: {config['domain_mode']}",
+            "",
+            f"中文说明：{config['meaning_zh']}",
+            f"English: {config['meaning_en']}",
+            f"GUI 已接入数据集数量：{len(self.configs)} 个。",
+            f"当前区域下拉：{ENTSOE_ALL_AREAS_LABEL} + {len(ENTSOE_BIDDING_ZONES)} 个内置常用区域。",
+            "",
+            "参数含义",
+        ]
+        for key, value in params.items():
+            meaning = self.parameter_meanings.get(key, "固定官方参数。")
+            lines.append(f"- {key}={value}: {meaning}")
+        if domain_mode == "single":
+            domain_parameter = str(config.get("domain_parameter") or "")
+            lines.append(f"- {domain_parameter}=<area EIC>: {self.parameter_meanings.get(domain_parameter, '区域参数。')}")
+        elif domain_mode == "same_pair":
+            lines.append("- in_Domain/out_Domain=<area EIC>: 同一报价区的输入和输出区域。")
+        else:
+            lines.append("- in_Domain/out_Domain=<from/to EIC>: 跨境方向，反向需交换两个区域。")
+            stats = self.border_pair_probe_stats()
+            if stats:
+                lines.append(
+                    "- 已加载本地跨境可用性探测结果；来源/目标下拉会只显示探测到有数据的组合。"
+                )
+                lines.append(
+                    f"- 探测摘要：可用 {stats.get('available', 0)}，"
+                    f"无数据 {stats.get('unavailable', 0)}，错误 {stats.get('errors', 0)}。"
+                )
+            else:
+                lines.append(
+                    "- 当前数据集还没有本地可用性探测结果；下拉显示全部内置区域，真实可用性以 ENTSO-E 返回为准。"
+                )
+        lines.extend(
+            [
+                "- periodStart/periodEnd: UTC 查询窗口，结束点不包含。",
+                f"- 选择空白或 {ENTSOE_ALL_AREAS_LABEL}: 执行时会展开为全部内置区域。",
+                "",
+                "返回数据意义",
+                self.output_meaning,
+            ]
+        )
+        self.set_text(self.description_text, "\n".join(lines))
+        self.refresh_results()
+
+    def set_area_state(self, *, single_enabled: bool, border_enabled: bool) -> None:
+        if self.area_combo is not None:
+            self.area_combo.configure(state="normal" if single_enabled else "disabled")
+        if self.in_area_combo is not None:
+            self.in_area_combo.configure(state="normal" if border_enabled else "disabled")
+        if self.out_area_combo is not None:
+            self.out_area_combo.configure(state="normal" if border_enabled else "disabled")
+
+    def preview_request(self) -> None:
+        if not self.maybe_warn_gb_after_publication_stop(block_action=True):
+            return
+        try:
+            request = self.build_request_preview()
+        except ValueError as exc:
+            messagebox.showerror("预览失败", str(exc))
+            return
+        self.set_text(self.raw_text, json.dumps(request, ensure_ascii=False, indent=2))
+        self.summary_var.set("dry-run 预览已生成；未访问 ENTSO-E，也未写入数据库。")
+
+    def build_request_preview(self) -> dict[str, object]:
+        config = self.selected_config()
+        jobs = self.build_collect_jobs()
+        previews = []
+        for _label, kwargs in jobs[:20]:
+            params = self.build_entsoe_params(
+                config,
+                area=str(kwargs.get("area") or ""),
+                in_area=str(kwargs.get("in_area") or ""),
+                out_area=str(kwargs.get("out_area") or ""),
+            )
+            params["periodStart"] = self.format_entsoe_period(self.start_date_var.get().strip())
+            params["periodEnd"] = self.format_entsoe_period(self.end_date_var.get().strip())
+            previews.append(params)
+        return {
+            "dataset": config["name"],
+            "title_zh": config["title_zh"],
+            "domain_mode": config["domain_mode"],
+            "request_count": len(jobs),
+            "preview_limit": 20,
+            "params_without_token": previews,
+            "dry_run": True,
+        }
+
+    def build_entsoe_params(
+        self,
+        config: dict[str, object],
+        *,
+        area: str = "",
+        in_area: str = "",
+        out_area: str = "",
+    ) -> dict[str, str]:
+        params = {str(key): str(value) for key, value in dict(config["params"]).items()}
+        domain_mode = str(config["domain_mode"])
+        if domain_mode == "single":
+            if not area:
+                raise ValueError("请选择 area。")
+            params[str(config["domain_parameter"])] = self.resolve_area_code(area)
+        elif domain_mode == "same_pair":
+            if not area:
+                raise ValueError("请选择 area。")
+            area_code = self.resolve_area_code(area)
+            params["in_Domain"] = area_code
+            params["out_Domain"] = area_code
+        elif domain_mode == "border":
+            if not in_area or not out_area:
+                raise ValueError("请选择 in-area 和 out-area。")
+            params["in_Domain"] = self.resolve_area_code(in_area)
+            params["out_Domain"] = self.resolve_area_code(out_area)
+        else:
+            raise ValueError(f"Unsupported ENTSO-E domain mode: {domain_mode}")
+
+        psr_type = self.psr_type_var.get().strip()
+        if psr_type:
+            params["psrType"] = psr_type
+        params.update(self.parse_extra_params(self.extra_params_var.get()))
+        return params
+
+    def build_collect_jobs(self) -> list[tuple[str, dict[str, object]]]:
+        dataset = self.selected_dataset_name()
+        config = self.selected_config()
+        start_date = self.start_date_var.get().strip()
+        end_date = self.end_date_var.get().strip()
+        date.fromisoformat(start_date)
+        date.fromisoformat(end_date)
+        if date.fromisoformat(start_date) >= date.fromisoformat(end_date):
+            raise ValueError("结束日期必须晚于开始日期。")
+
+        base_kwargs: dict[str, object] = {"start_date": start_date, "end_date": end_date}
+        domain_mode = str(config["domain_mode"])
+        jobs: list[tuple[str, dict[str, object]]] = []
+        if domain_mode in {"single", "same_pair"}:
+            for area in self.selected_area_aliases(self.area_var.get()):
+                jobs.append((self.format_area_option(area), {**base_kwargs, "area": area}))
+        else:
+            for in_area, out_area in self.selected_border_pairs():
+                label = f"{self.format_area_option(in_area)} -> {self.format_area_option(out_area)}"
+                jobs.append((label, {**base_kwargs, "in_area": in_area, "out_area": out_area}))
+
+        if dataset != ENTSOE_DAY_AHEAD_DATASET:
+            psr_type = self.psr_type_var.get().strip()
+            extra_params = self.parse_extra_params(self.extra_params_var.get())
+            for _label, kwargs in jobs:
+                if psr_type:
+                    kwargs["psr_type"] = psr_type
+                kwargs["extra_params"] = extra_params
+        elif self.psr_type_var.get().strip() or self.extra_params_var.get().strip():
+            raise ValueError("entsoe_day_ahead_prices 兼容数据集不支持 psrType 或额外参数。")
+        if not jobs:
+            raise ValueError("没有可执行的区域组合。")
+        return jobs
+
+    def start_collect(self) -> None:
+        if not self.maybe_warn_gb_after_publication_stop(block_action=True):
+            return
+        try:
+            jobs = self.build_collect_jobs()
+            self.build_request_preview()
+        except ValueError as exc:
+            messagebox.showerror("参数错误", str(exc))
+            return
+        if self.token_status_var.get() != "configured":
+            messagebox.showerror("缺少 token", "请先通过 powertrade set-credential entsoe 配置 token。")
+            return
+        dataset = self.selected_dataset_name()
+        if len(jobs) > 20:
+            if not messagebox.askyesno(
+                "确认批量采集",
+                (
+                    f"本次会对 {len(jobs)} 个区域/方向组合执行 ENTSO-E 请求。\n\n"
+                    "跨境数据如果两边都选“全部区域”，请求数量会非常大，"
+                    "且很多区域组合可能没有数据。\n\n确认继续吗？"
+                ),
+            ):
+                return
+        if self.collect_button is not None:
+            self.collect_button.configure(state="disabled")
+        self.show_collect_dialog(dataset, len(jobs))
+        thread = threading.Thread(target=self.collect_worker, args=(dataset, jobs), daemon=True)
+        thread.start()
+
+    def show_collect_dialog(self, dataset: str, job_count: int) -> None:
+        if self.collect_dialog is not None and self.collect_dialog.winfo_exists():
+            self.collect_dialog.destroy()
+        dialog = Toplevel(self.root)
+        dialog.title("正在采集 ENTSO-E")
+        dialog.geometry("520x190")
+        dialog.resizable(False, False)
+        self.collect_message_var.set(f"正在采集 {dataset} ...")
+        self.collect_detail_var.set(f"待执行区域/方向组合：{job_count} 个")
+        ttk.Label(dialog, textvariable=self.collect_message_var, wraplength=460).pack(
+            fill=X,
+            padx=18,
+            pady=(18, 8),
+        )
+        ttk.Label(dialog, textvariable=self.collect_detail_var, wraplength=460).pack(
+            fill=X,
+            padx=18,
+            pady=(0, 12),
+        )
+        ttk.Progressbar(dialog, mode="indeterminate").pack(fill=X, padx=18)
+        ttk.Label(dialog, text="可最小化窗口，采集会继续。").pack(anchor=W, padx=18, pady=(12, 0))
+        self.collect_dialog = dialog
+        self.summary_var.set(f"正在采集 {dataset} ...")
+
+    def collect_worker(self, dataset: str, jobs: list[tuple[str, dict[str, object]]]) -> None:
+        record_count = 0
+        written = 0
+        try:
+            for index, (label, kwargs) in enumerate(jobs, start=1):
+                self.root.after(
+                    0,
+                    lambda index=index, label=label: self.update_collect_progress(
+                        index=index,
+                        total=len(jobs),
+                        label=label,
+                    ),
+                )
+                spider = get_spider(dataset, **kwargs)
+                try:
+                    records = list(spider.crawl())
+                finally:
+                    spider.close()
+                record_count += len(records)
+                if all(isinstance(record, MarketRecord) for record in records):
+                    written += upsert_records(records)
+                elif all(isinstance(record, EntsoeRecord) for record in records):
+                    written += upsert_entsoe_records(records)
+                else:
+                    raise ValueError("ENTSO-E spider returned unsupported record types.")
+        except Exception as exc:
+            message = str(exc)
+            self.root.after(0, lambda message=message: self.on_collect_error(message))
+        else:
+            self.root.after(0, lambda: self.on_collect_success(record_count, written))
+
+    def update_collect_progress(self, *, index: int, total: int, label: str) -> None:
+        self.collect_message_var.set(f"正在采集 ENTSO-E：{index}/{total}")
+        self.collect_detail_var.set(label)
+        self.summary_var.set(f"ENTSO-E 采集中：{index}/{total} {label}")
+
+    def on_collect_success(self, record_count: int, written: int) -> None:
+        self.finish_collect()
+        self.refresh_results()
+        self.summary_var.set(f"ENTSO-E 采集完成：抓取 {record_count} 条，写入/更新 {written} 条。")
+        messagebox.showinfo(
+            "采集完成",
+            f"ENTSO-E 采集完成。\n\n抓取记录：{record_count}\n写入/更新：{written}",
+        )
+
+    def on_collect_error(self, message: str) -> None:
+        self.finish_collect()
+        self.summary_var.set("ENTSO-E 采集失败。")
+        messagebox.showerror("ENTSO-E 采集失败", message)
+
+    def finish_collect(self) -> None:
+        if self.collect_button is not None:
+            self.collect_button.configure(state="normal")
+        if self.collect_dialog is not None and self.collect_dialog.winfo_exists():
+            self.collect_dialog.destroy()
+        self.collect_dialog = None
+
+    def export_records(self) -> None:
+        output_path = asksaveasfilename(
+            title="导出 ENTSO-E CSV",
+            initialfile=f"{self.selected_dataset_name()}.csv",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not output_path:
+            return
+        try:
+            filters = self.current_query_filters()
+            row_count = self.repository.export_records(output_path=Path(output_path), **filters)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("导出失败", str(exc))
+            self.summary_var.set("ENTSO-E CSV 导出失败。")
+            return
+        self.summary_var.set(f"已导出 {row_count} 条 ENTSO-E 记录到 {output_path}")
+        messagebox.showinfo("导出完成", f"已导出 {row_count} 条记录。\n\n{output_path}")
+
+    def clear_records(self) -> None:
+        try:
+            filters = self.current_query_filters()
+        except ValueError as exc:
+            messagebox.showerror("清除失败", str(exc))
+            return
+        dataset = self.selected_dataset_name()
+        area_label = self.current_area_label()
+        if not messagebox.askyesno(
+            "确认清除数据",
+            (
+                f"将清除当前筛选范围内的 ENTSO-E 数据。\n\n"
+                f"数据集：{dataset}\n"
+                f"区域：{area_label}\n"
+                f"日期：{self.start_date_var.get()} 至 {self.end_date_var.get()}\n\n"
+                "此操作不可撤销，确认继续吗？"
+            ),
+        ):
+            return
+        try:
+            deleted = self.repository.delete_records(**filters)
+        except ValueError as exc:
+            messagebox.showerror("清除失败", str(exc))
+            return
+        self.refresh_results()
+        self.summary_var.set(f"已清除 {deleted} 条 ENTSO-E 记录。")
+        messagebox.showinfo("清除完成", f"已清除 {deleted} 条记录。")
+
+    def refresh_results(self) -> None:
+        try:
+            filters = self.current_query_filters()
+        except ValueError as exc:
+            messagebox.showerror("刷新失败", str(exc))
+            return
+        rows = self.repository.search(
+            **filters,
+        )
+        self.result_rows = rows
+        self.result_tree.delete(*self.result_tree.get_children())
+        for index, row in enumerate(rows):
+            self.result_tree.insert(
+                "",
+                END,
+                iid=str(index),
+                values=(
+                    row.get("dataset") or "",
+                    self.display_area(row),
+                    row.get("interval_start_utc") or "",
+                    self.format_value(row.get("value")),
+                    row.get("value_field") or "",
+                    row.get("unit") or "",
+                    row.get("psr_type") or "",
+                ),
+            )
+        self.summary_var.set(f"ENTSO-E：显示 {len(rows)} 条记录。默认最多显示 1000 条。")
+        self.show_first_result()
+
+    def current_query_filters(self) -> dict[str, str]:
+        dataset = self.selected_dataset_name()
+        config = self.selected_config()
+        filters = {
+            "dataset": dataset,
+            "area": "",
+            "in_domain": "",
+            "out_domain": "",
+            "start_date": self.start_date_var.get().strip(),
+            "end_date": self.end_date_var.get().strip(),
+        }
+        domain_mode = str(config["domain_mode"])
+        if domain_mode in {"single", "same_pair"}:
+            area = self.selected_area_alias(self.area_var.get())
+            filters["area"] = area or ""
+        else:
+            in_area = self.selected_area_alias(self.in_area_var.get())
+            out_area = self.selected_area_alias(self.out_area_var.get())
+            filters["in_domain"] = self.resolve_area_code(in_area) if in_area else ""
+            filters["out_domain"] = self.resolve_area_code(out_area) if out_area else ""
+        return filters
+
+    def current_area_label(self) -> str:
+        config = self.selected_config()
+        if str(config["domain_mode"]) in {"single", "same_pair"}:
+            return self.area_var.get().strip() or ENTSOE_ALL_AREAS_LABEL
+        return (
+            f"{self.in_area_var.get().strip() or ENTSOE_ALL_AREAS_LABEL} -> "
+            f"{self.out_area_var.get().strip() or ENTSOE_ALL_AREAS_LABEL}"
+        )
+
+    def reset_filters(self) -> None:
+        self.area_var.set(self.format_area_option("DE-LU"))
+        self.in_area_var.set(self.format_area_option("FR"))
+        self.out_area_var.set(self.format_area_option("DE-LU"))
+        today = date.today()
+        self.start_date_var.set((today - timedelta(days=1)).isoformat())
+        self.end_date_var.set(today.isoformat())
+        self.psr_type_var.set("")
+        self.extra_params_var.set("")
+        self.refresh_results()
+
+    def show_first_result(self) -> None:
+        if not self.result_rows:
+            self.set_text(self.raw_text, "没有匹配数据。")
+            return
+        self.result_tree.selection_set("0")
+        self.result_tree.focus("0")
+        self.set_text(self.raw_text, self.describe_row(self.result_rows[0]))
+
+    def on_select_result(self, _event) -> None:
+        selection = self.result_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if 0 <= index < len(self.result_rows):
+            self.set_text(self.raw_text, self.describe_row(self.result_rows[index]))
+
+    def describe_row(self, row: dict[str, object]) -> str:
+        data = dict(row)
+        raw_json = data.pop("raw_json", None)
+        lines = [f"{key}: {value if value not in (None, '') else '-'}" for key, value in data.items()]
+        lines.extend(["", "raw_json", self.format_json(str(raw_json) if raw_json else None)])
+        return "\n".join(lines)
+
+    @staticmethod
+    def display_area(row: dict[str, object]) -> str:
+        area = row.get("area")
+        if area:
+            return EntsoeDataApp.format_area_value(str(area))
+        in_domain = EntsoeDataApp.format_area_value(str(row.get("in_domain") or "?"))
+        out_domain = EntsoeDataApp.format_area_value(str(row.get("out_domain") or "?"))
+        return f"{in_domain}->{out_domain}"
+
+    @staticmethod
+    def format_area_value(value: str) -> str:
+        if value in ENTSOE_BIDDING_ZONES:
+            return EntsoeDataApp.format_area_option(value)
+        for alias, eic in ENTSOE_BIDDING_ZONES.items():
+            if value == eic:
+                return EntsoeDataApp.format_area_option(alias)
+        return value
+
+    @staticmethod
+    def resolve_area_code(value: str) -> str:
+        if value in ENTSOE_BIDDING_ZONES:
+            return ENTSOE_BIDDING_ZONES[value]
+        if value.startswith("10Y"):
+            return value
+        available = ", ".join(sorted(ENTSOE_BIDDING_ZONES))
+        raise ValueError(f"未知 ENTSO-E area：{value}。可用别名：{available}")
+
+    @staticmethod
+    def format_entsoe_period(value: str) -> str:
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("日期格式应为 YYYY-MM-DD。") from exc
+        return parsed.strftime("%Y%m%d0000")
+
+    @staticmethod
+    def parse_extra_params(value: str) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        if not value.strip():
+            return parsed
+        normalized = value.replace("\n", ";").replace(",", ";")
+        for item in normalized.split(";"):
+            item = item.strip()
+            if not item:
+                continue
+            key, separator, raw_value = item.partition("=")
+            if not separator or not key.strip() or not raw_value.strip():
+                raise ValueError(f"额外参数格式错误：{item}。应使用 KEY=VALUE。")
+            parsed[key.strip()] = raw_value.strip()
+        return parsed
+
+    def set_text(self, text_widget, content: str) -> None:
+        text_widget.configure(state="normal")
+        text_widget.delete("1.0", END)
+        text_widget.insert("1.0", content)
+        text_widget.configure(state="disabled")
+
+    @staticmethod
+    def format_value(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, float):
+            return f"{value:.6g}"
+        return str(value)
+
+    @staticmethod
+    def format_json(value: str | None) -> str:
+        if not value:
+            return "{}"
+        try:
+            return json.dumps(json.loads(value), ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            return value
+
+
 def launch_gui() -> None:
     db_path = resolve_sqlite_path()
     if not db_path.exists():
@@ -3211,8 +4679,10 @@ def launch_gui() -> None:
 
     gridstatus_tab = ttk.Frame(notebook)
     elecheck_tab = ttk.Frame(notebook)
+    entsoe_tab = ttk.Frame(notebook)
     notebook.add(gridstatus_tab, text="GridStatus")
     notebook.add(elecheck_tab, text="Elecheck 易能电易查")
+    notebook.add(entsoe_tab, text="ENTSO-E 欧洲")
 
     GridStatusMetadataApp(
         gridstatus_tab,
@@ -3220,4 +4690,5 @@ def launch_gui() -> None:
         configure_window=False,
     )
     ElecheckDataApp(elecheck_tab, ElecheckDataRepository(db_path))
+    EntsoeDataApp(entsoe_tab, EntsoeDataRepository(db_path))
     root.mainloop()

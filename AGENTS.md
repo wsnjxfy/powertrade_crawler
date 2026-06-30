@@ -160,6 +160,7 @@ English:
 - 本地 SQLite 数据库
 - CSV 导出
 - GridStatus 数据浏览与下载
+- ENTSO-E 欧洲数据源 CLI 采集、GUI 选择/预览/执行和本地结果浏览
 - GZPEC 新闻采集
 - Elecheck 易能电易查数据采集与 GUI 浏览
 
@@ -174,6 +175,7 @@ The project currently includes:
 - CSV export
 - GridStatus data browsing and downloading
 - ENTSO-E market, load, generation, transmission, balancing, and outage collection
+- ENTSO-E GUI dataset selection, dry-run preview, collection, and local result browsing
 - GZPEC news collection
 - Elecheck data collection and GUI browsing
 
@@ -745,6 +747,54 @@ English:
 
 The ENTSO-E module uses the official REST API, with a configuration-driven catalog, generic XML/ZIP parsing, automatic chunking, dedicated storage, area/EIC support, and raw parameter overrides. Read `docs/ENTSOE_API_GUIDE.md` and `configs/entsoe/requests.json` before extending it.
 
+### 15.1 2026-06-26 ENTSO-E GUI 接入 / ENTSO-E GUI Integration
+
+中文：
+
+本轮已经把 ENTSO-E 接入 Tkinter GUI。入口是 `powertrade gui` 顶层 Notebook 的 `ENTSO-E 欧洲` 页签。
+
+GUI 已有能力：
+
+- 显示 ENTSO-E token 配置状态，只显示 `configured` 或 `missing`，绝不显示 token 明文。
+- 数据集下拉来自 `configs/entsoe/requests.json`，不是写死在 GUI 中；当前 26 个配置化数据集已全部接入。
+- 说明面板展示数据集中文说明、英文说明、固定参数含义、domain mode 和返回数据意义。
+- 单区域与同区 in/out 数据使用 `区域`，跨境数据使用 `来源区域` 和 `目标区域`。
+- area 下拉来自 `ENTSOE_BIDDING_ZONES`，但 GUI 展示中文可读名称，例如 `德国-卢森堡 (DE-LU)`。
+- 选择空白或 `全部区域` 会展开为全部内置 area；跨境数据会展开为来源/目标组合，数量较大时执行前会弹确认。
+- 跨境可用性探测结果保存在 `configs/entsoe/border_availability.json`。已探测的数据集会动态过滤来源/目标区域；未探测的数据集继续显示全部区域。
+- 支持选择 `start-date` 和 `end-date`；GUI 预览按 UTC 零点生成 `periodStart`/`periodEnd`。
+- 支持 `psrType` 和额外 `KEY=VALUE` 参数；但兼容数据集 `entsoe_day_ahead_prices` 不支持这两个 GUI 字段。
+- `dry-run 预览` 只构造并展示不含 `securityToken` 的请求参数，不访问 ENTSO-E，也不写数据库。
+- `执行爬取` 复用 `registry.get_spider`、现有 spider/client/credentials/storage 逻辑，不另写 API 请求。
+- 通用 ENTSO-E 数据写入并浏览 `entsoe_records`；兼容的 `entsoe_day_ahead_prices` 仍写入并浏览 `market_records`。
+- GUI 采集线程会在后台运行，并在完成后刷新当前结果表。
+- `导出数据` 按当前数据集、区域和日期筛选导出 CSV。
+- `清除数据` 按当前数据集、区域和日期筛选删除本地记录，执行前会二次确认。
+
+实现位置：
+
+```text
+src/powertrade_crawler/gui.py
+  EntsoeDataRepository
+  EntsoeDataApp
+  launch_gui() 中的 ENTSO-E 欧洲 tab
+scripts/probe_entsoe_border_availability.py
+configs/entsoe/border_availability.json
+```
+
+注意事项：
+
+- 不要把 ENTSO-E token 放进 GUI 文本框、日志、dry-run 预览或截图。
+- GUI 的 dry-run 语义不同于 CLI `--dry-run`：GUI 预览只展示请求参数；CLI dry-run 会实际跑 spider 并把记录打印出来但不写库。
+- Tkinter `ttk.Combobox` 不支持单个下拉项置灰；当前实现是读取可用性文件后把不可用来源/目标组合从可选列表中移除，并在旁边显示可用/无数据/错误数量。
+- 当前已运行 `scripts/probe_entsoe_border_availability.py` 探测 5 个跨境数据集，窗口为 `2026-06-01` 到 `2026-06-02`，候选方向 124 个。结果：物理潮流 122/2/0，商业计划 122/2/0，预测传输容量 42/82/0，日前可供交易容量 22/102/0，输电停运 23/60/41，数字顺序为 有数据/无数据/错误。这个结果只代表该日期窗口。
+- 如果以后要支持更细的区域角色配置、真实可用边界清单或按数据集维护可用区域白名单，优先扩展现有 `EntsoeDataRepository` / `EntsoeDataApp`，仍复用 spider/client/storage。
+- `entsoe_day_ahead_prices` 的存储差异是有意保留的兼容行为，不要为了 GUI 统一展示而把它偷偷迁到 `entsoe_records`。
+
+English:
+
+ENTSO-E is now available in the Tkinter GUI under the top-level `ENTSO-E 欧洲` tab. The GUI reads all 26 datasets from `configs/entsoe/requests.json`, shows token status without revealing the token, displays bilingual dataset explanations and parameter meanings, supports Chinese-readable area/in-area/out-area selection, all-area expansion, border availability filtering from `configs/entsoe/border_availability.json`, date selection, dry-run request preview without token fields, export, clearing local records, and real collection through the existing spider/client/credential/storage path. Generic ENTSO-E rows are stored in `entsoe_records`; the compatibility day-ahead-price spider still uses `market_records`.
+
 ## 16. ENTSO-E 参数、时间与区域语义 / Parameter, Time, and Area Semantics
 
 中文：
@@ -826,6 +876,7 @@ powertrade = "powertrade_crawler.cli:app"
 - 激活虚拟环境后可直接使用 `powertrade`；不激活时使用 `.\.venv\Scripts\powertrade.exe`。
 - `.env`、`.auth/`、`data/` 均被忽略。提交前必须确认没有使用 `git add -f` 把凭据或数据库加入暂存区。
 - 通用 ENTSO-E 数据表是 `entsoe_records`；原日前电价兼容 spider 仍写 `market_records`，这是当前有意保留的差异。
+- ENTSO-E GUI 已接入，入口是 `powertrade gui` -> `ENTSO-E 欧洲`；不要再把“新增 ENTSO-E GUI 专页”当成待办。
 - `MarketRecord` 的自然键不适合长期承载所有高频 ENTSO-E 时序，因此新增了 `EntsoeRecord` 和专用表。
 - `EntsoeRecord.row_key` 使用稳定业务内容哈希，不包含采集时间，重复采集可 upsert。
 - ENTSO-E XML namespace 会变化，解析使用 local-name，不要硬编码完整 namespace。
@@ -834,7 +885,7 @@ powertrade = "powertrade_crawler.cli:app"
 - 停运响应可能是 ZIP，官方 Postman 示例正文还可能把多个 XML 拼在展示文本中；真实 API 路径应按 ZIP/XML Content 处理。
 - 对真实 API 冒烟测试使用一天、小区域和 `--dry-run`，避免大查询和无意写库。
 - `powertrade init-db` 使用 SQLAlchemy `create_all` 创建新表。
-- 当前完整检查基线：`ruff` 通过，`pytest` 56 passed（2026-06-24）；存在既有 `datetime.utcnow()` deprecation warnings，暂未统一清理。
+- 当前完整检查基线：`ruff` 通过，`pytest` 57 passed（2026-06-26）；存在既有 `datetime.utcnow()` deprecation warnings，暂未统一清理。
 
 ## 19. 建议的下一步 / Recommended Next Steps
 
@@ -846,7 +897,7 @@ powertrade = "powertrade_crawler.cli:app"
 4. 增加 IANA 时区映射，实现“按当地交易日查询”和 UTC/当地时间双字段。
 5. 为停运数据解析 planned/unplanned、revision、cancelled、available capacity、resource name 等业务字段。
 6. 增加负荷预测误差、风光预测误差、跨境商业计划与物理潮流偏差等分析层。
-7. 给 GUI 增加 ENTSO-E 专页，并考虑数据集、区域、PSR、日期和跨境方向筛选。
+7. 继续优化 ENTSO-E GUI：真实可用边界清单、按数据集维护可用区域白名单、区域角色配置和更细的数据结果筛选。
 8. 为 `credentials.py` 增加可选的 Windows 文件权限收紧或系统凭据库支持。
 9. 缺少任何凭据时使用 `powertrade set-credential`，不要编辑 `.env`；以 `powertrade credentials-status` 的实时结果为准。
 10. 提交新业务前继续运行：
