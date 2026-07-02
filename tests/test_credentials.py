@@ -16,16 +16,19 @@ def test_credentials_are_saved_in_one_json_file(tmp_path):
     save_credential("gridstatus_api_key", "grid-key", path=path)
     save_credential("elecheck_authorization", "elecheck-token", path=path)
     save_credential("entsoe_security_token", "entsoe-token", path=path)
+    save_credential("elexon_api_key", "elexon-key", path=path)
 
     assert read_credentials(path) == {
         "gridstatus_api_key": "grid-key",
         "elecheck_authorization": "elecheck-token",
         "entsoe_security_token": "entsoe-token",
+        "elexon_api_key": "elexon-key",
     }
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "gridstatus_api_key": "grid-key",
         "elecheck_authorization": "elecheck-token",
         "entsoe_security_token": "entsoe-token",
+        "elexon_api_key": "elexon-key",
     }
 
 

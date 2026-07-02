@@ -8,11 +8,11 @@
 
 中文：
 
-`powertrade_crawler` 是一个 Python 数据采集、存储、浏览和打包分发项目，目标是建设电力交易、电价和电力系统运行数据的本地采集与查看工具。当前重点数据源包括 ENTSO-E Transparency Platform、GridStatus、广州电力交易中心新闻，以及微信小程序“易能电易查”的多个业务接口。
+`powertrade_crawler` 是一个 Python 数据采集、存储、浏览和打包分发项目，目标是建设电力交易、电价和电力系统运行数据的本地采集与查看工具。当前重点数据源包括 ENTSO-E Transparency Platform、Elexon Insights API、GridStatus、广州电力交易中心新闻，以及微信小程序“易能电易查”的多个业务接口。
 
 English:
 
-`powertrade_crawler` is a Python project for collecting, storing, browsing, and distributing power-market and power-system data. Its current data sources include ENTSO-E Transparency Platform, GridStatus, Guangzhou Power Exchange news, and several business APIs from the WeChat mini-program "Elecheck / 易能电易查".
+`powertrade_crawler` is a Python project for collecting, storing, browsing, and distributing power-market and power-system data. Its current data sources include ENTSO-E Transparency Platform, Elexon Insights API, GridStatus, Guangzhou Power Exchange news, and several business APIs from the WeChat mini-program "Elecheck / 易能电易查".
 
 核心技术栈 / Main stack:
 
@@ -32,6 +32,8 @@ English:
 - GridStatus request config: `configs/gridstatus/requests.json`
 - ENTSO-E request catalog: `configs/entsoe/requests.json`
 - ENTSO-E bilingual guide: `docs/ENTSOE_API_GUIDE.md`
+- Elexon request catalog: `configs/elexon/requests.json`
+- Elexon bilingual guide: `docs/ELEXON_API_GUIDE.md`
 - Local credential file: `.auth/credentials.json` (ignored by Git)
 - Local database: `data/powertrade.db`
 - GUI entry: `powertrade gui`
@@ -68,7 +70,7 @@ English:
 常用检查命令：
 
 ```powershell
-.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m ruff check src tests scripts
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m compileall src
 ```
@@ -100,7 +102,7 @@ Use the in-project virtual environment when available:
 Common checks:
 
 ```powershell
-.\.venv\Scripts\python.exe -m ruff check src tests
+.\.venv\Scripts\python.exe -m ruff check src tests scripts
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m compileall src
 ```
@@ -133,19 +135,20 @@ powertrade gui
 - `cli.py`: Typer 命令行入口。
 - `gui.py`: Tkinter GUI，包含数据浏览、筛选、导出、清空、采集进度窗口等。
 - `config.py`: 非敏感环境变量与运行配置。
-- `credentials.py`: GridStatus、Elecheck、ENTSO-E 三种凭据的统一本地存储和读取。
+- `credentials.py`: GridStatus、Elecheck、ENTSO-E、Elexon 四种凭据的统一本地存储和读取。
 - `elecheck_auth.py`: Elecheck Authorization 的兼容读取、缓存和进程内覆盖。
 
 English:
 
 - `clients/`: External HTTP/API wrappers. Add new API methods here first.
 - `spiders/`: Business collection logic that transforms client responses into project records.
-- `models.py`: SQLAlchemy ORM models.
+- `models.py`: Pydantic business record models.
 - `storage.py`: Table creation, sessions, inserts, upserts, exports, and persistence utilities.
 - `registry.py`: Spider registry used by `list-spiders` and `crawl`.
 - `cli.py`: Typer command-line entry point.
 - `gui.py`: Tkinter GUI for browsing, filtering, exporting, clearing data, and running collection progress dialogs.
-- `config.py`: Environment variables and settings.
+- `config.py`: Non-sensitive environment variables and settings.
+- `credentials.py`: Unified local credential storage for GridStatus, Elecheck, ENTSO-E, and Elexon.
 - `elecheck_auth.py`: Elecheck Authorization loading and expiration handling.
 
 ## 5. 已有业务模块 / Existing Business Modules
@@ -161,6 +164,7 @@ English:
 - CSV 导出
 - GridStatus 数据浏览与下载
 - ENTSO-E 欧洲数据源 CLI 采集、GUI 选择/预览/执行和本地结果浏览
+- Elexon 英国数据源 CLI 采集、GUI 选择/预览/执行和本地结果浏览
 - GZPEC 新闻采集
 - Elecheck 易能电易查数据采集与 GUI 浏览
 
@@ -176,6 +180,8 @@ The project currently includes:
 - GridStatus data browsing and downloading
 - ENTSO-E market, load, generation, transmission, balancing, and outage collection
 - ENTSO-E GUI dataset selection, dry-run preview, collection, and local result browsing
+- Elexon GB demand, generation, price, balancing, security-margin, interconnector, and non-BM balancing-service collection
+- Elexon GUI dataset selection, dry-run preview, collection, and local result browsing
 - GZPEC news collection
 - Elecheck data collection and GUI browsing
 
@@ -354,7 +360,8 @@ The main implementation points are:
 {
   "gridstatus_api_key": "",
   "elecheck_authorization": "",
-  "entsoe_security_token": ""
+  "entsoe_security_token": "",
+  "elexon_api_key": ""
 }
 ```
 
@@ -363,13 +370,14 @@ The main implementation points are:
 - `.auth/` 整个目录已加入 `.gitignore`，绝对不能强制提交。
 - `.env` 只保存数据库、超时、重试、请求间隔等非敏感配置。
 - 不要重新把 `GRIDSTATUS_API_KEY`、`ELECHECK_AUTHORIZATION` 或 `ENTSOE_SECURITY_TOKEN` 放回 `.env`。
-- 使用 `powertrade set-credential gridstatus|elecheck|entsoe` 隐藏输入凭据，避免进入 PowerShell 历史。
+- 使用 `powertrade set-credential gridstatus|elecheck|entsoe|elexon` 隐藏输入凭据，避免进入 PowerShell 历史。
 - 使用 `powertrade credentials-status` 只查看 configured/missing，不显示具体值。
 - 当前读取优先级是：显式临时参数、进程内覆盖、`.auth/credentials.json`。
 - Elecheck Authorization 一直使用到接口返回 HTTP 401，不主动按时间过期。
 - Elecheck CLI/GUI 输入新 Authorization 后会保存到统一鉴权文件。
 - GridStatus GUI 的“更换 API key”也写入统一鉴权文件。
 - ENTSO-E 的 `--entsoe-token` 只应作为临时覆盖；正常运行读取 `.auth`。
+- Elexon Insights API 当前公开访问，不要求 API key；`elexon_api_key` 是可选槽位，用于以后兼容需要 key 的环境。
 
 不要在文档中固化本机凭据是否存在。每次以以下命令实时检查为准：
 
@@ -454,9 +462,11 @@ Packaging command:
 ```text
 src/powertrade_crawler/clients/elecheck.py
 src/powertrade_crawler/clients/entsoe.py
+src/powertrade_crawler/clients/elexon.py
 src/powertrade_crawler/clients/gridstatus.py
 src/powertrade_crawler/spiders/elecheck.py
 src/powertrade_crawler/spiders/entsoe.py
+src/powertrade_crawler/spiders/elexon.py
 src/powertrade_crawler/models.py
 src/powertrade_crawler/storage.py
 src/powertrade_crawler/cli.py
@@ -465,9 +475,12 @@ src/powertrade_crawler/registry.py
 src/powertrade_crawler/elecheck_auth.py
 src/powertrade_crawler/credentials.py
 configs/entsoe/requests.json
+configs/elexon/requests.json
 docs/ENTSOE_API_GUIDE.md
+docs/ELEXON_API_GUIDE.md
 tests/test_elecheck_spider.py
 tests/test_entsoe_spider.py
+tests/test_elexon_spider.py
 tests/test_credentials.py
 ```
 
@@ -477,14 +490,27 @@ At the start of a task, read the relevant files first:
 
 ```text
 src/powertrade_crawler/clients/elecheck.py
+src/powertrade_crawler/clients/entsoe.py
+src/powertrade_crawler/clients/elexon.py
+src/powertrade_crawler/clients/gridstatus.py
 src/powertrade_crawler/spiders/elecheck.py
+src/powertrade_crawler/spiders/entsoe.py
+src/powertrade_crawler/spiders/elexon.py
 src/powertrade_crawler/models.py
 src/powertrade_crawler/storage.py
 src/powertrade_crawler/cli.py
 src/powertrade_crawler/gui.py
 src/powertrade_crawler/registry.py
 src/powertrade_crawler/elecheck_auth.py
+src/powertrade_crawler/credentials.py
+configs/entsoe/requests.json
+configs/elexon/requests.json
+docs/ENTSOE_API_GUIDE.md
+docs/ELEXON_API_GUIDE.md
 tests/test_elecheck_spider.py
+tests/test_entsoe_spider.py
+tests/test_elexon_spider.py
+tests/test_credentials.py
 ```
 
 ## 10. 新接口接入流程 / Workflow for Adding a New API
@@ -795,6 +821,156 @@ English:
 
 ENTSO-E is now available in the Tkinter GUI under the top-level `ENTSO-E 欧洲` tab. The GUI reads all 26 datasets from `configs/entsoe/requests.json`, shows token status without revealing the token, displays bilingual dataset explanations and parameter meanings, supports Chinese-readable area/in-area/out-area selection, all-area expansion, border availability filtering from `configs/entsoe/border_availability.json`, date selection, dry-run request preview without token fields, export, clearing local records, and real collection through the existing spider/client/credential/storage path. Generic ENTSO-E rows are stored in `entsoe_records`; the compatibility day-ahead-price spider still uses `market_records`.
 
+### 15.2 2026-06-30 Elexon 英国数据源首版 / Elexon GB Data Source
+
+中文：
+
+本轮新增 Elexon Insights API 首版接入，用于补齐 ENTSO-E 中英国 GB 在 2021-06-15 后停止发布的问题。官方资料入口：
+
+```text
+https://bmrs.elexon.co.uk/api-documentation/introduction
+https://github.com/elexon-data/insights-docs
+https://data.elexon.co.uk/swagger/v1/swagger.json
+```
+
+实现位置：
+
+```text
+configs/elexon/requests.json
+docs/ELEXON_API_GUIDE.md
+src/powertrade_crawler/clients/elexon.py
+src/powertrade_crawler/spiders/elexon.py
+src/powertrade_crawler/models.py -> ElexonRecord
+src/powertrade_crawler/storage.py -> elexon_records / upsert_elexon_records
+src/powertrade_crawler/cli.py -> elexon-datasets / elexon-describe / crawl elexon_*
+src/powertrade_crawler/gui.py -> Elexon 英国 tab
+tests/test_elexon_spider.py
+```
+
+当前配置的 Elexon 常用数据集覆盖负荷、发电、价格、平衡机制、供需紧张度、互联线和非 BM 平衡服务概览：
+
+```text
+elexon_generation_by_fuel_instant
+elexon_generation_by_fuel_half_hourly
+elexon_actual_generation_by_type
+elexon_initial_demand_outturn
+elexon_day_ahead_demand_forecast
+elexon_wind_generation_forecast
+elexon_system_prices
+elexon_market_index_prices
+elexon_balancing_physical
+elexon_bid_offer_acceptances
+elexon_loss_of_load_probability
+elexon_daily_margin_forecast
+elexon_daily_surplus_forecast
+elexon_interconnector_flows
+elexon_net_balancing_services_adjustment
+elexon_disaggregated_balancing_services_adjustment
+elexon_non_bm_stor
+```
+
+关键点：
+
+- Elexon Insights API 当前公开访问，不要求 API key；项目仍新增可选 `elexon_api_key` 凭据槽位。
+- `powertrade credentials-status` 会显示 elexon configured/missing，但 GUI 文案显示 API key `not required` 或 `optional configured`。
+- Elexon 通用记录写入 `elexon_records`，不复用 `entsoe_records`。
+- `--elexon-param KEY=VALUE` 可覆盖或增加官方参数，例如 `fuelType=CCGT`、`settlementPeriod=10`、`dataset=MELS`、`bmUnit=T_GRAI-8`、`interconnectorName=IFA`。
+- BMU 级平衡机制数据量很大，`elexon_balancing_physical` 和 `elexon_bid_offer_acceptances` 默认只查询 `settlementPeriod=1`；全量查询应按日期和周期分批。
+- GUI 顶层新增 `Elexon 英国` 页签，支持数据集说明、日期范围、额外参数、dry-run 预览、执行爬取、刷新、导出和清除。
+- 互联线参考接口 `/reference/interconnectors/all` 作为 `elexon_interconnector_flows` 的说明和参数来源使用，不单独做 GUI 参考数据页面。
+- GUI 说明区直接解释 LOLP、de-rated margin、NETBSAD、DISBSAD、STOR、BMU 等术语。
+
+常用命令：
+
+```powershell
+powertrade elexon-datasets
+powertrade elexon-describe elexon_system_prices
+powertrade crawl elexon_initial_demand_outturn --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_generation_by_fuel_half_hourly --start-date 2026-06-01 --end-date 2026-06-02 --elexon-param fuelType=CCGT --dry-run
+powertrade crawl elexon_system_prices --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_balancing_physical --start-date 2026-06-01 --end-date 2026-06-02 --elexon-param settlementPeriod=1 --dry-run
+powertrade crawl elexon_loss_of_load_probability --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_interconnector_flows --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_net_balancing_services_adjustment --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+```
+
+English:
+
+The Elexon integration adds a config-driven client/spider/storage/CLI/GUI path for common GB demand, generation, price, balancing, security-margin, interconnector, and non-BM balancing-service datasets. Elexon rows are stored in `elexon_records`; the public API currently does not require an API key, but an optional credential slot is available for future compatibility.
+
+### 15.3 2026-07-02 第九周 Elexon 补强 / Week 9 Elexon Reinforcement
+
+中文：
+
+第九周继续补强英国 Elexon 数据源。注意这里的“数据集”指项目内的 API 查询配置和 GUI/CLI 入口，不表示仓库里预下载了数据。CLI `--dry-run` 会实际请求 API 并把解析后的记录打印出来，但不会写数据库；GUI 的 `dry-run 预览` 只构造请求参数，不访问 API，也不写数据库。
+
+本轮新增或确认的能力：
+
+- Elexon 配置目录扩展到 17 个常用入口。
+- 新增英国供需紧张度：`elexon_loss_of_load_probability`、`elexon_daily_margin_forecast`、`elexon_daily_surplus_forecast`。
+- 新增英国互联线潮流：`elexon_interconnector_flows`。
+- 新增非 BM 平衡服务概览：`elexon_net_balancing_services_adjustment`、`elexon_disaggregated_balancing_services_adjustment`、`elexon_non_bm_stor`。
+- `/reference/interconnectors/all` 只作为互联线名称说明和参数来源使用，不做单独 GUI 参考数据页面。
+- GUI Elexon 页签把 `指标` 改为 `数据项/指标`，把 `BMU` 改为 `BMU（可留空）` / `BMU/平衡单元`，减少行业缩写误解。
+- GUI 说明区直接解释 LOLP、de-rated margin、NETBSAD、DISBSAD、STOR、BMU 和互联线名称。
+- Elexon client 支持顶层 JSON array 响应，兼容参考接口。
+- Elexon spider 增加 `snapshot` time mode，用于 `/forecast/margin/daily` 和 `/forecast/surplus/daily` 这类最新快照接口。
+- Elexon spider 会把 `interconnectorName` 映射到结果表的类型维度，原始字段仍保存在 `raw_json`。
+- Elexon 本地结果筛选优先按 `start_time_utc` / `settlement_date`，比只按发布时间更适合日度 margin/surplus 快照。
+
+第九周新增入口清单：
+
+```text
+elexon_loss_of_load_probability
+elexon_daily_margin_forecast
+elexon_daily_surplus_forecast
+elexon_interconnector_flows
+elexon_net_balancing_services_adjustment
+elexon_disaggregated_balancing_services_adjustment
+elexon_non_bm_stor
+```
+
+关键接口语义：
+
+- LOLP 是 Loss of Load Probability，数值越高表示系统供需越紧张。
+- de-rated margin 是折减裕度，数值越低通常表示系统供需越紧张。
+- `interconnectorName` 示例来自官方参考接口：`Eleclink (INTELEC)`、`France(IFA)`、`IFA2 (INTIFA2)`、`Netherlands(BritNed)`、`Belgium (Nemolink)`、`North Sea Link (INTNSL)`、`Denmark (Viking link)`、`Ireland(East-West)`、`Northern Ireland(Moyle)`、`Ireland (Greenlink)`。
+- NETBSAD 是非 BM 平衡服务的净额调整视角。
+- DISBSAD 是非 BM 平衡服务的拆分汇总视角，但仍不是逐条 BMU 报价明细。
+- STOR 是 Short Term Operating Reserve，短期运行备用；某些日期返回 0 条是正常情况。
+
+验证记录：
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check src tests scripts
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+结果：
+
+```text
+ruff: All checks passed
+pytest: 65 passed, 124 warnings
+```
+
+额外 smoke：
+
+- `powertrade elexon-datasets` 能列出 17 个 Elexon 入口。
+- `powertrade elexon-describe elexon_interconnector_flows` 能显示 reference endpoint、互联线术语说明和参数说明。
+- `elexon_loss_of_load_probability` 小范围 dry-run 成功返回 LOLP/de-rated margin 记录。
+- `elexon_interconnector_flows` 小范围 dry-run 成功返回互联线潮流，并把互联线名称放进类型维度。
+- `elexon_daily_margin_forecast` 和 `elexon_daily_surplus_forecast` 成功返回最新每日快照。
+- `elexon_disaggregated_balancing_services_adjustment` 小范围 dry-run 成功返回 DISBSAD 汇总记录。
+- `elexon_net_balancing_services_adjustment` 在 `includeZero=true` 的小范围 client 校验中返回记录。
+- `elexon_non_bm_stor` 在测试窗口可能返回 0 条，这表示该窗口无 STOR 调用或无可返回记录，不是解析失败。
+- GUI smoke 能初始化 `Elexon 英国` 页签，显示 `已接入 17 个数据集`，LOLP/de-rated margin 术语说明可见。
+
+本轮没有改动 `.auth/credentials.json`，没有提交 `.auth/`、`.env`、`data/`、`build/`、`dist/`、`.venv/` 等忽略文件。Elexon 可选凭据仍是 `elexon_api_key`，当前公开 API 不要求 key。
+
+English:
+
+Week 9 strengthened the Elexon integration with seven additional GB query entries for supply tightness, interconnector flows, and non-BM balancing-service summaries. The reference interconnector endpoint is used only for inline explanations and parameter guidance, not as a separate GUI page. The Elexon GUI now exposes clearer labels and inline concept notes, while records continue to be stored in `elexon_records`.
+
 ## 16. ENTSO-E 参数、时间与区域语义 / Parameter, Time, and Area Semantics
 
 中文：
@@ -885,22 +1061,24 @@ powertrade = "powertrade_crawler.cli:app"
 - 停运响应可能是 ZIP，官方 Postman 示例正文还可能把多个 XML 拼在展示文本中；真实 API 路径应按 ZIP/XML Content 处理。
 - 对真实 API 冒烟测试使用一天、小区域和 `--dry-run`，避免大查询和无意写库。
 - `powertrade init-db` 使用 SQLAlchemy `create_all` 创建新表。
-- 当前完整检查基线：`ruff` 通过，`pytest` 57 passed（2026-06-26）；存在既有 `datetime.utcnow()` deprecation warnings，暂未统一清理。
+- 当前完整检查基线：`ruff check src tests scripts` 通过，`pytest -q` 为 65 passed（2026-07-02）；存在既有 `datetime.utcnow()` deprecation warnings，暂未统一清理。
 
 ## 19. 建议的下一步 / Recommended Next Steps
 
 优先级建议：
 
-1. 为 ENTSO-E 26 个配置化数据集逐一做小范围真实 API 验证，记录哪些区域有数据。
-2. 把 ENTSO-E BZN、CTA、MBA、IPA、LFA 等区域角色拆成配置，不再只用单一 alias -> EIC 映射。
-3. 增加历史区域映射，尤其是 `DE-AT-LU` 与 `DE-LU` 的 2018-10-01 边界。
-4. 增加 IANA 时区映射，实现“按当地交易日查询”和 UTC/当地时间双字段。
-5. 为停运数据解析 planned/unplanned、revision、cancelled、available capacity、resource name 等业务字段。
-6. 增加负荷预测误差、风光预测误差、跨境商业计划与物理潮流偏差等分析层。
-7. 继续优化 ENTSO-E GUI：真实可用边界清单、按数据集维护可用区域白名单、区域角色配置和更细的数据结果筛选。
-8. 为 `credentials.py` 增加可选的 Windows 文件权限收紧或系统凭据库支持。
-9. 缺少任何凭据时使用 `powertrade set-credential`，不要编辑 `.env`；以 `powertrade credentials-status` 的实时结果为准。
-10. 提交新业务前继续运行：
+1. ENTSO-E 下一批优先做跨区市场与拥塞管理：`Implicit Allocations - Net Positions`、`Implicit Allocations - Congestion Income`、`Flow-based Allocations - Congestion Income`、`Use of Transfer Capacity`、`Total Nominated Capacity`、`Auction Revenue`、`Costs of Congestion Management`、`Redispatching Internal`、`Redispatching Cross Border`。实现前必须用官方 Postman collection / sitemap 确认 `documentType`、`businessType`、`processType`、区域参数，不能靠名称猜码。
+2. 为 ENTSO-E 26 个配置化数据集逐一做小范围真实 API 验证，记录哪些区域有数据。
+3. 把 ENTSO-E BZN、CTA、MBA、IPA、LFA 等区域角色拆成配置，不再只用单一 alias -> EIC 映射。
+4. 增加历史区域映射，尤其是 `DE-AT-LU` 与 `DE-LU` 的 2018-10-01 边界。
+5. 增加 IANA 时区映射，实现“按当地交易日查询”和 UTC/当地时间双字段。
+6. 为停运数据解析 planned/unplanned、revision、cancelled、available capacity、resource name 等业务字段。
+7. 增加负荷预测误差、风光预测误差、跨境商业计划与物理潮流偏差等分析层。
+8. 继续优化 ENTSO-E GUI：真实可用边界清单、按数据集维护可用区域白名单、区域角色配置和更细的数据结果筛选。
+9. Elexon 后续如继续补强，优先考虑 REMIT 停运/不可用、可用容量预测、BMU 元数据映射；仍把解释嵌入对应数据集说明，不单独堆“参考数据页面”。
+10. 为 `credentials.py` 增加可选的 Windows 文件权限收紧或系统凭据库支持。
+11. 缺少任何凭据时使用 `powertrade set-credential`，不要编辑 `.env`；以 `powertrade credentials-status` 的实时结果为准。
+12. 提交新业务前继续运行：
 
 ```powershell
 .\.venv\Scripts\python.exe -m ruff check src tests scripts

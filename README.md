@@ -5,6 +5,7 @@
 当前已接入的数据源包括：
 
 - ENTSO-E Transparency Platform 欧洲电力数据。
+- Elexon Insights API 英国电力数据。
 - GridStatus API。
 - 广州电力交易中心新闻。
 - 微信小程序“易能电易查”的多个业务接口。
@@ -230,7 +231,7 @@ Elecheck authorization 同样保存在统一鉴权文件中：
 powertrade set-credential elecheck
 ```
 
-查看三种凭据是否已经配置，不会显示具体内容：
+查看凭据是否已经配置，不会显示具体内容：
 
 ```powershell
 powertrade credentials-status
@@ -242,7 +243,8 @@ powertrade credentials-status
 {
   "gridstatus_api_key": "",
   "elecheck_authorization": "",
-  "entsoe_security_token": ""
+  "entsoe_security_token": "",
+  "elexon_api_key": ""
 }
 ```
 
@@ -351,6 +353,49 @@ API 使用的核心参数：
 
 ```text
 docs/ENTSOE_API_GUIDE.md
+```
+
+## 9. Elexon Insights API 英国数据源
+
+Elexon 用于查询英国 GB 在 ENTSO-E 停止发布后的负荷、发电、价格和平衡机制数据。当前 Elexon Insights API 公开访问，不要求 API key；项目仍预留可选凭据：
+
+```powershell
+powertrade set-credential elexon
+```
+
+查看已经配置的数据集：
+
+```powershell
+powertrade elexon-datasets
+powertrade elexon-describe elexon_initial_demand_outturn
+```
+
+示例：
+
+```powershell
+powertrade crawl elexon_initial_demand_outturn --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_generation_by_fuel_half_hourly --start-date 2026-06-01 --end-date 2026-06-02 --elexon-param fuelType=CCGT --dry-run
+powertrade crawl elexon_system_prices --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_balancing_physical --start-date 2026-06-01 --end-date 2026-06-02 --elexon-param settlementPeriod=1 --dry-run
+powertrade crawl elexon_loss_of_load_probability --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_interconnector_flows --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+powertrade crawl elexon_net_balancing_services_adjustment --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
+```
+
+通用 Elexon 数据写入：
+
+```text
+elexon_records
+```
+
+GUI 已增加 `Elexon 英国` 页签，支持数据集选择、说明查看、日期范围、额外参数、dry-run 预览、执行爬取、刷新、导出和清除本地数据。
+
+Elexon 页签中的说明区会直接解释 LOLP、de-rated margin、互联线名称、NETBSAD、DISBSAD、STOR、BMU 等术语；互联线参考接口 `/reference/interconnectors/all` 作为参数说明来源使用，不单独做参考数据页面。
+
+完整说明见：
+
+```text
+docs/ELEXON_API_GUIDE.md
 ```
 
 

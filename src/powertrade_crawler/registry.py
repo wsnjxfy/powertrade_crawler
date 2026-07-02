@@ -12,6 +12,7 @@ from powertrade_crawler.spiders.entsoe import (
     EntsoeDayAheadPricesSpider,
     build_entsoe_spider_classes,
 )
+from powertrade_crawler.spiders.elexon import build_elexon_spider_classes
 from powertrade_crawler.spiders.gridstatus import build_gridstatus_spider_classes
 from powertrade_crawler.spiders.gzpec_news_combined import GzpecNewsCombinedSpider
 
@@ -29,6 +30,7 @@ SPIDERS: dict[str, type[BaseSpider]] = {
 }
 SPIDERS.update(build_gridstatus_spider_classes())
 SPIDERS.update(build_entsoe_spider_classes())
+SPIDERS.update(build_elexon_spider_classes())
 
 
 def list_spiders() -> list[str]:

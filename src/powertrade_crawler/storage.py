@@ -26,6 +26,7 @@ from powertrade_crawler.models import (
     ElecheckMechanismElectricityPriceRecord,
     ElecheckPurchasingProvinceRecord,
     ElecheckPurchasingRecord,
+    ElexonRecord,
     EntsoeRecord,
     GridStatusDatasetMetadataRecord,
     GridStatusRecord,
@@ -133,6 +134,45 @@ class EntsoeRecordRow(Base):
     resolution: Mapped[str | None] = mapped_column(String(20), nullable=True)
     value: Mapped[float | None] = mapped_column(Float, nullable=True)
     value_field: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    raw_json: Mapped[str] = mapped_column(Text)
+    collected_at: Mapped[DateTime] = mapped_column(DateTime)
+
+
+class ElexonRecordRow(Base):
+    __tablename__ = "elexon_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset",
+            "row_key",
+            name="uq_elexon_dataset_row_key",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    dataset: Mapped[str] = mapped_column(String(160), index=True)
+    category: Mapped[str] = mapped_column(String(80), index=True)
+    title_en: Mapped[str] = mapped_column(String(240))
+    title_zh: Mapped[str] = mapped_column(String(240))
+    endpoint: Mapped[str] = mapped_column(String(240), index=True)
+    row_key: Mapped[str] = mapped_column(String(64), index=True)
+    area: Mapped[str] = mapped_column(String(20), index=True)
+    settlement_date: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
+    settlement_period: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    publish_time_utc: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    start_time_utc: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    end_time_utc: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    fuel_type: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    bm_unit: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    national_grid_bm_unit: Mapped[str | None] = mapped_column(
+        String(120),
+        nullable=True,
+        index=True,
+    )
+    metric: Mapped[str] = mapped_column(String(160), index=True)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    value_field: Mapped[str] = mapped_column(String(120), index=True)
     unit: Mapped[str | None] = mapped_column(String(40), nullable=True)
     currency: Mapped[str | None] = mapped_column(String(20), nullable=True)
     raw_json: Mapped[str] = mapped_column(Text)
@@ -812,6 +852,32 @@ def upsert_entsoe_records(records: list[EntsoeRecord]) -> int:
             values["raw_json"] = json.dumps(record.raw, ensure_ascii=False)
             if row is None:
                 session.add(EntsoeRecordRow(**values))
+            else:
+                for field, value in values.items():
+                    setattr(row, field, value)
+            written += 1
+        session.commit()
+    return written
+
+
+def upsert_elexon_records(records: list[ElexonRecord]) -> int:
+    import json
+
+    if not records:
+        return 0
+
+    written = 0
+    with get_session() as session:
+        for record in records:
+            row = (
+                session.query(ElexonRecordRow)
+                .filter_by(dataset=record.dataset, row_key=record.row_key)
+                .one_or_none()
+            )
+            values = record.model_dump(exclude={"raw"})
+            values["raw_json"] = json.dumps(record.raw, ensure_ascii=False)
+            if row is None:
+                session.add(ElexonRecordRow(**values))
             else:
                 for field, value in values.items():
                     setattr(row, field, value)

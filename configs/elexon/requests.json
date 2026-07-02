@@ -1,0 +1,437 @@
+{
+  "requests": [
+    {
+      "name": "elexon_generation_by_fuel_instant",
+      "category": "generation",
+      "title_en": "Instantaneous Generation by Fuel Type",
+      "title_zh": "实时按燃料类型发电",
+      "meaning_en": "Near-real-time GB generation outturn grouped by fuel type from FUELINST.",
+      "meaning_zh": "英国实时发电出力，按燃料类型分组，来自 Elexon FUELINST 数据集。",
+      "endpoint": "/datasets/FUELINST",
+      "time_mode": "publish_range",
+      "chunk_days": 1,
+      "value_fields": [
+        {"field": "generation", "metric": "generation", "unit": "MW"}
+      ],
+      "dimension_fields": ["fuelType"],
+      "parameter_notes": {
+        "publishDateTimeFrom": "发布时间开始 UTC。",
+        "publishDateTimeTo": "发布时间结束 UTC，不包含结束点。",
+        "fuelType": "可选燃料类型过滤，例如 NUCLEAR。"
+      }
+    },
+    {
+      "name": "elexon_generation_by_fuel_half_hourly",
+      "category": "generation",
+      "title_en": "Half-hourly Generation by Fuel Type",
+      "title_zh": "半小时按燃料类型发电",
+      "meaning_en": "Half-hourly GB generation outturn grouped by fuel type from FUELHH.",
+      "meaning_zh": "英国半小时发电出力，按燃料类型分组，来自 Elexon FUELHH 数据集。",
+      "endpoint": "/datasets/FUELHH",
+      "time_mode": "publish_range",
+      "chunk_days": 7,
+      "value_fields": [
+        {"field": "generation", "metric": "generation", "unit": "MW"}
+      ],
+      "dimension_fields": ["fuelType"],
+      "parameter_notes": {
+        "publishDateTimeFrom": "发布时间开始 UTC。",
+        "publishDateTimeTo": "发布时间结束 UTC，不包含结束点。",
+        "fuelType": "可选燃料类型过滤，例如 CCGT、NUCLEAR、WIND。"
+      }
+    },
+    {
+      "name": "elexon_actual_generation_by_type",
+      "category": "generation",
+      "title_en": "Actual Generation per Production Type",
+      "title_zh": "按发电类型实际发电",
+      "meaning_en": "Historic actual generation per production type from AGPT/B1620.",
+      "meaning_zh": "英国按发电类型划分的历史实际发电出力，来自 AGPT/B1620。",
+      "endpoint": "/generation/actual/per-type",
+      "time_mode": "from_to",
+      "chunk_days": 7,
+      "value_fields": [
+        {"field": "quantity", "metric": "generation", "unit": "MW"}
+      ],
+      "dimension_fields": ["businessType", "psrType"],
+      "parameter_notes": {
+        "from": "数据时段开始 UTC。",
+        "to": "数据时段结束 UTC，不包含结束点。"
+      }
+    },
+    {
+      "name": "elexon_initial_demand_outturn",
+      "category": "load",
+      "title_en": "Initial National Demand Outturn",
+      "title_zh": "初始全国负荷实绩",
+      "meaning_en": "Initial GB national demand and transmission system demand outturn from INDO.",
+      "meaning_zh": "英国初始全国负荷实绩和输电系统负荷实绩，来自 INDO。",
+      "endpoint": "/demand/outturn",
+      "time_mode": "settlement_date_range",
+      "chunk_days": 14,
+      "value_fields": [
+        {"field": "initialDemandOutturn", "metric": "initial_demand_outturn", "unit": "MW"},
+        {"field": "initialTransmissionSystemDemandOutturn", "metric": "initial_transmission_system_demand_outturn", "unit": "MW"}
+      ],
+      "dimension_fields": [],
+      "parameter_notes": {
+        "settlementDateFrom": "结算日期开始。",
+        "settlementDateTo": "结算日期结束，Elexon 按日期过滤。"
+      }
+    },
+    {
+      "name": "elexon_day_ahead_demand_forecast",
+      "category": "load",
+      "title_en": "Latest Day-ahead Demand Forecast",
+      "title_zh": "最新日前负荷预测",
+      "meaning_en": "Latest day-ahead national demand and transmission system demand forecast from NDF/TSDF.",
+      "meaning_zh": "英国最新日前全国负荷和输电系统负荷预测，来自 NDF/TSDF。",
+      "endpoint": "/forecast/demand/day-ahead/latest",
+      "time_mode": "from_to",
+      "chunk_days": 14,
+      "value_fields": [
+        {"field": "nationalDemand", "metric": "national_demand_forecast", "unit": "MW"},
+        {"field": "transmissionSystemDemand", "metric": "transmission_system_demand_forecast", "unit": "MW"}
+      ],
+      "dimension_fields": ["boundary"],
+      "parameter_notes": {
+        "from": "预测时段开始 UTC。",
+        "to": "预测时段结束 UTC，不包含结束点。",
+        "boundary": "可选边界类型；留空返回全国数据，zonal 返回分区数据。"
+      }
+    },
+    {
+      "name": "elexon_wind_generation_forecast",
+      "category": "generation",
+      "title_en": "Latest Wind Generation Forecast",
+      "title_zh": "最新风电发电预测",
+      "meaning_en": "Latest wind generation forecast from WINDFOR.",
+      "meaning_zh": "英国最新风电发电预测，来自 WINDFOR。",
+      "endpoint": "/forecast/generation/wind/latest",
+      "time_mode": "from_to",
+      "chunk_days": 14,
+      "value_fields": [
+        {"field": "generation", "metric": "wind_generation_forecast", "unit": "MW"}
+      ],
+      "dimension_fields": [],
+      "parameter_notes": {
+        "from": "预测时段开始 UTC。",
+        "to": "预测时段结束 UTC，不包含结束点。"
+      }
+    },
+    {
+      "name": "elexon_system_prices",
+      "category": "price",
+      "title_en": "Settlement System Prices",
+      "title_zh": "结算系统价格",
+      "meaning_en": "GB system sell/buy price and imbalance settlement metrics from DISEBSP.",
+      "meaning_zh": "英国结算系统卖价、买价和不平衡结算相关指标，来自 DISEBSP。",
+      "endpoint": "/balancing/settlement/system-prices/{settlement_date}",
+      "period_endpoint": "/balancing/settlement/system-prices/{settlement_date}/{settlement_period}",
+      "time_mode": "settlement_date_path",
+      "chunk_days": 31,
+      "value_fields": [
+        {"field": "systemSellPrice", "metric": "system_sell_price", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "systemBuyPrice", "metric": "system_buy_price", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "netImbalanceVolume", "metric": "net_imbalance_volume", "unit": "MWh"},
+        {"field": "replacementPrice", "metric": "replacement_price", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "reserveScarcityPrice", "metric": "reserve_scarcity_price", "unit": "GBP/MWh", "currency": "GBP"}
+      ],
+      "dimension_fields": ["priceDerivationCode"],
+      "parameter_notes": {
+        "settlementDate": "结算日期，来自开始/结束日期范围逐日展开。",
+        "settlementPeriod": "可选；通过额外参数 settlementPeriod=1 查询单个结算周期。"
+      }
+    },
+    {
+      "name": "elexon_market_index_prices",
+      "category": "price",
+      "title_en": "Market Index Prices",
+      "title_zh": "市场指数价格",
+      "meaning_en": "Market Index Data price and volume time series from MID.",
+      "meaning_zh": "英国市场指数价格和成交量时序，来自 MID。",
+      "endpoint": "/balancing/pricing/market-index",
+      "time_mode": "from_to",
+      "chunk_days": 14,
+      "value_fields": [
+        {"field": "price", "metric": "market_index_price", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "volume", "metric": "market_index_volume", "unit": "MWh"}
+      ],
+      "dimension_fields": ["dataProvider"],
+      "parameter_notes": {
+        "from": "数据时段开始 UTC。",
+        "to": "数据时段结束 UTC，不包含结束点。",
+        "dataProviders": "可选数据提供方过滤。"
+      }
+    },
+    {
+      "name": "elexon_balancing_physical",
+      "category": "balancing",
+      "title_en": "Market-wide Physical Data",
+      "title_zh": "平衡机制物理申报数据",
+      "meaning_en": "Market-wide physical data for PN/QPN/MILS/MELS by settlement period.",
+      "meaning_zh": "英国平衡机制市场范围物理申报数据，支持 PN、QPN、MILS、MELS，默认只查询第 1 个结算周期以控制数据量。",
+      "endpoint": "/balancing/physical/all",
+      "time_mode": "settlement_date_period",
+      "chunk_days": 1,
+      "default_params": {"dataset": "PN", "settlementPeriod": "1"},
+      "value_fields": [
+        {"field": "levelFrom", "metric": "level_from", "unit": "MW"},
+        {"field": "levelTo", "metric": "level_to", "unit": "MW"}
+      ],
+      "dimension_fields": ["dataset", "nationalGridBmUnit", "bmUnit"],
+      "parameter_notes": {
+        "settlementDate": "结算日期，来自开始/结束日期范围逐日展开。",
+        "settlementPeriod": "结算周期，默认 1；可通过额外参数覆盖。",
+        "dataset": "PN、QPN、MILS 或 MELS，默认 PN。",
+        "bmUnit": "可选 BM Unit 过滤；留空返回全市场。"
+      }
+    },
+    {
+      "name": "elexon_bid_offer_acceptances",
+      "category": "balancing",
+      "title_en": "Market-wide Bid-offer Acceptances",
+      "title_zh": "平衡机制报价接受量",
+      "meaning_en": "Market-wide bid-offer acceptances by settlement period from BOALF.",
+      "meaning_zh": "英国平衡机制市场范围 Bid-offer 接受记录，来自 BOALF，默认只查询第 1 个结算周期以控制数据量。",
+      "endpoint": "/balancing/acceptances/all",
+      "time_mode": "settlement_date_period",
+      "chunk_days": 1,
+      "default_params": {"settlementPeriod": "1"},
+      "value_fields": [
+        {"field": "levelFrom", "metric": "acceptance_level_from", "unit": "MW"},
+        {"field": "levelTo", "metric": "acceptance_level_to", "unit": "MW"}
+      ],
+      "dimension_fields": ["acceptanceNumber", "nationalGridBmUnit", "bmUnit"],
+      "parameter_notes": {
+        "settlementDate": "结算日期，来自开始/结束日期范围逐日展开。",
+        "settlementPeriod": "结算周期，默认 1；可通过额外参数覆盖。",
+        "bmUnit": "可选 BM Unit 过滤；留空返回全市场。"
+      }
+    },
+    {
+      "name": "elexon_loss_of_load_probability",
+      "category": "security",
+      "title_en": "Loss of Load Probability and De-rated Margin",
+      "title_zh": "供需紧张度：失负荷概率和折减裕度",
+      "meaning_en": "GB loss of load probability and de-rated margin forecast from LOLPDRM.",
+      "meaning_zh": "英国供需紧张度预测，包含失负荷概率 LOLP 和折减裕度 de-rated margin，可用于判断系统是否偏紧。",
+      "endpoint": "/forecast/system/loss-of-load",
+      "time_mode": "from_to",
+      "chunk_days": 7,
+      "value_fields": [
+        {
+          "field": "lossOfLoadProbability",
+          "metric": "loss_of_load_probability",
+          "unit": "probability",
+          "meaning_zh": "失负荷概率，数值越高表示供需越紧张。"
+        },
+        {
+          "field": "deratedMargin",
+          "metric": "derated_margin",
+          "unit": "MW",
+          "meaning_zh": "折减后的系统可用裕度，数值越低表示供需越紧张。"
+        }
+      ],
+      "dimension_fields": [],
+      "concept_notes": [
+        "LOLP 是 Loss of Load Probability，表示系统在某结算周期出现供给不足风险的概率。",
+        "de-rated margin 是折减裕度，已经考虑机组可用性和可靠性，比简单装机容量裕度更接近实际供需安全边际。",
+        "通常可以和负荷、风电预测、互联线潮流、系统价格一起看：LOLP 上升或折减裕度下降时，系统更容易出现高价或备用调用。"
+      ],
+      "parameter_notes": {
+        "from": "预测时段开始 UTC。",
+        "to": "预测时段结束 UTC，不包含结束点。",
+        "settlementPeriodFrom": "可选，起始结算周期，1-50。",
+        "settlementPeriodTo": "可选，结束结算周期，1-50。"
+      }
+    },
+    {
+      "name": "elexon_daily_margin_forecast",
+      "category": "security",
+      "title_en": "Daily Margin Forecast",
+      "title_zh": "每日系统裕度预测",
+      "meaning_en": "Latest daily GB margin forecast from OCNMFD2.",
+      "meaning_zh": "英国每日系统裕度预测，用于快速查看未来几天供给相对需求的安全边际。",
+      "endpoint": "/forecast/margin/daily",
+      "time_mode": "snapshot",
+      "chunk_days": 1,
+      "value_fields": [
+        {
+          "field": "margin",
+          "metric": "daily_margin_forecast",
+          "unit": "MW",
+          "meaning_zh": "每日预测裕度，数值越低表示供需越紧。"
+        }
+      ],
+      "dimension_fields": [],
+      "concept_notes": [
+        "这是最新发布的每日裕度快照，接口本身不接收开始/结束日期过滤；GUI 的日期用于筛选本地已保存结果。"
+      ],
+      "parameter_notes": {
+        "format": "由客户端自动传入 json。"
+      }
+    },
+    {
+      "name": "elexon_daily_surplus_forecast",
+      "category": "security",
+      "title_en": "Daily Surplus Forecast",
+      "title_zh": "每日系统剩余容量预测",
+      "meaning_en": "Latest daily GB surplus forecast from OCNMFD.",
+      "meaning_zh": "英国每日系统剩余容量预测，用于观察系统供给相对需求的可用余量。",
+      "endpoint": "/forecast/surplus/daily",
+      "time_mode": "snapshot",
+      "chunk_days": 1,
+      "value_fields": [
+        {
+          "field": "surplus",
+          "metric": "daily_surplus_forecast",
+          "unit": "MW",
+          "meaning_zh": "每日预测剩余容量，数值越低表示供需越紧。"
+        }
+      ],
+      "dimension_fields": [],
+      "concept_notes": [
+        "这是最新发布的每日剩余容量快照，接口本身不接收开始/结束日期过滤；GUI 的日期用于筛选本地已保存结果。"
+      ],
+      "parameter_notes": {
+        "format": "由客户端自动传入 json。"
+      }
+    },
+    {
+      "name": "elexon_interconnector_flows",
+      "category": "interconnector",
+      "title_en": "Historic Half-hourly Interconnector Flows",
+      "title_zh": "半小时互联线潮流",
+      "meaning_en": "Historic half-hourly GB interconnector flow outturn from FUELINST.",
+      "meaning_zh": "英国与周边市场之间互联线的半小时实际潮流，可用于分析进出口电力对英国供需和价格的影响。",
+      "endpoint": "/generation/outturn/interconnectors",
+      "reference_endpoint": "/reference/interconnectors/all",
+      "time_mode": "settlement_date_range",
+      "chunk_days": 7,
+      "value_fields": [
+        {
+          "field": "generation",
+          "metric": "interconnector_flow",
+          "unit": "MW",
+          "meaning_zh": "互联线半小时潮流，正负方向沿用 Elexon 原始定义；原始字段保存在 raw_json。"
+        }
+      ],
+      "dimension_fields": ["interconnectorName"],
+      "concept_notes": [
+        "interconnectorName 是互联线名称，例如英国与法国、荷兰、比利时、挪威、爱尔兰等市场之间的联络线名称。",
+        "可用互联线名称来自 Elexon 参考接口 /reference/interconnectors/all；本项目把这个说明放在互联线数据集里，不单独做参考数据页面。",
+        "当前参考接口示例包括 Eleclink (INTELEC)、France(IFA)、IFA2 (INTIFA2)、Netherlands(BritNed)、Belgium (Nemolink)、North Sea Link (INTNSL)、Denmark (Viking link)、Ireland(East-West)、Northern Ireland(Moyle)、Ireland (Greenlink)。",
+        "如果不填 interconnectorName，会返回所选日期范围内全部互联线；如需筛选，可在额外参数中填写 interconnectorName=名称。"
+      ],
+      "parameter_notes": {
+        "settlementDateFrom": "结算日期开始。",
+        "settlementDateTo": "结算日期结束，项目按开始/结束日期范围自动生成。",
+        "settlementPeriod": "可选结算周期过滤。",
+        "interconnectorName": "可选互联线名称过滤，名称来自 /reference/interconnectors/all。"
+      }
+    },
+    {
+      "name": "elexon_net_balancing_services_adjustment",
+      "category": "balancing",
+      "title_en": "Net Balancing Services Adjustment",
+      "title_zh": "净平衡服务调整 NETBSAD",
+      "meaning_en": "Net non-BM balancing services adjustment time series from NETBSAD.",
+      "meaning_zh": "英国非 BM 平衡服务的净调整汇总，用于观察系统运营方通过非 BM 服务对能量和价格的整体调整影响。",
+      "endpoint": "/balancing/nonbm/netbsad",
+      "time_mode": "from_to",
+      "chunk_days": 7,
+      "default_params": {"includeZero": "false"},
+      "value_fields": [
+        {"field": "netBuyPriceCostAdjustmentEnergy", "metric": "net_buy_price_cost_adjustment_energy", "unit": "MWh"},
+        {"field": "netBuyPriceVolumeAdjustmentEnergy", "metric": "net_buy_price_volume_adjustment_energy", "unit": "MWh"},
+        {"field": "netBuyPriceVolumeAdjustmentSystem", "metric": "net_buy_price_volume_adjustment_system", "unit": "MWh"},
+        {"field": "buyPricePriceAdjustment", "metric": "buy_price_price_adjustment", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "netSellPriceCostAdjustmentEnergy", "metric": "net_sell_price_cost_adjustment_energy", "unit": "MWh"},
+        {"field": "netSellPriceVolumeAdjustmentEnergy", "metric": "net_sell_price_volume_adjustment_energy", "unit": "MWh"},
+        {"field": "netSellPriceVolumeAdjustmentSystem", "metric": "net_sell_price_volume_adjustment_system", "unit": "MWh"},
+        {"field": "sellPricePriceAdjustment", "metric": "sell_price_price_adjustment", "unit": "GBP/MWh", "currency": "GBP"}
+      ],
+      "dimension_fields": [],
+      "concept_notes": [
+        "非 BM 指不直接表现为普通 BMU bid/offer 接受的平衡服务调整。",
+        "NETBSAD 是净额视角，适合看某半小时内非 BM 服务对买价、卖价、能量和系统量的总体影响。",
+        "这比逐条 BMU 报价和接受记录更适合 GUI 概览。"
+      ],
+      "parameter_notes": {
+        "from": "数据时段开始 UTC。",
+        "to": "数据时段结束 UTC，不包含结束点。",
+        "settlementPeriodFrom": "可选，起始结算周期，1-50。",
+        "settlementPeriodTo": "可选，结束结算周期，1-50。",
+        "includeZero": "是否包含全为 0 的数据点，默认 false，减少无信息记录。"
+      }
+    },
+    {
+      "name": "elexon_disaggregated_balancing_services_adjustment",
+      "category": "balancing",
+      "title_en": "Disaggregated Balancing Services Adjustment Summary",
+      "title_zh": "拆分平衡服务调整汇总 DISBSAD",
+      "meaning_en": "Summary of disaggregated non-BM balancing services adjustment data from DISBSAD.",
+      "meaning_zh": "英国非 BM 平衡服务调整的拆分汇总，显示买/卖方向的动作数量、价格范围、平均价格和成交量。",
+      "endpoint": "/balancing/nonbm/disbsad/summary",
+      "time_mode": "from_to",
+      "chunk_days": 7,
+      "value_fields": [
+        {"field": "buyActionCount", "metric": "buy_action_count", "unit": "count"},
+        {"field": "sellActionCount", "metric": "sell_action_count", "unit": "count"},
+        {"field": "buyPriceMinimum", "metric": "buy_price_minimum", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "buyPriceMaximum", "metric": "buy_price_maximum", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "buyPriceAverage", "metric": "buy_price_average", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "sellPriceMinimum", "metric": "sell_price_minimum", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "sellPriceMaximum", "metric": "sell_price_maximum", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "sellPriceAverage", "metric": "sell_price_average", "unit": "GBP/MWh", "currency": "GBP"},
+        {"field": "buyVolumeTotal", "metric": "buy_volume_total", "unit": "MWh"},
+        {"field": "sellVolumeTotal", "metric": "sell_volume_total", "unit": "MWh"},
+        {"field": "netVolume", "metric": "net_volume", "unit": "MWh"}
+      ],
+      "dimension_fields": [],
+      "concept_notes": [
+        "DISBSAD 比 NETBSAD 更细，但仍是汇总层，不进入每个 BMU 或每条报价接受记录。",
+        "适合查看非 BM 平衡服务在买入/卖出方向上的数量、价格区间、平均价格和净量。"
+      ],
+      "parameter_notes": {
+        "from": "数据时段开始 UTC。",
+        "to": "数据时段结束 UTC，不包含结束点。",
+        "settlementPeriodFrom": "可选，起始结算周期，1-50。",
+        "settlementPeriodTo": "可选，结束结算周期，1-50。"
+      }
+    },
+    {
+      "name": "elexon_non_bm_stor",
+      "category": "balancing",
+      "title_en": "Non-BM STOR",
+      "title_zh": "非 BM 短期运行备用 STOR",
+      "meaning_en": "Non-BM Short Term Operating Reserve time series from NONBM.",
+      "meaning_zh": "英国非 BM 短期运行备用 STOR 时间序列，用于观察系统什么时候调用备用容量。",
+      "endpoint": "/balancing/nonbm/stor",
+      "time_mode": "from_to",
+      "chunk_days": 7,
+      "default_params": {"includeZero": "false"},
+      "value_fields": [
+        {
+          "field": "generation",
+          "metric": "non_bm_stor_generation",
+          "unit": "MW",
+          "meaning_zh": "非 BM STOR 调用量，通常可与供需紧张度和系统价格一起分析。"
+        }
+      ],
+      "dimension_fields": [],
+      "concept_notes": [
+        "STOR 是 Short Term Operating Reserve，短期运行备用。",
+        "这个入口展示备用调用的时间序列，不进入具体合同或 BMU 级别明细。"
+      ],
+      "parameter_notes": {
+        "from": "数据时段开始 UTC。",
+        "to": "数据时段结束 UTC，不包含结束点。",
+        "settlementPeriodFrom": "可选，起始结算周期，1-50。",
+        "settlementPeriodTo": "可选，结束结算周期，1-50。",
+        "includeZero": "是否包含 0 调用量的数据点，默认 false，减少无信息记录。"
+      }
+    }
+  ]
+}

@@ -6,6 +6,7 @@ from powertrade_crawler.models import (
     ElecheckClearPriceRecord,
     ElecheckMechanismElectricityPriceRecord,
     ElecheckPurchasingRecord,
+    ElexonRecord,
     EntsoeRecord,
     GridStatusDatasetMetadataRecord,
     GridStatusRecord,
@@ -20,6 +21,7 @@ SpiderRecord = (
     | GridStatusRecord
     | GridStatusDatasetMetadataRecord
     | EntsoeRecord
+    | ElexonRecord
     | ElecheckClearPriceRecord
     | ElecheckPurchasingRecord
     | ElecheckMechanismElectricityPriceRecord

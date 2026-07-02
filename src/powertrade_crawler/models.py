@@ -75,6 +75,35 @@ class EntsoeRecord(BaseModel):
         return "|".join([self.dataset, self.row_key])
 
 
+class ElexonRecord(BaseModel):
+    dataset: str
+    category: str
+    title_en: str
+    title_zh: str
+    endpoint: str
+    row_key: str
+    area: str = "GB"
+    settlement_date: str | None = None
+    settlement_period: int | None = None
+    publish_time_utc: str | None = None
+    start_time_utc: str | None = None
+    end_time_utc: str | None = None
+    fuel_type: str | None = None
+    bm_unit: str | None = None
+    national_grid_bm_unit: str | None = None
+    metric: str
+    value: float | None = None
+    value_field: str
+    unit: str | None = None
+    currency: str | None = None
+    raw: dict[str, Any] = Field(default_factory=dict)
+    collected_at: datetime = Field(default_factory=datetime.utcnow)
+
+    @property
+    def natural_key(self) -> str:
+        return "|".join([self.dataset, self.row_key])
+
+
 class GridStatusDatasetMetadataRecord(BaseModel):
     # GridStatus 数据集的唯一编号，例如 caiso_fuel_mix 或 spp_load_forecast_by_baa。
     # 后续查询具体数据时，会把它放进 /v1/datasets/{dataset_id}/query。

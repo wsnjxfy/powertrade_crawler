@@ -48,10 +48,12 @@ from powertrade_crawler.spiders.elecheck import (
     ElecheckMechanismElectricityPriceSpider,
     ElecheckPurchasingNationalRangeSpider,
 )
-from powertrade_crawler.models import EntsoeRecord, MarketRecord
+from powertrade_crawler.models import ElexonRecord, EntsoeRecord, MarketRecord
 from powertrade_crawler.registry import get_spider
 from powertrade_crawler.spiders.entsoe import ENTSOE_BIDDING_ZONES, load_entsoe_request_configs
+from powertrade_crawler.spiders.elexon import load_elexon_request_configs
 from powertrade_crawler.storage import (
+    upsert_elexon_records,
     upsert_entsoe_records,
     upsert_elecheck_clear_price_records,
     upsert_elecheck_mechanism_electricity_price_records,
@@ -70,6 +72,7 @@ ENTSOE_GB_PUBLICATION_STOP_DATE = date(2021, 6, 15)
 ENTSOE_BORDER_AVAILABILITY_PATH = (
     get_project_root() / "configs" / "entsoe" / "border_availability.json"
 )
+ELEXON_API_KEY_PLACEHOLDER = "replace-with-your-elexon-api-key"
 ENTSOE_AREA_NAMES = {
     "AL": "阿尔巴尼亚",
     "AT": "奥地利",
@@ -4660,6 +4663,687 @@ class EntsoeDataApp:
             return value
 
 
+class ElexonDataRepository:
+    def __init__(self, db_path: Path | None = None) -> None:
+        self.db_path = db_path or resolve_sqlite_path()
+
+    def connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.db_path)
+        connection.row_factory = sqlite3.Row
+        return connection
+
+    def table_exists(self, table_name: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                (table_name,),
+            ).fetchone()
+        return row is not None
+
+    def search(
+        self,
+        *,
+        dataset: str = "",
+        metric: str = "",
+        bm_unit: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        limit: int = 1000,
+    ) -> list[dict[str, object]]:
+        if not self.table_exists("elexon_records"):
+            return []
+        where, params = self.build_where(
+            dataset=dataset,
+            metric=metric,
+            bm_unit=bm_unit,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        with self.connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT id, dataset, category, title_zh, title_en, endpoint, area,
+                       settlement_date, settlement_period, publish_time_utc,
+                       start_time_utc, end_time_utc, fuel_type, bm_unit,
+                       national_grid_bm_unit, metric, value, value_field, unit,
+                       currency, raw_json, collected_at
+                FROM elexon_records
+                WHERE {' AND '.join(where)}
+                ORDER BY COALESCE(start_time_utc, settlement_date, publish_time_utc, '') DESC,
+                         dataset, metric, fuel_type, bm_unit
+                LIMIT ?
+                """,
+                [*params, limit],
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def delete_records(
+        self,
+        *,
+        dataset: str,
+        metric: str = "",
+        bm_unit: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if not self.table_exists("elexon_records"):
+            return 0
+        where, params = self.build_where(
+            dataset=dataset,
+            metric=metric,
+            bm_unit=bm_unit,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        with self.connect() as connection:
+            cursor = connection.execute(
+                f"DELETE FROM elexon_records WHERE {' AND '.join(where)}",
+                params,
+            )
+            deleted = cursor.rowcount if cursor.rowcount is not None else 0
+            connection.commit()
+        return deleted
+
+    def export_records(
+        self,
+        *,
+        output_path: Path,
+        dataset: str,
+        metric: str = "",
+        bm_unit: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> int:
+        if not self.table_exists("elexon_records"):
+            return 0
+        columns = [
+            "id",
+            "dataset",
+            "category",
+            "title_zh",
+            "title_en",
+            "endpoint",
+            "area",
+            "settlement_date",
+            "settlement_period",
+            "publish_time_utc",
+            "start_time_utc",
+            "end_time_utc",
+            "fuel_type",
+            "bm_unit",
+            "national_grid_bm_unit",
+            "metric",
+            "value",
+            "value_field",
+            "unit",
+            "currency",
+            "raw_json",
+            "collected_at",
+        ]
+        where, params = self.build_where(
+            dataset=dataset,
+            metric=metric,
+            bm_unit=bm_unit,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        row_count = 0
+        with self.connect() as connection, output_path.open(
+            "w",
+            newline="",
+            encoding="utf-8-sig",
+        ) as file:
+            writer = csv.DictWriter(file, fieldnames=columns)
+            writer.writeheader()
+            cursor = connection.execute(
+                f"""
+                SELECT {", ".join(columns)}
+                FROM elexon_records
+                WHERE {' AND '.join(where)}
+                ORDER BY COALESCE(start_time_utc, settlement_date, publish_time_utc, '') DESC,
+                         dataset, metric, fuel_type, bm_unit
+                """,
+                params,
+            )
+            for row in cursor:
+                writer.writerow(dict(row))
+                row_count += 1
+        return row_count
+
+    def build_where(
+        self,
+        *,
+        dataset: str,
+        metric: str = "",
+        bm_unit: str = "",
+        start_date: str = "",
+        end_date: str = "",
+    ) -> tuple[list[str], list[object]]:
+        where = ["dataset = ?"]
+        params: list[object] = [dataset]
+        if metric:
+            where.append("metric = ?")
+            params.append(metric)
+        if bm_unit:
+            where.append("(bm_unit = ? OR national_grid_bm_unit = ?)")
+            params.extend([bm_unit, bm_unit])
+        if start_date:
+            where.append("COALESCE(start_time_utc, settlement_date, publish_time_utc, '') >= ?")
+            params.append(start_date)
+        if end_date:
+            where.append("COALESCE(start_time_utc, settlement_date, publish_time_utc, '') < ?")
+            params.append(end_date)
+        return where, params
+
+
+class ElexonDataApp:
+    output_meaning = (
+        "返回数据写入 elexon_records。每个官方 JSON 行会按配置中的 value_fields 拆成一条或多条记录；"
+        "raw_json 保留 Elexon 原始字段和本次请求参数。燃料类型、互联线名称等维度会尽量显示在结果表的类型列。"
+    )
+
+    def __init__(self, root, repository: ElexonDataRepository) -> None:
+        self.root = root
+        self.repository = repository
+        self.configs = load_elexon_request_configs()
+        self.config_by_name = {config["name"]: config for config in self.configs}
+        self.dataset_options = [
+            f"{config['name']} | {config['title_zh']} / {config['title_en']}"
+            for config in self.configs
+        ]
+        today = date.today()
+        self.dataset_var = StringVar(value=self.dataset_options[0] if self.dataset_options else "")
+        self.dataset_count_var = StringVar(value=f"已接入 {len(self.configs)} 个数据集")
+        self.api_key_status_var = StringVar()
+        self.start_date_var = StringVar(value=(today - timedelta(days=1)).isoformat())
+        self.end_date_var = StringVar(value=today.isoformat())
+        self.metric_var = StringVar()
+        self.bm_unit_var = StringVar()
+        self.extra_params_var = StringVar()
+        self.summary_var = StringVar(value="Ready")
+        self.result_rows: list[dict[str, object]] = []
+        self.collect_button: ttk.Button | None = None
+        self.collect_dialog: Toplevel | None = None
+        self.collect_message_var = StringVar()
+        self.collect_detail_var = StringVar()
+
+        self.build_layout()
+        self.refresh_api_key_status()
+        self.update_dataset_description()
+        self.refresh_results()
+
+    def build_layout(self) -> None:
+        outer = ttk.Frame(self.root)
+        outer.pack(fill=BOTH, expand=True, padx=8, pady=8)
+
+        request_frame = ttk.Frame(outer, style="Toolbar.TFrame")
+        request_frame.pack(fill=X)
+        ttk.Label(request_frame, text="API key").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(request_frame, textvariable=self.api_key_status_var, width=20).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Button(request_frame, text="刷新状态", command=self.refresh_api_key_status).pack(
+            side=LEFT,
+            padx=(0, 12),
+        )
+        ttk.Label(request_frame, textvariable=self.dataset_count_var, width=16).pack(
+            side=LEFT,
+            padx=(0, 12),
+        )
+        ttk.Label(request_frame, text="数据集").pack(side=LEFT, padx=(0, 6))
+        self.dataset_combo = ttk.Combobox(
+            request_frame,
+            textvariable=self.dataset_var,
+            values=self.dataset_options,
+            width=76,
+            state="readonly",
+        )
+        self.dataset_combo.pack(side=LEFT, padx=(0, 8))
+        self.dataset_combo.bind("<<ComboboxSelected>>", lambda _event: self.update_dataset_description())
+
+        date_frame = ttk.Frame(outer, style="Toolbar.TFrame")
+        date_frame.pack(fill=X)
+        ttk.Label(date_frame, text="开始日期").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.start_date_var, width=12, state="readonly").pack(
+            side=LEFT,
+            padx=(0, 3),
+        )
+        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.start_date_var)).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Label(date_frame, text="结束日期").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.end_date_var, width=12, state="readonly").pack(
+            side=LEFT,
+            padx=(0, 3),
+        )
+        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.end_date_var)).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Label(date_frame, text="数据项/指标").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.metric_var, width=24).pack(side=LEFT, padx=(0, 8))
+        ttk.Label(date_frame, text="BMU（可留空）").pack(side=LEFT, padx=(0, 4))
+        ttk.Entry(date_frame, textvariable=self.bm_unit_var, width=18).pack(side=LEFT, padx=(0, 8))
+
+        param_frame = ttk.Frame(outer, style="Toolbar.TFrame")
+        param_frame.pack(fill=X)
+        ttk.Label(param_frame, text="额外参数").pack(side=LEFT, padx=(0, 6))
+        ttk.Entry(param_frame, textvariable=self.extra_params_var, width=72).pack(
+            side=LEFT,
+            padx=(0, 8),
+        )
+        ttk.Button(param_frame, text="dry-run 预览", command=self.preview_request).pack(side=LEFT)
+        self.collect_button = ttk.Button(param_frame, text="执行爬取", command=self.start_collect)
+        self.collect_button.pack(side=LEFT, padx=(8, 0))
+        ttk.Button(param_frame, text="刷新数据", command=self.refresh_results).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(param_frame, text="导出数据", command=self.export_records).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(param_frame, text="清除数据", command=self.clear_records).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(param_frame, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+
+        info_pane = ttk.PanedWindow(outer, orient="horizontal")
+        info_pane.pack(fill=BOTH, expand=True)
+        left = ttk.Frame(info_pane)
+        right = ttk.Frame(info_pane)
+        info_pane.add(left, weight=3)
+        info_pane.add(right, weight=5)
+
+        self.description_text = __import__("tkinter").Text(
+            left,
+            wrap="word",
+            width=54,
+            height=16,
+            padx=10,
+            pady=8,
+        )
+        description_scroll = ttk.Scrollbar(left, orient=VERTICAL, command=self.description_text.yview)
+        self.description_text.configure(yscrollcommand=description_scroll.set, state="disabled")
+        self.description_text.pack(side=LEFT, fill=BOTH, expand=True)
+        description_scroll.pack(side=RIGHT, fill=Y)
+
+        self.result_tree, self.raw_text = self.build_result_panel(right)
+
+        status_bar = ttk.Frame(outer)
+        status_bar.pack(fill=X, side="bottom")
+        ttk.Label(status_bar, textvariable=self.summary_var, anchor=W).pack(fill=X, padx=4, pady=4)
+
+    def build_result_panel(self, parent: ttk.Frame):
+        main = ttk.PanedWindow(parent, orient="vertical")
+        main.pack(fill=BOTH, expand=True)
+
+        table_frame = ttk.Frame(main)
+        detail_frame = ttk.Frame(main)
+        main.add(table_frame, weight=4)
+        main.add(detail_frame, weight=1)
+
+        columns = ("dataset", "category", "metric", "start", "period", "value", "unit", "fuel", "bmu")
+        tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+        headings = {
+            "dataset": ("数据集", 220),
+            "category": ("类别", 80),
+            "metric": ("数据项/指标", 160),
+            "start": ("时段开始 UTC", 150),
+            "period": ("SP", 55),
+            "value": ("数值", 100),
+            "unit": ("单位", 90),
+            "fuel": ("燃料/互联线/类型", 125),
+            "bmu": ("BMU/平衡单元", 120),
+        }
+        for column, (label, width) in headings.items():
+            tree.heading(column, text=label)
+            tree.column(column, width=width, minwidth=max(55, width // 2), anchor="center")
+        scroll = ttk.Scrollbar(table_frame, orient=VERTICAL, command=tree.yview)
+        tree.configure(yscrollcommand=scroll.set)
+        tree.pack(side=LEFT, fill=BOTH, expand=True)
+        scroll.pack(side=RIGHT, fill=Y)
+        tree.bind("<<TreeviewSelect>>", self.on_select_result)
+
+        raw_text = __import__("tkinter").Text(detail_frame, wrap="word", height=7, padx=10, pady=8)
+        raw_scroll = ttk.Scrollbar(detail_frame, orient=VERTICAL, command=raw_text.yview)
+        raw_text.configure(yscrollcommand=raw_scroll.set, state="disabled")
+        raw_text.pack(side=LEFT, fill=BOTH, expand=True)
+        raw_scroll.pack(side=RIGHT, fill=Y)
+        return tree, raw_text
+
+    def pick_date(self, target_var: StringVar) -> None:
+        selected = DatePickerDialog(self.root, target_var.get()).show()
+        if selected:
+            target_var.set(selected)
+
+    def refresh_api_key_status(self) -> None:
+        api_key = (get_credential("elexon_api_key") or "").strip()
+        if api_key and api_key != ELEXON_API_KEY_PLACEHOLDER:
+            self.api_key_status_var.set("optional configured")
+        else:
+            self.api_key_status_var.set("not required")
+
+    def selected_dataset_name(self) -> str:
+        value = self.dataset_var.get().strip()
+        return value.split("|", 1)[0].strip()
+
+    def selected_config(self) -> dict[str, object]:
+        return self.config_by_name[self.selected_dataset_name()]
+
+    def update_dataset_description(self) -> None:
+        config = self.selected_config()
+        lines = [
+            f"{config['title_zh']} / {config['title_en']}",
+            f"Command: {config['name']}",
+            f"Category: {config['category']}",
+            f"Endpoint: {config['endpoint']}",
+            f"Time mode: {config['time_mode']}",
+            "",
+            f"中文说明：{config['meaning_zh']}",
+            f"English: {config['meaning_en']}",
+            "Elexon Insights API 当前公开访问，不要求 API key；如以后配置 key，只显示状态不显示明文。",
+        ]
+        if config.get("reference_endpoint"):
+            lines.append(f"Reference endpoint: {config['reference_endpoint']}")
+        concept_notes = config.get("concept_notes") or []
+        if concept_notes:
+            lines.extend(["", "术语和使用说明"])
+            for note in concept_notes:
+                lines.append(f"- {note}")
+        lines.extend(["", "主数值字段"])
+        for value_config in config["value_fields"]:
+            field_line = (
+                f"- {value_config['field']} -> {value_config['metric']} "
+                f"({value_config.get('unit') or '-'})"
+            )
+            if value_config.get("meaning_zh"):
+                field_line = f"{field_line}: {value_config['meaning_zh']}"
+            lines.append(field_line)
+        default_params = config.get("default_params") or {}
+        if default_params:
+            lines.extend(["", f"默认参数：{default_params}"])
+        parameter_notes = config.get("parameter_notes") or {}
+        if parameter_notes:
+            lines.append("")
+            lines.append("参数含义")
+            for key, meaning in parameter_notes.items():
+                lines.append(f"- {key}: {meaning}")
+        lines.extend(["", "返回数据意义", self.output_meaning])
+        self.set_text(self.description_text, "\n".join(lines))
+        self.refresh_results()
+
+    def build_spider_kwargs(self) -> dict[str, object]:
+        start_date = self.start_date_var.get().strip()
+        end_date = self.end_date_var.get().strip()
+        date.fromisoformat(start_date)
+        date.fromisoformat(end_date)
+        if date.fromisoformat(start_date) >= date.fromisoformat(end_date):
+            raise ValueError("结束日期必须晚于开始日期。")
+        return {
+            "start_date": start_date,
+            "end_date": end_date,
+            "extra_params": self.parse_extra_params(self.extra_params_var.get()),
+        }
+
+    def preview_request(self) -> None:
+        try:
+            dataset = self.selected_dataset_name()
+            spider = get_spider(dataset, **self.build_spider_kwargs())
+            try:
+                specs = spider.build_request_specs()
+            finally:
+                spider.close()
+        except ValueError as exc:
+            messagebox.showerror("预览失败", str(exc))
+            return
+        request = {
+            "dataset": dataset,
+            "title_zh": self.selected_config()["title_zh"],
+            "request_count": len(specs),
+            "preview_limit": 20,
+            "requests": specs[:20],
+            "dry_run": True,
+        }
+        self.set_text(self.raw_text, json.dumps(request, ensure_ascii=False, indent=2))
+        self.summary_var.set("dry-run 预览已生成；未访问 Elexon，也未写入数据库。")
+
+    def start_collect(self) -> None:
+        try:
+            dataset = self.selected_dataset_name()
+            kwargs = self.build_spider_kwargs()
+            spider = get_spider(dataset, **kwargs)
+            try:
+                request_count = len(spider.build_request_specs())
+            finally:
+                spider.close()
+        except ValueError as exc:
+            messagebox.showerror("参数错误", str(exc))
+            return
+        if request_count > 20:
+            if not messagebox.askyesno(
+                "确认批量采集",
+                f"本次会执行 {request_count} 个 Elexon 请求。\n\n确认继续吗？",
+            ):
+                return
+        if self.collect_button is not None:
+            self.collect_button.configure(state="disabled")
+        self.show_collect_dialog(dataset, request_count)
+        thread = threading.Thread(target=self.collect_worker, args=(dataset, kwargs), daemon=True)
+        thread.start()
+
+    def show_collect_dialog(self, dataset: str, request_count: int) -> None:
+        if self.collect_dialog is not None and self.collect_dialog.winfo_exists():
+            self.collect_dialog.destroy()
+        dialog = Toplevel(self.root)
+        dialog.title("正在采集 Elexon")
+        dialog.geometry("520x190")
+        dialog.resizable(False, False)
+        self.collect_message_var.set(f"正在采集 {dataset} ...")
+        self.collect_detail_var.set(f"待执行请求：{request_count} 个")
+        ttk.Label(dialog, textvariable=self.collect_message_var, wraplength=460).pack(
+            fill=X,
+            padx=18,
+            pady=(18, 8),
+        )
+        ttk.Label(dialog, textvariable=self.collect_detail_var, wraplength=460).pack(
+            fill=X,
+            padx=18,
+            pady=(0, 12),
+        )
+        ttk.Progressbar(dialog, mode="indeterminate").pack(fill=X, padx=18)
+        ttk.Label(dialog, text="可最小化窗口，采集会继续。").pack(anchor=W, padx=18, pady=(12, 0))
+        self.collect_dialog = dialog
+        self.summary_var.set(f"正在采集 {dataset} ...")
+
+    def collect_worker(self, dataset: str, kwargs: dict[str, object]) -> None:
+        try:
+            spider = get_spider(dataset, **kwargs)
+            try:
+                records = list(spider.crawl())
+            finally:
+                spider.close()
+            if not all(isinstance(record, ElexonRecord) for record in records):
+                raise ValueError("Elexon spider returned unsupported record types.")
+            written = upsert_elexon_records(records)
+        except Exception as exc:
+            message = str(exc)
+            self.root.after(0, lambda message=message: self.on_collect_error(message))
+        else:
+            self.root.after(0, lambda: self.on_collect_success(len(records), written))
+
+    def on_collect_success(self, record_count: int, written: int) -> None:
+        self.finish_collect()
+        self.refresh_results()
+        self.summary_var.set(f"Elexon 采集完成：抓取 {record_count} 条，写入/更新 {written} 条。")
+        messagebox.showinfo(
+            "采集完成",
+            f"Elexon 采集完成。\n\n抓取记录：{record_count}\n写入/更新：{written}",
+        )
+
+    def on_collect_error(self, message: str) -> None:
+        self.finish_collect()
+        self.summary_var.set("Elexon 采集失败。")
+        messagebox.showerror("Elexon 采集失败", message)
+
+    def finish_collect(self) -> None:
+        if self.collect_button is not None:
+            self.collect_button.configure(state="normal")
+        if self.collect_dialog is not None and self.collect_dialog.winfo_exists():
+            self.collect_dialog.destroy()
+        self.collect_dialog = None
+
+    def refresh_results(self) -> None:
+        try:
+            filters = self.current_query_filters()
+        except ValueError as exc:
+            messagebox.showerror("刷新失败", str(exc))
+            return
+        rows = self.repository.search(**filters)
+        self.result_rows = rows
+        self.result_tree.delete(*self.result_tree.get_children())
+        for index, row in enumerate(rows):
+            self.result_tree.insert(
+                "",
+                END,
+                iid=str(index),
+                values=(
+                    row.get("dataset") or "",
+                    row.get("category") or "",
+                    row.get("metric") or "",
+                    row.get("start_time_utc") or row.get("publish_time_utc") or row.get("settlement_date") or "",
+                    row.get("settlement_period") or "",
+                    self.format_value(row.get("value")),
+                    row.get("unit") or "",
+                    row.get("fuel_type") or "",
+                    row.get("bm_unit") or row.get("national_grid_bm_unit") or "",
+                ),
+            )
+        self.summary_var.set(f"Elexon：显示 {len(rows)} 条记录。默认最多显示 1000 条。")
+        self.show_first_result()
+
+    def current_query_filters(self) -> dict[str, str]:
+        return {
+            "dataset": self.selected_dataset_name(),
+            "metric": self.metric_var.get().strip(),
+            "bm_unit": self.bm_unit_var.get().strip(),
+            "start_date": self.start_date_var.get().strip(),
+            "end_date": self.end_date_var.get().strip(),
+        }
+
+    def export_records(self) -> None:
+        output_path = asksaveasfilename(
+            title="导出 Elexon CSV",
+            initialfile=f"{self.selected_dataset_name()}.csv",
+            defaultextension=".csv",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+        )
+        if not output_path:
+            return
+        try:
+            filters = self.current_query_filters()
+            row_count = self.repository.export_records(output_path=Path(output_path), **filters)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror("导出失败", str(exc))
+            self.summary_var.set("Elexon CSV 导出失败。")
+            return
+        self.summary_var.set(f"已导出 {row_count} 条 Elexon 记录到 {output_path}")
+        messagebox.showinfo("导出完成", f"已导出 {row_count} 条记录。\n\n{output_path}")
+
+    def clear_records(self) -> None:
+        try:
+            filters = self.current_query_filters()
+        except ValueError as exc:
+            messagebox.showerror("清除失败", str(exc))
+            return
+        if not messagebox.askyesno(
+            "确认清除数据",
+            (
+                "将清除当前筛选范围内的 Elexon 数据。\n\n"
+                f"数据集：{filters['dataset']}\n"
+                f"指标：{filters['metric'] or '全部'}\n"
+                f"BMU（平衡单元）：{filters['bm_unit'] or '全部'}\n"
+                f"日期：{filters['start_date']} 至 {filters['end_date']}\n\n"
+                "此操作不可撤销，确认继续吗？"
+            ),
+        ):
+            return
+        try:
+            deleted = self.repository.delete_records(**filters)
+        except ValueError as exc:
+            messagebox.showerror("清除失败", str(exc))
+            return
+        self.refresh_results()
+        self.summary_var.set(f"已清除 {deleted} 条 Elexon 记录。")
+        messagebox.showinfo("清除完成", f"已清除 {deleted} 条记录。")
+
+    def reset_filters(self) -> None:
+        today = date.today()
+        self.start_date_var.set((today - timedelta(days=1)).isoformat())
+        self.end_date_var.set(today.isoformat())
+        self.metric_var.set("")
+        self.bm_unit_var.set("")
+        self.extra_params_var.set("")
+        self.refresh_results()
+
+    def show_first_result(self) -> None:
+        if not self.result_rows:
+            self.set_text(self.raw_text, "没有匹配数据。")
+            return
+        self.result_tree.selection_set("0")
+        self.result_tree.focus("0")
+        self.set_text(self.raw_text, self.describe_row(self.result_rows[0]))
+
+    def on_select_result(self, _event) -> None:
+        selection = self.result_tree.selection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if 0 <= index < len(self.result_rows):
+            self.set_text(self.raw_text, self.describe_row(self.result_rows[index]))
+
+    def describe_row(self, row: dict[str, object]) -> str:
+        data = dict(row)
+        raw_json = data.pop("raw_json", None)
+        lines = [f"{key}: {value if value not in (None, '') else '-'}" for key, value in data.items()]
+        lines.extend(["", "raw_json", self.format_json(str(raw_json) if raw_json else None)])
+        return "\n".join(lines)
+
+    @staticmethod
+    def parse_extra_params(value: str) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        if not value.strip():
+            return parsed
+        normalized = value.replace("\n", ";").replace(",", ";")
+        for item in normalized.split(";"):
+            item = item.strip()
+            if not item:
+                continue
+            key, separator, raw_value = item.partition("=")
+            if not separator or not key.strip() or not raw_value.strip():
+                raise ValueError(f"额外参数格式错误：{item}。应使用 KEY=VALUE。")
+            parsed[key.strip()] = raw_value.strip()
+        return parsed
+
+    def set_text(self, text_widget, content: str) -> None:
+        text_widget.configure(state="normal")
+        text_widget.delete("1.0", END)
+        text_widget.insert("1.0", content)
+        text_widget.configure(state="disabled")
+
+    @staticmethod
+    def format_value(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, float):
+            return f"{value:.6g}"
+        return str(value)
+
+    @staticmethod
+    def format_json(value: str | None) -> str:
+        if not value:
+            return "{}"
+        try:
+            return json.dumps(json.loads(value), ensure_ascii=False, indent=2)
+        except json.JSONDecodeError:
+            return value
+
+
 def launch_gui() -> None:
     db_path = resolve_sqlite_path()
     if not db_path.exists():
@@ -4680,9 +5364,11 @@ def launch_gui() -> None:
     gridstatus_tab = ttk.Frame(notebook)
     elecheck_tab = ttk.Frame(notebook)
     entsoe_tab = ttk.Frame(notebook)
+    elexon_tab = ttk.Frame(notebook)
     notebook.add(gridstatus_tab, text="GridStatus")
     notebook.add(elecheck_tab, text="Elecheck 易能电易查")
     notebook.add(entsoe_tab, text="ENTSO-E 欧洲")
+    notebook.add(elexon_tab, text="Elexon 英国")
 
     GridStatusMetadataApp(
         gridstatus_tab,
@@ -4691,4 +5377,5 @@ def launch_gui() -> None:
     )
     ElecheckDataApp(elecheck_tab, ElecheckDataRepository(db_path))
     EntsoeDataApp(entsoe_tab, EntsoeDataRepository(db_path))
+    ElexonDataApp(elexon_tab, ElexonDataRepository(db_path))
     root.mainloop()

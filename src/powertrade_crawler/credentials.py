@@ -8,12 +8,14 @@ CredentialName = Literal[
     "gridstatus_api_key",
     "elecheck_authorization",
     "entsoe_security_token",
+    "elexon_api_key",
 ]
 
 CREDENTIAL_NAMES: tuple[CredentialName, ...] = (
     "gridstatus_api_key",
     "elecheck_authorization",
     "entsoe_security_token",
+    "elexon_api_key",
 )
 _PROCESS_CREDENTIALS: dict[CredentialName, str] = {}
 

@@ -23,6 +23,7 @@ from powertrade_crawler.models import (
     ElecheckMechanismElectricityPriceRecord,
     ElecheckPurchasingProvinceRecord,
     ElecheckPurchasingRecord,
+    ElexonRecord,
     EntsoeRecord,
     GridStatusDatasetMetadataRecord,
     GridStatusRecord,
@@ -35,6 +36,10 @@ from powertrade_crawler.spiders.entsoe import (
     get_entsoe_request_config,
     load_entsoe_request_configs,
 )
+from powertrade_crawler.spiders.elexon import (
+    get_elexon_request_config,
+    load_elexon_request_configs,
+)
 from powertrade_crawler.storage import (
     export_gridstatus_translation_tasks,
     export_table_to_csv,
@@ -42,6 +47,7 @@ from powertrade_crawler.storage import (
     init_db,
     list_tables,
     resolve_elecheck_area_code,
+    upsert_elexon_records,
     upsert_entsoe_records,
     upsert_elecheck_clear_price_records,
     upsert_elecheck_mechanism_electricity_price_records,
@@ -70,10 +76,12 @@ ELECHECK_PURCHASING_SPIDERS = {
     "elecheck_purchasing_province_month",
 }
 ENTSOE_SPIDERS = {config["name"] for config in load_entsoe_request_configs()}
+ELEXON_SPIDERS = {config["name"] for config in load_elexon_request_configs()}
 CREDENTIAL_ALIASES = {
     "gridstatus": "gridstatus_api_key",
     "elecheck": "elecheck_authorization",
     "entsoe": "entsoe_security_token",
+    "elexon": "elexon_api_key",
 }
 
 
@@ -104,6 +112,10 @@ def show_command_guide() -> None:
                 "    Preview only: powertrade crawl gridstatus_datasets --dry-run",
                 "    ENTSO-E day-ahead prices: powertrade crawl entsoe_day_ahead_prices "
                 "--area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run",
+                "    Elexon GB demand: powertrade crawl elexon_initial_demand_outturn "
+                "--start-date 2026-06-01 --end-date 2026-06-02 --dry-run",
+                "    Elexon GB prices: powertrade crawl elexon_system_prices "
+                "--start-date 2026-06-01 --end-date 2026-06-02 --dry-run",
                 "    Elecheck recent: powertrade crawl elecheck_clear_price --period recent",
                 "    Elecheck 7 days: powertrade crawl elecheck_clear_price --period 7d",
                 "    Elecheck 30 days: powertrade crawl elecheck_clear_price --period 30d",
@@ -206,6 +218,46 @@ def list_entsoe_areas() -> None:
         typer.echo(f"{alias}\t{eic}")
 
 
+@app.command("elexon-datasets")
+def list_elexon_datasets() -> None:
+    """List configured Elexon datasets with bilingual titles."""
+    for config in load_elexon_request_configs():
+        typer.echo(
+            f"{config['name']}\t{config['title_zh']}\t{config['title_en']}\t"
+            f"[{config['category']}]"
+        )
+
+
+@app.command("elexon-describe")
+def describe_elexon_dataset(
+    dataset: Annotated[str, typer.Argument(help="Elexon dataset/spider name.")],
+) -> None:
+    """Describe one Elexon dataset in Chinese and English."""
+    try:
+        config = get_elexon_request_config(dataset)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"{config['title_zh']} / {config['title_en']}")
+    typer.echo(f"Command: {config['name']}")
+    typer.echo(f"Category: {config['category']}")
+    typer.echo(f"Endpoint: {config['endpoint']}")
+    if config.get("reference_endpoint"):
+        typer.echo(f"Reference endpoint: {config['reference_endpoint']}")
+    typer.echo(f"Time mode: {config['time_mode']}")
+    typer.echo(f"中文意义: {config['meaning_zh']}")
+    typer.echo(f"Meaning: {config['meaning_en']}")
+    typer.echo(f"Value fields: {config['value_fields']}")
+    typer.echo(f"Default params: {config.get('default_params', {})}")
+    if config.get("concept_notes"):
+        typer.echo("Concept notes:")
+        for note in config["concept_notes"]:
+            typer.echo(f"- {note}")
+    if config.get("parameter_notes"):
+        typer.echo("Parameter notes:")
+        for key, note in config["parameter_notes"].items():
+            typer.echo(f"- {key}: {note}")
+
+
 @app.command("entsoe-query")
 def query_entsoe_raw(
     param: Annotated[
@@ -278,7 +330,7 @@ def show_credentials_status() -> None:
 def set_credential(
     name: Annotated[
         str,
-        typer.Argument(help="Credential name: gridstatus, elecheck, or entsoe."),
+        typer.Argument(help="Credential name: gridstatus, elecheck, entsoe, or elexon."),
     ],
 ) -> None:
     """Securely save one credential in .auth/credentials.json."""
@@ -487,6 +539,20 @@ def crawl(
             help="Repeatable raw ENTSO-E parameter override in KEY=VALUE form.",
         ),
     ] = None,
+    elexon_api_key: Annotated[
+        str | None,
+        typer.Option(
+            "--elexon-api-key",
+            help="Temporary Elexon API key override. Current public Insights API does not require it.",
+        ),
+    ] = None,
+    elexon_param: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--elexon-param",
+            help="Repeatable raw Elexon query parameter override in KEY=VALUE form.",
+        ),
+    ] = None,
 ) -> None:
     spider_kwargs = {}
     if spider_name == "elecheck_clear_price":
@@ -581,7 +647,10 @@ def crawl(
             }
         else:
             try:
-                extra_params = parse_key_value_options(entsoe_param or [])
+                extra_params = parse_key_value_options(
+                    entsoe_param or [],
+                    option_name="--entsoe-param",
+                )
             except ValueError as exc:
                 raise typer.BadParameter(str(exc)) from exc
             spider_kwargs = {
@@ -597,6 +666,42 @@ def crawl(
                 "extra_params": extra_params,
                 "security_token": entsoe_token,
             }
+    elif spider_name in ELEXON_SPIDERS:
+        if any([
+            period,
+            area_code,
+            area,
+            month,
+            start_month,
+            end_month,
+            daily,
+            authorization,
+            entsoe_token,
+            in_area_code,
+            in_area,
+            out_area_code,
+            out_area,
+            psr_type,
+            entsoe_param,
+        ]):
+            raise typer.BadParameter(
+                "--period, --area, --area-code, --month, --start-month, --end-month, "
+                "--daily, --authorization, ENTSO-E domain options, --psr-type, "
+                "and --entsoe-param are not supported by Elexon spiders."
+            )
+        try:
+            extra_params = parse_key_value_options(
+                elexon_param or [],
+                option_name="--elexon-param",
+            )
+        except ValueError as exc:
+            raise typer.BadParameter(str(exc)) from exc
+        spider_kwargs = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "extra_params": extra_params,
+            "api_key": elexon_api_key,
+        }
     elif any([
         period,
         area_code,
@@ -615,11 +720,14 @@ def crawl(
         out_area,
         psr_type,
         entsoe_param,
+        elexon_api_key,
+        elexon_param,
     ]):
         raise typer.BadParameter(
             "--period, --area, --area-code, --month, --start-date, --end-date, "
-            "--start-month, --end-month, --daily, --authorization, and --entsoe-token "
-            "are only supported by Elecheck or ENTSO-E spiders."
+            "--start-month, --end-month, --daily, --authorization, --entsoe-token, "
+            "--elexon-api-key, and source-specific raw params "
+            "are only supported by Elecheck, ENTSO-E, or Elexon spiders."
         )
 
     records = crawl_with_optional_elecheck_auth_retry(spider_name, spider_kwargs)
@@ -632,6 +740,8 @@ def crawl(
         written = upsert_records(records)
     elif all(isinstance(record, EntsoeRecord) for record in records):
         written = upsert_entsoe_records(records)
+    elif all(isinstance(record, ElexonRecord) for record in records):
+        written = upsert_elexon_records(records)
     elif all(isinstance(record, GzpecNewsRecord) for record in records):
         written = upsert_gzpec_news_records(records)
     elif all(isinstance(record, GridStatusRecord) for record in records):
@@ -651,13 +761,17 @@ def crawl(
     typer.echo(f"Done. Upserted {written} records.")
 
 
-def parse_key_value_options(options: list[str]) -> dict[str, str]:
+def parse_key_value_options(
+    options: list[str],
+    *,
+    option_name: str = "--param",
+) -> dict[str, str]:
     parsed: dict[str, str] = {}
     for option in options:
         key, separator, value = option.partition("=")
         if not separator or not key.strip() or not value.strip():
             raise ValueError(
-                f"Invalid --entsoe-param value: {option}. Expected KEY=VALUE."
+                f"Invalid {option_name} value: {option}. Expected KEY=VALUE."
             )
         parsed[key.strip()] = value.strip()
     return parsed

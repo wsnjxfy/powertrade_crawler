@@ -8,11 +8,12 @@ Powertrade Crawler 使用说明
 二、鉴权文件
 1. 所有 API key、token 和 Authorization 统一保存在 exe 同级目录的：
    .auth\credentials.json
-2. 该文件包含 GridStatus、Elecheck 和 ENTSO-E 三种凭据。
+2. 该文件包含 GridStatus、Elecheck、ENTSO-E 和 Elexon 凭据。
 3. .env 只保存数据库、超时和请求间隔等非敏感配置，不再保存凭据。
 4. Elecheck AUTHORIZATION 不按固定时间自动失效。
-5. 如果 Elecheck 采集时返回 401，软件会提示“授权已过期，请联系管理员更新授权文件”。
-6. 分发软件时不要把管理员真实的 .auth 目录提供给无权限用户。
+5. Elexon Insights API 当前公开访问，不要求 API key；Elexon 凭据只是可选预留。
+6. 如果 Elecheck 采集时返回 401，软件会提示“授权已过期，请联系管理员更新授权文件”。
+7. 分发软件时不要把管理员真实的 .auth 目录提供给无权限用户。
 
 三、数据库
 1. data\powertrade.db 是本地 SQLite 数据库。
