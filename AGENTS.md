@@ -1063,6 +1063,32 @@ powertrade = "powertrade_crawler.cli:app"
 - `powertrade init-db` 使用 SQLAlchemy `create_all` 创建新表。
 - 当前完整检查基线：`ruff check src tests scripts` 通过，`pytest -q` 为 65 passed（2026-07-02）；存在既有 `datetime.utcnow()` deprecation warnings，暂未统一清理。
 
+GitHub 推送网络经验：
+
+- 2026-07-02 第九周提交 `33c2c23 Add Elexon GB data source` 推送时，普通 `git push origin main` 连续遇到 `schannel: failed to receive handshake, SSL/TLS connection failed`。
+- 当时成功方式是只对当前命令临时切换 Git SSL backend，不改全局配置：
+
+```powershell
+git -c http.sslBackend=openssl push origin main
+```
+
+- 如果用户已开启本机 VPN，端口为 `7897`，可以用 per-command 代理参数测试 GitHub 连通性：
+
+```powershell
+git -c http.proxy=http://127.0.0.1:7897 `
+    -c https.proxy=http://127.0.0.1:7897 `
+    ls-remote --heads origin main
+```
+
+- 需要通过 VPN 推送时，优先使用临时参数，避免把本机代理写死到仓库或全局 Git 配置：
+
+```powershell
+git -c http.sslBackend=openssl `
+    -c http.proxy=http://127.0.0.1:7897 `
+    -c https.proxy=http://127.0.0.1:7897 `
+    push origin main
+```
+
 ## 19. 建议的下一步 / Recommended Next Steps
 
 优先级建议：
