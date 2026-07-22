@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import StringIO
+from math import ceil
 from pathlib import Path
 from threading import Event
 from typing import Any, Callable
@@ -14,9 +15,16 @@ import httpx
 
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.credentials import get_credential
+from powertrade_crawler.gridstatus_rate_limit import (
+    GRIDSTATUS_MAX_REQUESTS_PER_MINUTE,
+    GRIDSTATUS_SAFE_INTERVAL_SECONDS,
+    gridstatus_request_limiter,
+)
 
 
 GRIDSTATUS_QUERY_BASE_URL = "https://api.gridstatus.io/v1/datasets/{dataset_id}/query"
+GRIDSTATUS_DEFAULT_PAGE_SIZE = 50_000
+GRIDSTATUS_MAX_PAGE_SIZE = 50_000
 
 
 ProgressCallback = Callable[[dict[str, Any] | str], None]
@@ -57,13 +65,13 @@ class DownloadControl:
 class RateLimiter:
     def __init__(
         self,
-        min_interval_seconds: float = 1.2,
+        min_interval_seconds: float = GRIDSTATUS_SAFE_INTERVAL_SECONDS,
         batch_size: int = 50,
         batch_pause_seconds: float = 30.0,
-        max_requests_per_minute: int = 30,
+        max_requests_per_minute: int = GRIDSTATUS_MAX_REQUESTS_PER_MINUTE,
         max_requests_per_hour: int = 600,
     ) -> None:
-        self.min_interval_seconds = min_interval_seconds
+        self.min_interval_seconds = max(0.0, min_interval_seconds)
         self.batch_size = batch_size
         self.batch_pause_seconds = batch_pause_seconds
         self.max_requests_per_minute = max_requests_per_minute
@@ -140,30 +148,34 @@ class RateLimiter:
 def build_gridstatus_csv_url(
     dataset_id: str,
     api_key: str,
-    limit: int = 1000,
+    limit: int | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    filter_column: str | None = None,
+    filter_value: str | None = None,
     download: bool = True,
 ) -> str:
     params: dict[str, Any] = {
         "return_format": "csv",
-        "limit": limit,
         "api_key": api_key,
     }
+    if limit is not None:
+        params["limit"] = limit
     if download:
         params["download"] = "true"
     if start_time is not None:
         params["start_time"] = format_gridstatus_time(start_time)
     if end_time is not None:
         params["end_time"] = format_gridstatus_time(end_time)
+    add_gridstatus_filter_params(params, filter_column, filter_value)
     return f"{GRIDSTATUS_QUERY_BASE_URL.format(dataset_id=dataset_id)}?{urlencode(params)}"
 
 
 def download_dataset_csv_adaptive(
     metadata: dict[str, Any],
     output_path: Path,
-    limit: int = 1000,
-    min_interval_seconds: float = 1.2,
+    page_size: int = GRIDSTATUS_DEFAULT_PAGE_SIZE,
+    min_interval_seconds: float = GRIDSTATUS_SAFE_INTERVAL_SECONDS,
     batch_size: int = 50,
     batch_pause_seconds: float = 30.0,
     min_window_seconds: float = 1.0,
@@ -181,6 +193,14 @@ def download_dataset_csv_adaptive(
         )
 
     dataset_id = str(metadata["dataset_id"])
+    page_size = int(metadata.get("download_page_size") or page_size)
+    if not 1 <= page_size <= GRIDSTATUS_MAX_PAGE_SIZE:
+        raise ValueError(
+            f"GridStatus page_size must be between 1 and {GRIDSTATUS_MAX_PAGE_SIZE}."
+        )
+    filter_column = optional_text(metadata.get("download_filter_column"))
+    filter_value = optional_text(metadata.get("download_filter_value"))
+    validate_gridstatus_filter(filter_column, filter_value)
     start = parse_gridstatus_time(
         metadata.get("download_start_time_utc") or metadata.get("earliest_available_time_utc")
     )
@@ -209,12 +229,21 @@ def download_dataset_csv_adaptive(
     estimated_total_rows = estimate_rows_for_range(metadata, start, end, full_start, full_end)
     effective_window_seconds = max(
         min_window_seconds,
-        window_seconds or default_window_seconds(metadata),
+        window_seconds or default_window_seconds(metadata, filtered=bool(filter_column)),
     )
     state_path = checkpoint_path(output_path)
     state = load_checkpoint(state_path)
     primary_keys = parse_primary_keys(metadata.get("primary_key_columns_json"))
     if state and state.get("dataset_id") == dataset_id:
+        validate_checkpoint_query(
+            state,
+            start=start,
+            end=end,
+            filter_column=filter_column,
+            filter_value=filter_value,
+            page_size=page_size,
+            output_format=output_format,
+        )
         window_start = parse_gridstatus_time(state.get("window_start_utc")) or start
         window_end = parse_gridstatus_time(state.get("window_end_utc"))
         if window_end is None or window_end <= window_start:
@@ -226,11 +255,8 @@ def download_dataset_csv_adaptive(
         if output_format == "sqlite":
             rows_written = read_sqlite_row_count(output_path)
             seen: set[tuple[Any, ...] | str] = read_sqlite_row_keys(output_path)
-            merged_rows: list[dict[str, str]] = []
         else:
-            merged_rows = read_csv_file(output_path)
-            seen = {row_key(row, primary_keys) for row in merged_rows}
-            rows_written = len(merged_rows)
+            rows_written, seen = read_csv_row_state(output_path, primary_keys)
         if progress:
             emit_progress(
                 progress,
@@ -238,8 +264,15 @@ def download_dataset_csv_adaptive(
                 message=f"发现断点文件：已存在 {rows_written} 行，将从上次进度继续下载",
                 rows_written=rows_written,
                 requests_made=requests_made,
-                intervals_pending=1 if has_next_page else 0,
+                intervals_pending=pending_interval_count(
+                    window_start,
+                    window_end,
+                    end,
+                    effective_window_seconds,
+                    has_next_page,
+                ),
                 estimated_total_rows=estimated_total_rows,
+                percent_override=download_time_percent(start, end, window_start),
             )
     else:
         window_start = start
@@ -248,7 +281,6 @@ def download_dataset_csv_adaptive(
         has_next_page = True
         requests_made = 0
         intervals_completed = 0
-        merged_rows: list[dict[str, str]] = []
         rows_written = 0
         seen: set[tuple[Any, ...] | str] = set()
         if output_format == "sqlite":
@@ -276,8 +308,15 @@ def download_dataset_csv_adaptive(
                 ),
                 rows_written=rows_written,
                 requests_made=requests_made,
-                intervals_pending=1 if has_next_page else 0,
+                intervals_pending=pending_interval_count(
+                    window_start,
+                    window_end,
+                    end,
+                    effective_window_seconds,
+                    has_next_page,
+                ),
                 estimated_total_rows=estimated_total_rows,
+                percent_override=download_time_percent(start, end, window_start),
             )
 
         limiter.wait(progress, control)
@@ -285,22 +324,32 @@ def download_dataset_csv_adaptive(
         url = build_gridstatus_json_url(
             dataset_id=dataset_id,
             api_key=api_key,
-            page_size=limit,
+            page_size=page_size,
             cursor=cursor,
             start_time=window_start,
             end_time=window_end,
+            filter_column=filter_column,
+            filter_value=filter_value,
         )
         payload = fetch_json(url)
         rows = normalize_json_rows(payload)
-        if len(rows) > limit:
+        if len(rows) > page_size:
             raise RuntimeError(
                 f"GridStatus returned {len(rows)} rows in one page, exceeding requested "
-                f"page_size={limit}. Download stopped to avoid unexpected API usage."
+                f"page_size={page_size}. Download stopped to avoid unexpected API usage."
             )
         meta = payload.get("meta") or {}
         has_next_page = bool(meta.get("hasNextPage") or meta.get("has_next_page"))
         cursor = meta.get("cursor") or None
         requests_made += 1
+        completed_through = window_start if has_next_page else window_end
+        intervals_pending = pending_interval_count(
+            window_start,
+            window_end,
+            end,
+            effective_window_seconds,
+            has_next_page,
+        )
 
         if progress:
             emit_progress(
@@ -309,8 +358,9 @@ def download_dataset_csv_adaptive(
                 message=f"返回 {len(rows)} 行；hasNextPage={has_next_page}",
                 rows_written=rows_written,
                 requests_made=requests_made,
-                intervals_pending=1 if has_next_page else 0,
+                intervals_pending=intervals_pending,
                 estimated_total_rows=estimated_total_rows,
+                percent_override=download_time_percent(start, end, completed_through),
             )
 
         new_rows: list[dict[str, str]] = []
@@ -329,9 +379,8 @@ def download_dataset_csv_adaptive(
             write_sqlite_rows(output_path, new_rows, primary_keys)
             rows_written += len(new_rows)
         else:
-            merged_rows.extend(new_rows)
-            rows_written = len(merged_rows)
-            write_csv(output_path, merged_rows)
+            append_csv_rows(output_path, new_rows)
+            rows_written += len(new_rows)
         save_checkpoint(
             state_path,
             dataset_id=dataset_id,
@@ -341,6 +390,12 @@ def download_dataset_csv_adaptive(
             intervals_completed=intervals_completed,
             window_start=window_start,
             window_end=window_end,
+            download_start=start,
+            download_end=end,
+            filter_column=filter_column,
+            filter_value=filter_value,
+            page_size=page_size,
+            output_format=output_format,
         )
         if progress:
             emit_progress(
@@ -349,15 +404,14 @@ def download_dataset_csv_adaptive(
                 message=f"已保存断点：当前写入 {rows_written} 行",
                 rows_written=rows_written,
                 requests_made=requests_made,
-                intervals_pending=1 if has_next_page else 0,
+                intervals_pending=intervals_pending,
                 estimated_total_rows=estimated_total_rows,
+                percent_override=download_time_percent(start, end, completed_through),
             )
 
         if has_next_page and not cursor:
             raise RuntimeError("API indicated hasNextPage=true but did not provide a cursor.")
 
-    if output_format == "csv":
-        write_csv(output_path, merged_rows)
     if state_path.exists():
         state_path.unlink()
     return DownloadResult(
@@ -392,8 +446,11 @@ def emit_progress(
     requests_made: int,
     intervals_pending: int,
     estimated_total_rows: int | None,
+    percent_override: float | None = None,
 ) -> None:
-    if estimated_total_rows and estimated_total_rows > 0:
+    if percent_override is not None:
+        percent = max(0.0, min(100.0, percent_override))
+    elif estimated_total_rows and estimated_total_rows > 0:
         percent = max(0.0, min(99.0, rows_written / estimated_total_rows * 100))
         if intervals_pending == 0:
             percent = 100.0
@@ -413,8 +470,37 @@ def emit_progress(
     )
 
 
-def default_window_seconds(metadata: dict[str, Any]) -> float:
+def download_time_percent(start: datetime, end: datetime, completed_through: datetime) -> float:
+    total_seconds = (end - start).total_seconds()
+    if total_seconds <= 0:
+        return 100.0
+    completed_seconds = (completed_through - start).total_seconds()
+    return completed_seconds / total_seconds * 100
+
+
+def pending_interval_count(
+    window_start: datetime,
+    window_end: datetime,
+    download_end: datetime,
+    window_seconds: float,
+    has_next_page: bool,
+) -> int:
+    future_seconds = max(0.0, (download_end - window_end).total_seconds())
+    future_windows = ceil(future_seconds / window_seconds) if window_seconds > 0 else 0
+    return future_windows + (1 if has_next_page and window_start < download_end else 0)
+
+
+def default_window_seconds(metadata: dict[str, Any], *, filtered: bool = False) -> float:
     frequency = str(metadata.get("data_frequency") or "").upper()
+    if filtered:
+        if "5_MIN" in frequency or "5 MIN" in frequency:
+            return 31 * 24 * 60 * 60
+        if "15_MIN" in frequency or "15 MIN" in frequency:
+            return 93 * 24 * 60 * 60
+        if "HOUR" in frequency:
+            return 366 * 24 * 60 * 60
+        if "DAY" in frequency or "DAILY" in frequency:
+            return 5 * 366 * 24 * 60 * 60
     if "5_MIN" in frequency or "5 MIN" in frequency:
         return 7 * 24 * 60 * 60
     if "15_MIN" in frequency or "15 MIN" in frequency:
@@ -432,6 +518,9 @@ def default_fetch_csv(url: str) -> bytes:
     safe_url = redact_api_key(url)
     for attempt in range(settings.request_retry_times + 1):
         try:
+            gridstatus_request_limiter.wait(
+                min_interval_seconds=settings.gridstatus_min_interval_seconds,
+            )
             with httpx.Client(
                 timeout=settings.request_timeout_seconds,
                 headers={"User-Agent": settings.user_agent},
@@ -491,10 +580,12 @@ def redact_api_key(url: str) -> str:
 def build_gridstatus_json_url(
     dataset_id: str,
     api_key: str,
-    page_size: int = 1000,
+    page_size: int = GRIDSTATUS_DEFAULT_PAGE_SIZE,
     cursor: str | None = "",
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    filter_column: str | None = None,
+    filter_value: str | None = None,
 ) -> str:
     params: dict[str, Any] = {
         "page_size": page_size,
@@ -506,7 +597,34 @@ def build_gridstatus_json_url(
         params["start_time"] = format_gridstatus_time(start_time)
     if end_time is not None:
         params["end_time"] = format_gridstatus_time(end_time)
+    add_gridstatus_filter_params(params, filter_column, filter_value)
     return f"{GRIDSTATUS_QUERY_BASE_URL.format(dataset_id=dataset_id)}?{urlencode(params)}"
+
+
+def add_gridstatus_filter_params(
+    params: dict[str, Any],
+    filter_column: str | None,
+    filter_value: str | None,
+) -> None:
+    validate_gridstatus_filter(filter_column, filter_value)
+    if not filter_column:
+        return
+    params["filter_column"] = filter_column
+    params["filter_value"] = filter_value
+    params["filter_operator"] = "="
+
+
+def validate_gridstatus_filter(
+    filter_column: str | None,
+    filter_value: str | None,
+) -> None:
+    if bool(filter_column) != bool(filter_value):
+        raise ValueError("GridStatus filter_column and filter_value must be provided together.")
+
+
+def optional_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
 
 
 def normalize_json_rows(payload: dict[str, Any]) -> list[dict[str, str]]:
@@ -531,6 +649,22 @@ def read_csv_file(path: Path) -> list[dict[str, str]]:
         return []
     with path.open(newline="", encoding="utf-8-sig") as file:
         return [dict(row) for row in csv.DictReader(file)]
+
+
+def read_csv_row_state(
+    path: Path,
+    primary_keys: list[str],
+) -> tuple[int, set[tuple[Any, ...] | str]]:
+    if not path.exists():
+        return 0, set()
+
+    count = 0
+    seen: set[tuple[Any, ...] | str] = set()
+    with path.open(newline="", encoding="utf-8-sig") as file:
+        for row in csv.DictReader(file):
+            count += 1
+            seen.add(row_key(dict(row), primary_keys))
+    return count, seen
 
 
 def merge_rows(batches: list[list[dict[str, str]]], metadata: dict[str, Any]) -> list[dict[str, str]]:
@@ -580,6 +714,10 @@ def initialize_sqlite_output(output_path: Path, metadata: dict[str, Any]) -> Non
             "source": metadata.get("source"),
             "data_frequency": metadata.get("data_frequency"),
             "primary_key_columns_json": metadata.get("primary_key_columns_json"),
+            "filter_column": metadata.get("download_filter_column"),
+            "filter_value": metadata.get("download_filter_value"),
+            "filter_operator": "=" if metadata.get("download_filter_column") else None,
+            "page_size": metadata.get("download_page_size") or GRIDSTATUS_DEFAULT_PAGE_SIZE,
         }
         connection.executemany(
             """
@@ -692,6 +830,34 @@ def write_csv(output_path: Path, rows: list[dict[str, str]]) -> None:
         writer.writerows(rows)
 
 
+def append_csv_rows(output_path: Path, rows: list[dict[str, str]]) -> None:
+    if not rows:
+        return
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames: list[str]
+    write_header = not output_path.exists() or output_path.stat().st_size == 0
+    if write_header:
+        fieldnames = list(rows[0])
+    else:
+        with output_path.open(newline="", encoding="utf-8-sig") as file:
+            fieldnames = list(csv.DictReader(file).fieldnames or [])
+
+    extra_columns = sorted({key for row in rows for key in row if key not in fieldnames})
+    if extra_columns:
+        raise RuntimeError(
+            "GridStatus response columns changed during CSV download: "
+            + ", ".join(extra_columns)
+        )
+
+    mode = "w" if write_header else "a"
+    with output_path.open(mode, newline="", encoding="utf-8-sig") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        if write_header:
+            writer.writeheader()
+        writer.writerows(rows)
+
+
 def checkpoint_path(output_path: Path) -> Path:
     return output_path.with_name(f"{output_path.name}.state.json")
 
@@ -705,6 +871,12 @@ def save_checkpoint(
     intervals_completed: int,
     window_start: datetime | None = None,
     window_end: datetime | None = None,
+    download_start: datetime | None = None,
+    download_end: datetime | None = None,
+    filter_column: str | None = None,
+    filter_value: str | None = None,
+    page_size: int | None = None,
+    output_format: str | None = None,
 ) -> None:
     payload = {
         "dataset_id": dataset_id,
@@ -712,11 +884,20 @@ def save_checkpoint(
         "has_next_page": has_next_page,
         "requests_made": requests_made,
         "intervals_completed": intervals_completed,
+        "filter_column": filter_column,
+        "filter_value": filter_value,
+        "filter_operator": "=" if filter_column else None,
+        "page_size": page_size,
+        "output_format": output_format,
     }
     if window_start is not None:
         payload["window_start_utc"] = format_gridstatus_time(window_start)
     if window_end is not None:
         payload["window_end_utc"] = format_gridstatus_time(window_end)
+    if download_start is not None:
+        payload["download_start_time_utc"] = format_gridstatus_time(download_start)
+    if download_end is not None:
+        payload["download_end_time_utc"] = format_gridstatus_time(download_end)
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
@@ -727,6 +908,38 @@ def load_checkpoint(path: Path) -> dict[str, Any] | None:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
+
+
+def validate_checkpoint_query(
+    state: dict[str, Any],
+    *,
+    start: datetime,
+    end: datetime,
+    filter_column: str | None,
+    filter_value: str | None,
+    page_size: int,
+    output_format: str,
+) -> None:
+    expected = {
+        "download_start_time_utc": format_gridstatus_time(start),
+        "download_end_time_utc": format_gridstatus_time(end),
+        "filter_column": filter_column,
+        "filter_value": filter_value,
+        "page_size": page_size,
+        "output_format": output_format,
+    }
+    mismatches = [
+        key
+        for key, value in expected.items()
+        if key in state and state.get(key) != value
+    ]
+    legacy_filter_mismatch = filter_column is not None and "filter_column" not in state
+    if mismatches or legacy_filter_mismatch:
+        fields = mismatches or ["filter_column", "filter_value"]
+        raise ValueError(
+            "The existing GridStatus checkpoint uses different query options "
+            f"({', '.join(fields)}). Restart the download instead of resuming it."
+        )
 
 
 def parse_gridstatus_time(value: str | None) -> datetime | None:

@@ -205,7 +205,17 @@ powertrade list-spiders
 powertrade crawl gridstatus_aeso_load
 ```
 
-GridStatus 时间参数统一使用 UTC。当前客户端会保证请求间隔至少 `GRIDSTATUS_MIN_INTERVAL_SECONDS` 秒，默认 1.1 秒，避免超过“每秒 1 次请求”的限制。
+GridStatus 时间参数统一使用 UTC。GUI 下载器支持明确设置 `start_time`、`end_time`、
+`filter_column` 和 `filter_value`，首请求使用空 cursor，随后读取响应中的 cursor 自动翻页，
+直至每个时间分块全部完成。当前账户验证可用的最大 `page_size` 为 50,000，GUI 默认使用该值；
+小时级数据在设置等值筛选后默认按一年分块，以减少完整历史下载的请求次数。下载断点会保存时间、
+筛选和分页设置，恢复时会校验查询条件，CSV 按页追加，SQLite 按主键增量写入。
+
+客户端、批量下载和内部重试共享进程级限流器，请求间隔至少 2.1 秒，并额外限制为每分钟最多
+30 次。GUI 对活跃数据集生成下载区间时，结束时间取程序运行当下的 UTC 时间，不再把本地数据集
+目录中的旧更新时间当作今天。`ercot_spp_day_ahead_hourly` 下载窗口默认预填
+`location_type = Load Zone`；选择“完整数据集”时，开始时间来自目录中的
+`2010-12-01T06:00:00+00:00`。
 
 ## 7. 新增一个网站爬虫
 
@@ -397,5 +407,61 @@ Elexon 页签中的说明区会直接解释 LOLP、de-rated margin、互联线�
 ```text
 docs/ELEXON_API_GUIDE.md
 ```
+
+## 10. Elecheck 分析看板、指标汇总和定时任务
+
+GUI 中的 `Elecheck 易能电易查` 页签新增 `现货价格分析` 子页，提供：
+
+- 单一地区、单一日期的日前价格与实时价格日内折线图
+- 仅按共同时间点计算的 `实时价 - 日前价` 价差图
+- 最近 30 个自然日的日前、实时日均价趋势，缺失日期保留断点
+- 前后有数据日期导航、完整度提示、CSV 和 PNG 导出
+
+图表只读取 `elecheck_clear_price_records` 中 `endpoint = 'detail'` 且 `start_date = end_date` 的每日明细，不做跨地区或跨数据源比较，也不会插值或把缺失值补零。顶部通用 `分析看板` 已从 GUI 隐藏。
+
+同一 Elecheck 页签还提供：
+
+- `代理购电分析`：单省近 12/24 月或全部月份的费用构成柱、合计价趋势，以及所选月份全国合计价高低各 10 名和当前省份。
+- `增量机制分析`：按电源类型对比各地区燃煤基准价与 26 年增量机制电价，并展示当前地区各电源类型价格。
+
+代理购电图表只读取 `data_kind = 'national_table'`，排除全国极值和其他摘要记录；增量机制图表只反映当前快照，不生成虚假的历史趋势。两页均保持原始 `CNY/kWh` 口径，支持悬停、CSV 和 PNG 导出，采集完成后自动刷新。
+
+GUI 顶层仍提供 `定时任务/数据维护` 页签。原有通用指标汇总代码和 CLI 继续保留，供后续其他数据源看板复用；如需重建指标，可运行：
+
+```powershell
+powertrade metrics-rebuild --start-date 2026-06-01 --end-date 2026-07-01
+```
+
+指标写入本地表：
+
+```text
+dashboard_daily_metrics
+```
+
+定时任务配置和运行日志写入本地表：
+
+```text
+scheduled_jobs
+scheduled_job_runs
+```
+
+常用命令：
+
+```powershell
+powertrade schedule-create-templates
+powertrade schedule-list
+powertrade schedule-run 1 --force
+powertrade schedule-install-windows 1
+powertrade schedule-uninstall-windows 1
+powertrade maintenance-run --analyze --vacuum
+```
+
+打包版支持 headless 定时运行：
+
+```powershell
+PowertradeCrawler.exe --headless schedule-run 1
+```
+
+定时任务不保存任何 API key 或 token，采集时仍统一读取 `.auth/credentials.json`。
 
 

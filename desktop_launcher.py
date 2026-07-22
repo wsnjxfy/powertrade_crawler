@@ -34,6 +34,22 @@ def prepare_runtime_files(base_dir: Path) -> None:
 
 def main() -> int:
     base_dir = app_dir()
+    if len(sys.argv) > 1:
+        try:
+            if sys.argv[1] == "--headless":
+                del sys.argv[1]
+            prepare_runtime_files(base_dir)
+            from powertrade_crawler.storage import init_db
+
+            init_db()
+            from powertrade_crawler.cli import app
+
+            app()
+        except Exception as exc:
+            print(f"Powertrade Crawler headless command failed: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
     try:
         prepare_runtime_files(base_dir)
 

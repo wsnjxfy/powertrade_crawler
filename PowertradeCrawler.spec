@@ -10,7 +10,10 @@ a = Analysis(
         ('.env.example', '.'),
         ('EXE_README.txt', '.'),
     ],
-    hiddenimports=['powertrade_crawler.gui'],
+    hiddenimports=[
+        'powertrade_crawler.gui',
+        'matplotlib.backends.backend_tkagg',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

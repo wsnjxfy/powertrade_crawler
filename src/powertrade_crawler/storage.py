@@ -325,6 +325,73 @@ class ElecheckMechanismElectricityPriceRecordRow(Base):
     collected_at: Mapped[DateTime] = mapped_column(DateTime)
 
 
+class DashboardDailyMetricRow(Base):
+    __tablename__ = "dashboard_daily_metrics"
+    __table_args__ = (
+        UniqueConstraint(
+            "metric_date",
+            "source",
+            "dataset",
+            "category",
+            "region",
+            "dimension",
+            "metric_name",
+            "unit",
+            name="uq_dashboard_daily_metric",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    metric_date: Mapped[Date] = mapped_column(Date, index=True)
+    source: Mapped[str] = mapped_column(String(120), index=True)
+    dataset: Mapped[str] = mapped_column(String(160), index=True)
+    category: Mapped[str] = mapped_column(String(80), index=True)
+    region: Mapped[str] = mapped_column(String(160), index=True)
+    dimension: Mapped[str] = mapped_column(String(160), index=True)
+    metric_name: Mapped[str] = mapped_column(String(160), index=True)
+    unit: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    record_count: Mapped[int] = mapped_column(Integer)
+    avg_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    min_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    max_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    sum_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    spread_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latest_raw_time: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    rebuilt_at: Mapped[DateTime] = mapped_column(DateTime)
+
+
+class ScheduledJobRow(Base):
+    __tablename__ = "scheduled_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    job_type: Mapped[str] = mapped_column(String(40), index=True)
+    spider_name: Mapped[str | None] = mapped_column(String(160), nullable=True, index=True)
+    schedule_kind: Mapped[str] = mapped_column(String(40), index=True)
+    schedule_time: Mapped[str] = mapped_column(String(10))
+    date_mode: Mapped[str] = mapped_column(String(40), index=True)
+    start_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[Date | None] = mapped_column(Date, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    params_json: Mapped[str] = mapped_column(Text)
+    windows_task_name: Mapped[str | None] = mapped_column(String(260), nullable=True, index=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime)
+
+
+class ScheduledJobRunRow(Base):
+    __tablename__ = "scheduled_job_runs"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(Integer, index=True)
+    started_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    finished_at: Mapped[DateTime | None] = mapped_column(DateTime, nullable=True)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    message: Mapped[str] = mapped_column(Text)
+    records_written: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_json: Mapped[str] = mapped_column(Text)
+
+
 DEFAULT_ELECHECK_AREA_RECORDS = [
     ElecheckAreaRecord(
         area_name="山西",
@@ -561,6 +628,7 @@ def init_db() -> None:
     drop_gzpec_info_source_column_if_exists(engine)
     add_gridstatus_description_chinese_column_if_missing(engine)
     add_elecheck_area_earliest_clear_price_date_column_if_missing(engine)
+    add_elecheck_clear_price_chart_index_if_missing(engine)
     upsert_elecheck_area_records(DEFAULT_ELECHECK_AREA_RECORDS)
 
 
@@ -611,6 +679,22 @@ def add_elecheck_area_earliest_clear_price_date_column_if_missing(engine) -> Non
     with engine.begin() as connection:
         connection.execute(
             text("ALTER TABLE elecheck_area_records ADD COLUMN earliest_clear_price_date DATE")
+        )
+
+
+def add_elecheck_clear_price_chart_index_if_missing(engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    inspector = inspect(engine)
+    if "elecheck_clear_price_records" not in inspector.get_table_names():
+        return
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_elecheck_clear_price_chart_lookup "
+                "ON elecheck_clear_price_records "
+                "(area_code, endpoint, start_date, end_date, metric, time96)"
+            )
         )
 
 

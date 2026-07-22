@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
@@ -18,6 +18,11 @@ from powertrade_crawler.elecheck_auth import (
     resolve_elecheck_authorization,
     set_elecheck_authorization_for_current_process,
 )
+from powertrade_crawler.metrics import (
+    export_dashboard_metric_rows,
+    rebuild_dashboard_daily_metrics,
+    run_database_maintenance,
+)
 from powertrade_crawler.models import (
     ElecheckClearPriceRecord,
     ElecheckMechanismElectricityPriceRecord,
@@ -31,6 +36,19 @@ from powertrade_crawler.models import (
     MarketRecord,
 )
 from powertrade_crawler.registry import get_spider, list_spiders
+from powertrade_crawler.scheduler import (
+    create_default_job_templates,
+    create_scheduled_job,
+    delete_scheduled_job,
+    install_windows_task,
+    list_recent_job_runs,
+    list_scheduled_jobs,
+    parse_optional_date,
+    parse_params_json,
+    run_scheduled_job,
+    set_scheduled_job_enabled,
+    uninstall_windows_task,
+)
 from powertrade_crawler.spiders.entsoe import (
     ENTSOE_BIDDING_ZONES,
     get_entsoe_request_config,
@@ -309,6 +327,231 @@ def query_entsoe_raw(
         return
     for line in lines:
         typer.echo(line)
+
+
+@app.command("metrics-rebuild")
+def rebuild_metrics(
+    start_date: Annotated[
+        str | None,
+        typer.Option("--start-date", help="Inclusive metric rebuild start date, YYYY-MM-DD."),
+    ] = None,
+    end_date: Annotated[
+        str | None,
+        typer.Option("--end-date", help="Exclusive metric rebuild end date, YYYY-MM-DD."),
+    ] = None,
+    output_path: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Optional CSV export path after rebuild."),
+    ] = None,
+) -> None:
+    """Rebuild daily dashboard metrics from existing local records."""
+    init_db()
+    today = datetime.now().date()
+    start = parse_optional_date(start_date) or (today - timedelta(days=30))
+    end = parse_optional_date(end_date) or today
+    try:
+        count = rebuild_dashboard_daily_metrics(start, end)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Rebuilt {count} dashboard daily metrics from {start} to {end}.")
+    if output_path:
+        exported = export_dashboard_metric_rows(
+            output_path=output_path,
+            topic="all",
+            start_date=start,
+            end_date=end,
+        )
+        typer.echo(f"Exported {exported} dashboard metric rows to {output_path}")
+
+
+@app.command("schedule-list")
+def schedule_list() -> None:
+    """List local scheduled jobs and recent runs."""
+    init_db()
+    jobs = list_scheduled_jobs()
+    if not jobs:
+        typer.echo("No scheduled jobs. Use schedule-create or schedule-create-templates.")
+    for job in jobs:
+        typer.echo(
+            f"{job.id}\t{job.name}\t{job.job_type}\t{job.spider_name or '-'}\t"
+            f"{job.schedule_kind} {job.schedule_time}\t{job.date_mode}\t"
+            f"{'enabled' if job.enabled else 'disabled'}\t{job.windows_task_name or '-'}"
+        )
+    runs = list_recent_job_runs(limit=10)
+    if runs:
+        typer.echo("")
+        typer.echo("Recent runs:")
+        for run in runs:
+            typer.echo(
+                f"{run.id}\tjob={run.job_id}\t{run.status}\t{run.started_at}\t"
+                f"written={run.records_written if run.records_written is not None else '-'}\t"
+                f"{run.message}"
+            )
+
+
+@app.command("schedule-create")
+def schedule_create(
+    name: Annotated[str, typer.Argument(help="Scheduled job display name.")],
+    job_type: Annotated[
+        str,
+        typer.Option("--job-type", help="crawl, metrics, or maintenance."),
+    ] = "metrics",
+    spider_name: Annotated[
+        str | None,
+        typer.Option("--spider-name", help="Spider name for crawl jobs."),
+    ] = None,
+    schedule_kind: Annotated[
+        str,
+        typer.Option("--schedule-kind", help="daily, weekly, or monthly."),
+    ] = "daily",
+    schedule_time: Annotated[
+        str,
+        typer.Option("--schedule-time", help="Local HH:MM time used by Windows Task Scheduler."),
+    ] = "02:00",
+    date_mode: Annotated[
+        str,
+        typer.Option("--date-mode", help="none, yesterday, last-7-days, last-30-days, or custom."),
+    ] = "last-30-days",
+    start_date: Annotated[
+        str | None,
+        typer.Option("--start-date", help="Custom inclusive start date, YYYY-MM-DD."),
+    ] = None,
+    end_date: Annotated[
+        str | None,
+        typer.Option("--end-date", help="Custom exclusive end date, YYYY-MM-DD."),
+    ] = None,
+    params_json: Annotated[
+        str,
+        typer.Option(
+            "--params-json",
+            help="JSON object with spider kwargs or maintenance settings; no credentials.",
+        ),
+    ] = "{}",
+    enabled: Annotated[
+        bool,
+        typer.Option("--enabled/--disabled", help="Enable this local job."),
+    ] = True,
+) -> None:
+    """Create a local scheduled job definition in SQLite."""
+    init_db()
+    try:
+        job = create_scheduled_job(
+            name=name,
+            job_type=job_type,
+            spider_name=spider_name,
+            schedule_kind=schedule_kind,
+            schedule_time=schedule_time,
+            date_mode=date_mode,
+            start_date=parse_optional_date(start_date),
+            end_date=parse_optional_date(end_date),
+            enabled=enabled,
+            params=parse_params_json(params_json),
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Created scheduled job {job.id}: {job.name}")
+
+
+@app.command("schedule-create-templates")
+def schedule_create_templates() -> None:
+    """Create disabled starter templates for common maintenance and collection jobs."""
+    init_db()
+    created = create_default_job_templates()
+    typer.echo(f"Created {created} scheduled job templates.")
+
+
+@app.command("schedule-run")
+def schedule_run(
+    job_id: Annotated[int, typer.Argument(help="Scheduled job id.")],
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Run even when the local job is disabled."),
+    ] = False,
+) -> None:
+    """Run one scheduled job now and write a local run log."""
+    init_db()
+    result = run_scheduled_job(job_id, force=force)
+    typer.echo(
+        f"Job {result['job_id']} run {result['run_id']}: {result['status']} - "
+        f"{result['message']}"
+    )
+
+
+@app.command("schedule-enable")
+def schedule_enable(
+    job_id: Annotated[int, typer.Argument(help="Scheduled job id.")],
+) -> None:
+    init_db()
+    job = set_scheduled_job_enabled(job_id, True)
+    typer.echo(f"Enabled scheduled job {job.id}: {job.name}")
+
+
+@app.command("schedule-disable")
+def schedule_disable(
+    job_id: Annotated[int, typer.Argument(help="Scheduled job id.")],
+) -> None:
+    init_db()
+    job = set_scheduled_job_enabled(job_id, False)
+    typer.echo(f"Disabled scheduled job {job.id}: {job.name}")
+
+
+@app.command("schedule-delete")
+def schedule_delete(
+    job_id: Annotated[int, typer.Argument(help="Scheduled job id.")],
+) -> None:
+    """Delete a local scheduled job definition."""
+    init_db()
+    try:
+        delete_scheduled_job(job_id)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Deleted scheduled job {job_id}.")
+
+
+@app.command("schedule-install-windows")
+def schedule_install_windows(
+    job_id: Annotated[int, typer.Argument(help="Scheduled job id.")],
+) -> None:
+    """Install one local job into Windows Task Scheduler."""
+    init_db()
+    try:
+        task_name = install_windows_task(job_id)
+    except (RuntimeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Installed Windows scheduled task: {task_name}")
+
+
+@app.command("schedule-uninstall-windows")
+def schedule_uninstall_windows(
+    job_id: Annotated[int, typer.Argument(help="Scheduled job id.")],
+) -> None:
+    """Remove one local job from Windows Task Scheduler."""
+    init_db()
+    try:
+        task_name = uninstall_windows_task(job_id)
+    except (RuntimeError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Removed Windows scheduled task: {task_name}")
+
+
+@app.command("maintenance-run")
+def maintenance_run(
+    analyze: Annotated[
+        bool,
+        typer.Option("--analyze/--no-analyze", help="Run SQLite ANALYZE."),
+    ] = True,
+    vacuum: Annotated[
+        bool,
+        typer.Option("--vacuum/--no-vacuum", help="Run SQLite VACUUM."),
+    ] = False,
+) -> None:
+    """Run local SQLite maintenance."""
+    init_db()
+    try:
+        statements = run_database_maintenance(analyze=analyze, vacuum=vacuum)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo("Completed database maintenance: " + ", ".join(statements))
 
 
 @app.command("list-tables")

@@ -4,7 +4,7 @@ import json
 import sqlite3
 import threading
 import webbrowser
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from time import sleep
 from urllib.parse import urlencode
@@ -36,6 +36,8 @@ from powertrade_crawler.elecheck_auth import (
     set_elecheck_authorization_for_current_process,
 )
 from powertrade_crawler.gridstatus_downloader import (
+    GRIDSTATUS_DEFAULT_PAGE_SIZE,
+    GRIDSTATUS_MAX_PAGE_SIZE,
     DownloadCancelled,
     DownloadControl,
     checkpoint_path,
@@ -43,6 +45,12 @@ from powertrade_crawler.gridstatus_downloader import (
     format_gridstatus_time,
     parse_gridstatus_time,
 )
+from powertrade_crawler.dashboard_gui import ScheduleDataApp
+from powertrade_crawler.elecheck_business_dashboard import (
+    ElecheckMechanismDashboardApp,
+    ElecheckPurchasingDashboardApp,
+)
+from powertrade_crawler.elecheck_dashboard import ElecheckPriceDashboardApp
 from powertrade_crawler.spiders.elecheck import (
     ElecheckClearPriceSpider,
     ElecheckMechanismElectricityPriceSpider,
@@ -53,11 +61,13 @@ from powertrade_crawler.registry import get_spider
 from powertrade_crawler.spiders.entsoe import ENTSOE_BIDDING_ZONES, load_entsoe_request_configs
 from powertrade_crawler.spiders.elexon import load_elexon_request_configs
 from powertrade_crawler.storage import (
+    init_db,
     upsert_elexon_records,
     upsert_entsoe_records,
     upsert_elecheck_clear_price_records,
     upsert_elecheck_mechanism_electricity_price_records,
     upsert_elecheck_purchasing_records,
+    upsert_gridstatus_dataset_metadata_records,
     upsert_records,
 )
 
@@ -130,6 +140,12 @@ def resolve_sqlite_path() -> Path:
     return Path(database_url.replace("sqlite:///", "", 1)).resolve()
 
 
+def prepare_gui_database() -> Path:
+    db_path = resolve_sqlite_path()
+    init_db()
+    return db_path
+
+
 def has_usable_gridstatus_api_key() -> bool:
     api_key = (get_credential("gridstatus_api_key") or "").strip()
     return bool(api_key and api_key != GRIDSTATUS_API_KEY_PLACEHOLDER)
@@ -139,13 +155,21 @@ def save_gridstatus_api_key(api_key: str, credential_path: Path | None = None) -
     save_credential("gridstatus_api_key", api_key, path=credential_path)
 
 
-def suggested_download_range(metadata: dict[str, object]) -> tuple[str, str]:
+def current_gridstatus_time_utc(now: datetime | None = None) -> datetime:
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        return current.replace(tzinfo=timezone.utc)
+    return current.astimezone(timezone.utc)
+
+
+def suggested_download_range(
+    metadata: dict[str, object],
+    *,
+    now: datetime | None = None,
+) -> tuple[str, str]:
     earliest_text = str(metadata.get("earliest_available_time_utc") or "")
-    latest_text = str(metadata.get("latest_available_time_utc") or "")
     earliest = parse_gridstatus_time(earliest_text)
-    latest = parse_gridstatus_time(latest_text)
-    if latest is None:
-        return earliest_text, latest_text
+    latest = current_gridstatus_time_utc(now)
 
     frequency = str(metadata.get("data_frequency") or "").upper()
     if "5_MIN" in frequency or "15_MIN" in frequency:
@@ -161,6 +185,51 @@ def suggested_download_range(metadata: dict[str, object]) -> tuple[str, str]:
     if earliest is not None and start < earliest:
         start = earliest
     return format_gridstatus_time(start), format_gridstatus_time(latest)
+
+
+def full_download_range(
+    metadata: dict[str, object],
+    *,
+    now: datetime | None = None,
+) -> tuple[str, str]:
+    start = str(metadata.get("earliest_available_time_utc") or "")
+    status = str(metadata.get("status") or "active").strip().lower()
+    if status == "active":
+        end = format_gridstatus_time(current_gridstatus_time_utc(now))
+    else:
+        end = str(metadata.get("latest_available_time_utc") or "")
+    return start, end
+
+
+def gridstatus_dataset_columns(metadata: dict[str, object]) -> list[str]:
+    raw_columns = metadata.get("all_columns_json") or []
+    if isinstance(raw_columns, str):
+        try:
+            raw_columns = json.loads(raw_columns)
+        except json.JSONDecodeError:
+            return []
+    if not isinstance(raw_columns, list):
+        return []
+
+    columns: list[str] = []
+    for item in raw_columns:
+        if isinstance(item, dict):
+            name = str(item.get("name") or item.get("column") or "").strip()
+        else:
+            name = str(item).strip()
+        if name and name not in columns:
+            columns.append(name)
+    return columns
+
+
+def suggested_gridstatus_filter(metadata: dict[str, object]) -> tuple[str, str]:
+    columns = gridstatus_dataset_columns(metadata)
+    if (
+        metadata.get("dataset_id") == "ercot_spp_day_ahead_hourly"
+        and "location_type" in columns
+    ):
+        return "location_type", "Load Zone"
+    return "", ""
 
 
 class GridStatusMetadataRepository:
@@ -283,8 +352,12 @@ class GridStatusMetadataApp:
         self.download_control: DownloadControl | None = None
         self.download_start_time_var = StringVar()
         self.download_end_time_var = StringVar()
+        self.download_filter_column_var = StringVar()
+        self.download_filter_value_var = StringVar()
+        self.download_page_size_var = StringVar(value=str(GRIDSTATUS_DEFAULT_PAGE_SIZE))
         self.download_format_var = StringVar(value="csv")
         self.download_range_mode_var = StringVar(value="sample")
+        self.catalog_refresh_button: ttk.Button | None = None
 
         self.keyword_var = StringVar()
         self.source_var = StringVar()
@@ -336,6 +409,12 @@ class GridStatusMetadataApp:
 
         ttk.Button(toolbar, text="搜索", command=self.refresh_results).pack(side=LEFT)
         ttk.Button(toolbar, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+        self.catalog_refresh_button = ttk.Button(
+            toolbar,
+            text="更新数据集目录",
+            command=self.refresh_dataset_catalog,
+        )
+        self.catalog_refresh_button.pack(side=LEFT, padx=(8, 0))
         ttk.Button(toolbar, text="更换 API key", command=self.change_gridstatus_api_key).pack(
             side=LEFT,
             padx=(8, 0),
@@ -451,7 +530,10 @@ class GridStatusMetadataApp:
                 ),
             )
 
-        self.summary_var.set(f"找到 {len(rows)} 个数据集。默认最多显示 300 条。")
+        self.summary_var.set(
+            f"找到 {len(rows)} 个数据集。时间范围来自本地目录快照，"
+            "可点击“更新数据集目录”刷新。"
+        )
         if rows:
             first_id = str(rows[0]["id"])
             self.tree.selection_set(first_id)
@@ -459,6 +541,43 @@ class GridStatusMetadataApp:
             self.show_dataset(int(first_id))
         else:
             self.clear_detail()
+
+    def refresh_dataset_catalog(self) -> None:
+        if not self.ensure_gridstatus_api_key():
+            return
+        if self.catalog_refresh_button is not None:
+            self.catalog_refresh_button.configure(state="disabled")
+        self.summary_var.set("正在更新 GridStatus 数据集目录...")
+
+        def worker() -> None:
+            spider = None
+            try:
+                spider = get_spider("gridstatus_datasets")
+                records = list(spider.crawl())
+                written = upsert_gridstatus_dataset_metadata_records(records)
+            except Exception as exc:
+                message = str(exc)
+                self.root.after(0, lambda: self.on_catalog_refresh_error(message))
+            else:
+                self.root.after(0, lambda: self.on_catalog_refresh_success(written))
+            finally:
+                if spider is not None:
+                    spider.close()
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def on_catalog_refresh_success(self, written: int) -> None:
+        if self.catalog_refresh_button is not None:
+            self.catalog_refresh_button.configure(state="normal")
+        self.load_filters()
+        self.refresh_results()
+        self.summary_var.set(f"GridStatus 数据集目录已更新：写入 {written} 条。")
+
+    def on_catalog_refresh_error(self, message: str) -> None:
+        if self.catalog_refresh_button is not None:
+            self.catalog_refresh_button.configure(state="normal")
+        self.summary_var.set("GridStatus 数据集目录更新失败。")
+        messagebox.showerror("更新目录失败", message)
 
     def on_select_dataset(self, _event) -> None:
         selection = self.tree.selection()
@@ -665,14 +784,18 @@ class GridStatusMetadataApp:
 
     def show_download_options(self, metadata: dict[str, object]) -> None:
         dialog = Toplevel(self.root)
-        dialog.title("下载时间范围")
-        dialog.geometry("560x290")
+        dialog.title("下载数据")
+        dialog.geometry("650x430")
         dialog.resizable(False, False)
 
         dataset_id = str(metadata["dataset_id"])
         start, end = suggested_download_range(metadata)
         self.download_start_time_var.set(start)
         self.download_end_time_var.set(end)
+        filter_column, filter_value = suggested_gridstatus_filter(metadata)
+        self.download_filter_column_var.set(filter_column)
+        self.download_filter_value_var.set(filter_value)
+        self.download_page_size_var.set(str(GRIDSTATUS_DEFAULT_PAGE_SIZE))
         self.download_range_mode_var.set("sample")
 
         ttk.Label(dialog, text=f"数据集：{dataset_id}", font=("", 11, "bold")).pack(
@@ -680,7 +803,7 @@ class GridStatusMetadataApp:
             padx=18,
             pady=(16, 8),
         )
-        ttk.Label(dialog, text="默认安全试下载；如需完整历史，请选择“完整数据集”。").pack(
+        ttk.Label(dialog, text="选择时间和等值筛选条件；程序会使用 cursor 自动下载所有分页。").pack(
             anchor=W,
             padx=18,
             pady=(0, 12),
@@ -697,8 +820,15 @@ class GridStatusMetadataApp:
             self.download_end_time_var.set(sample_end)
 
         def use_full_range() -> None:
-            self.download_start_time_var.set(str(metadata.get("earliest_available_time_utc") or ""))
-            self.download_end_time_var.set(str(metadata.get("latest_available_time_utc") or ""))
+            full_start, full_end = full_download_range(metadata)
+            self.download_start_time_var.set(full_start)
+            self.download_end_time_var.set(full_end)
+
+        def use_current_time() -> None:
+            self.download_range_mode_var.set("custom")
+            self.download_end_time_var.set(
+                format_gridstatus_time(current_gridstatus_time_utc())
+            )
 
         def on_mode_change() -> None:
             if self.download_range_mode_var.get() == "sample":
@@ -734,25 +864,59 @@ class GridStatusMetadataApp:
             padx=(10, 0),
             pady=(0, 8),
         )
-        ttk.Label(form, text="结束时间").grid(row=2, column=0, sticky=W)
+        ttk.Label(form, text="结束时间（UTC）").grid(row=2, column=0, sticky=W)
         ttk.Entry(form, textvariable=self.download_end_time_var, width=46).grid(
             row=2,
             column=1,
             sticky=W,
             padx=(10, 0),
         )
-        ttk.Label(form, text="保存格式").grid(row=3, column=0, sticky=W, pady=(8, 0))
+        ttk.Button(form, text="当前 UTC", command=use_current_time).grid(
+            row=2,
+            column=2,
+            sticky=W,
+            padx=(8, 0),
+        )
+        ttk.Label(form, text="筛选字段").grid(row=3, column=0, sticky=W, pady=(8, 0))
+        ttk.Combobox(
+            form,
+            textvariable=self.download_filter_column_var,
+            values=["", *gridstatus_dataset_columns(metadata)],
+            width=43,
+        ).grid(row=3, column=1, sticky=W, padx=(10, 0), pady=(8, 0))
+        ttk.Label(form, text="筛选值").grid(row=4, column=0, sticky=W, pady=(8, 0))
+        ttk.Entry(form, textvariable=self.download_filter_value_var, width=46).grid(
+            row=4,
+            column=1,
+            sticky=W,
+            padx=(10, 0),
+            pady=(8, 0),
+        )
+        ttk.Label(form, text="每页行数").grid(row=5, column=0, sticky=W, pady=(8, 0))
+        ttk.Spinbox(
+            form,
+            textvariable=self.download_page_size_var,
+            from_=1_000,
+            to=GRIDSTATUS_MAX_PAGE_SIZE,
+            increment=1_000,
+            width=14,
+        ).grid(row=5, column=1, sticky=W, padx=(10, 0), pady=(8, 0))
+        ttk.Label(form, text="保存格式").grid(row=6, column=0, sticky=W, pady=(8, 0))
         ttk.Combobox(
             form,
             textvariable=self.download_format_var,
             values=["csv", "sqlite"],
             state="readonly",
             width=14,
-        ).grid(row=3, column=1, sticky=W, padx=(10, 0), pady=(8, 0))
+        ).grid(row=6, column=1, sticky=W, padx=(10, 0), pady=(8, 0))
 
         ttk.Label(
             dialog,
-            text="时间格式示例：2023-04-21T00:00Z。若看到大量已写入行，通常是在继续旧断点。",
+            text=(
+                "等值筛选示例：location_type = Load Zone。每页最多 50000 行；"
+                "时间格式示例：2023-04-21T00:00Z。"
+            ),
+            wraplength=610,
         ).pack(anchor=W, padx=18, pady=(12, 12))
 
         buttons = ttk.Frame(dialog)
@@ -767,12 +931,44 @@ class GridStatusMetadataApp:
     def start_download_with_options(self, dialog: Toplevel, metadata: dict[str, object]) -> None:
         start_time = self.download_start_time_var.get().strip()
         end_time = self.download_end_time_var.get().strip()
-        if start_time:
-            metadata["download_start_time_utc"] = start_time
-        if end_time:
-            metadata["download_end_time_utc"] = end_time
+        start = parse_gridstatus_time(start_time)
+        end = parse_gridstatus_time(end_time)
+        if start is None or end is None or start >= end:
+            messagebox.showerror("时间范围无效", "请填写有效的开始和结束时间，且开始时间早于结束时间。")
+            return
 
-        dataset_id = self.current_row["dataset_id"]
+        filter_column = self.download_filter_column_var.get().strip()
+        filter_value = self.download_filter_value_var.get().strip()
+        if bool(filter_column) != bool(filter_value):
+            messagebox.showerror("筛选条件不完整", "筛选字段和筛选值必须同时填写，或同时留空。")
+            return
+        available_columns = gridstatus_dataset_columns(metadata)
+        if filter_column and available_columns and filter_column not in available_columns:
+            messagebox.showerror("筛选字段无效", f"数据集不存在字段：{filter_column}")
+            return
+        try:
+            page_size = int(self.download_page_size_var.get().strip())
+        except ValueError:
+            messagebox.showerror("每页行数无效", "每页行数必须是整数。")
+            return
+        if not 1 <= page_size <= GRIDSTATUS_MAX_PAGE_SIZE:
+            messagebox.showerror(
+                "每页行数无效",
+                f"当前 GridStatus API 允许的范围是 1 到 {GRIDSTATUS_MAX_PAGE_SIZE}。",
+            )
+            return
+
+        metadata["download_start_time_utc"] = format_gridstatus_time(start)
+        metadata["download_end_time_utc"] = format_gridstatus_time(end)
+        metadata["download_page_size"] = page_size
+        if filter_column:
+            metadata["download_filter_column"] = filter_column
+            metadata["download_filter_value"] = filter_value
+        else:
+            metadata.pop("download_filter_column", None)
+            metadata.pop("download_filter_value", None)
+
+        dataset_id = str(metadata["dataset_id"])
         output_format = self.download_format_var.get() or "csv"
         if output_format == "sqlite":
             initialfile = f"{dataset_id}.db"
@@ -783,7 +979,7 @@ class GridStatusMetadataApp:
             defaultextension = ".csv"
             filetypes = [("CSV files", "*.csv"), ("All files", "*.*")]
         output_path = asksaveasfilename(
-            title="保存 CSV",
+            title="保存 GridStatus 数据",
             initialfile=initialfile,
             defaultextension=defaultextension,
             filetypes=filetypes,
@@ -793,9 +989,14 @@ class GridStatusMetadataApp:
         output = Path(output_path)
 
         if self.download_range_mode_var.get() == "full":
+            filter_summary = (
+                f"筛选：{filter_column} = {filter_value}\n" if filter_column else "筛选：无\n"
+            )
             if not messagebox.askyesno(
                 "确认完整下载",
                 (
+                    f"时间：{format_gridstatus_time(start)} 到 {format_gridstatus_time(end)}\n"
+                    f"{filter_summary}每页：{page_size} 行，使用 cursor 自动翻页。\n\n"
                     "完整数据集可能包含大量历史数据，并消耗较多 GridStatus API usage。\n\n"
                     "确认继续完整下载吗？"
                 ),
@@ -2015,6 +2216,9 @@ class ElecheckDataApp:
         self.clear_crawl_pause_event: threading.Event | None = None
         self.clear_crawl_stop_event: threading.Event | None = None
         self.clear_crawl_abandon_event: threading.Event | None = None
+        self.clear_price_dashboard: ElecheckPriceDashboardApp | None = None
+        self.purchasing_dashboard: ElecheckPurchasingDashboardApp | None = None
+        self.mechanism_dashboard: ElecheckMechanismDashboardApp | None = None
 
         self.purchasing_month_var = StringVar()
         self.purchasing_province_var = StringVar()
@@ -2058,8 +2262,28 @@ class ElecheckDataApp:
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill=BOTH, expand=True, padx=8, pady=8)
 
+        dashboard_frame = ttk.Frame(notebook)
+        notebook.add(dashboard_frame, text="现货价格分析")
+        self.clear_price_dashboard = ElecheckPriceDashboardApp(
+            dashboard_frame,
+            self.repository.db_path,
+        )
         self.clear_tree, self.clear_raw_text = self.build_clear_price_tab(notebook)
+
+        purchasing_dashboard_frame = ttk.Frame(notebook)
+        notebook.add(purchasing_dashboard_frame, text="代理购电分析")
+        self.purchasing_dashboard = ElecheckPurchasingDashboardApp(
+            purchasing_dashboard_frame,
+            self.repository.db_path,
+        )
         self.purchasing_tree, self.purchasing_raw_text = self.build_purchasing_tab(notebook)
+
+        mechanism_dashboard_frame = ttk.Frame(notebook)
+        notebook.add(mechanism_dashboard_frame, text="增量机制分析")
+        self.mechanism_dashboard = ElecheckMechanismDashboardApp(
+            mechanism_dashboard_frame,
+            self.repository.db_path,
+        )
         self.mechanism_tree, self.mechanism_raw_text = self.build_mechanism_tab(notebook)
 
         status_bar = ttk.Frame(self.root)
@@ -2068,7 +2292,7 @@ class ElecheckDataApp:
 
     def build_clear_price_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
-        notebook.add(frame, text="现货价格")
+        notebook.add(frame, text="现货价格数据")
 
         crawl_bar = ttk.Frame(frame, style="Toolbar.TFrame")
         crawl_bar.pack(fill=X)
@@ -2240,7 +2464,7 @@ class ElecheckDataApp:
 
     def build_purchasing_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
-        notebook.add(frame, text="代理购电价格")
+        notebook.add(frame, text="代理购电数据")
         toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
         toolbar.pack(fill=X)
 
@@ -2318,7 +2542,7 @@ class ElecheckDataApp:
 
     def build_mechanism_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
-        notebook.add(frame, text="增量机制电价")
+        notebook.add(frame, text="增量机制数据")
         toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
         toolbar.pack(fill=X)
 
@@ -2960,6 +3184,8 @@ class ElecheckDataApp:
         self.finish_clear_price_crawl()
         self.load_filter_values()
         self.refresh_clear_price()
+        if self.clear_price_dashboard is not None:
+            self.clear_price_dashboard.refresh_after_crawl(select_latest=True)
         status = "已结束并保存" if stopped_early else "采集完成"
         self.summary_var.set(f"现货价格{status}：抓取 {record_count} 条，写入/更新 {written} 条。")
         messagebox.showinfo(
@@ -2971,6 +3197,8 @@ class ElecheckDataApp:
         self.finish_clear_price_crawl()
         self.load_filter_values()
         self.refresh_clear_price()
+        if self.clear_price_dashboard is not None:
+            self.clear_price_dashboard.refresh_after_crawl(select_latest=True)
         self.summary_var.set(
             f"已放弃后续采集：本次抓取 {record_count} 条，已写入/更新 {written} 条。"
         )
@@ -3072,6 +3300,8 @@ class ElecheckDataApp:
 
         self.load_filter_values()
         self.refresh_clear_price()
+        if self.clear_price_dashboard is not None:
+            self.clear_price_dashboard.refresh_after_crawl(select_latest=True)
         self.summary_var.set(f"已清空现货价格数据，删除 {deleted} 条记录。")
         messagebox.showinfo("清空完成", f"已删除 {deleted} 条现货价格记录。")
 
@@ -3229,6 +3459,8 @@ class ElecheckDataApp:
         self.finish_purchasing_collect()
         self.load_filter_values()
         self.refresh_purchasing()
+        if self.purchasing_dashboard is not None:
+            self.purchasing_dashboard.refresh_after_crawl(select_latest=True)
         self.summary_var.set(
             f"代理购电价格采集完成：抓取 {record_count} 条，写入/更新 {written} 条。"
         )
@@ -3263,6 +3495,8 @@ class ElecheckDataApp:
 
         self.load_filter_values()
         self.refresh_purchasing()
+        if self.purchasing_dashboard is not None:
+            self.purchasing_dashboard.refresh_after_crawl(select_latest=True)
         self.summary_var.set(f"已清空代理购电价格数据，删除 {deleted} 条记录。")
         messagebox.showinfo("清空完成", f"已删除 {deleted} 条代理购电价格记录。")
 
@@ -3390,6 +3624,8 @@ class ElecheckDataApp:
         self.finish_mechanism_collect()
         self.load_filter_values()
         self.refresh_mechanism()
+        if self.mechanism_dashboard is not None:
+            self.mechanism_dashboard.refresh_after_crawl()
         self.summary_var.set(
             f"增量机制电价采集完成：抓取 {record_count} 条，写入/更新 {written} 条。"
         )
@@ -3427,6 +3663,8 @@ class ElecheckDataApp:
 
         self.load_filter_values()
         self.refresh_mechanism()
+        if self.mechanism_dashboard is not None:
+            self.mechanism_dashboard.refresh_after_crawl()
         self.summary_var.set(f"已清空增量机制电价数据，删除 {deleted} 条记录。")
         messagebox.showinfo("清空完成", f"已删除 {deleted} 条增量机制电价记录。")
 
@@ -5345,9 +5583,7 @@ class ElexonDataApp:
 
 
 def launch_gui() -> None:
-    db_path = resolve_sqlite_path()
-    if not db_path.exists():
-        raise FileNotFoundError(f"Database does not exist: {db_path}")
+    db_path = prepare_gui_database()
     root = Tk()
     root.title("Powertrade Crawler 数据浏览器")
     root.geometry("1280x800")
@@ -5365,10 +5601,12 @@ def launch_gui() -> None:
     elecheck_tab = ttk.Frame(notebook)
     entsoe_tab = ttk.Frame(notebook)
     elexon_tab = ttk.Frame(notebook)
+    schedule_tab = ttk.Frame(notebook)
     notebook.add(gridstatus_tab, text="GridStatus")
     notebook.add(elecheck_tab, text="Elecheck 易能电易查")
     notebook.add(entsoe_tab, text="ENTSO-E 欧洲")
     notebook.add(elexon_tab, text="Elexon 英国")
+    notebook.add(schedule_tab, text="定时任务/数据维护")
 
     GridStatusMetadataApp(
         gridstatus_tab,
@@ -5378,4 +5616,5 @@ def launch_gui() -> None:
     ElecheckDataApp(elecheck_tab, ElecheckDataRepository(db_path))
     EntsoeDataApp(entsoe_tab, EntsoeDataRepository(db_path))
     ElexonDataApp(elexon_tab, ElexonDataRepository(db_path))
+    ScheduleDataApp(schedule_tab)
     root.mainloop()

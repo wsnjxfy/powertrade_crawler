@@ -1,6 +1,6 @@
 import csv
 from io import StringIO
-from time import monotonic, sleep
+from time import sleep
 from typing import Any
 
 import httpx
@@ -8,6 +8,10 @@ from loguru import logger
 
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.credentials import get_credential
+from powertrade_crawler.gridstatus_rate_limit import (
+    GRIDSTATUS_SAFE_INTERVAL_SECONDS,
+    gridstatus_request_limiter,
+)
 
 
 class GridStatusClient:
@@ -22,9 +26,11 @@ class GridStatusClient:
             )
 
         self.api_key = api_key
-        self.min_interval_seconds = settings.gridstatus_min_interval_seconds
+        self.min_interval_seconds = max(
+            settings.gridstatus_min_interval_seconds,
+            GRIDSTATUS_SAFE_INTERVAL_SECONDS,
+        )
         self.retry_times = settings.request_retry_times
-        self.last_request_at = 0.0
         self.client = httpx.Client(
             base_url=self.base_url,
             timeout=settings.request_timeout_seconds,
@@ -86,10 +92,9 @@ class GridStatusClient:
         raise RuntimeError(f"GridStatus GET {path} failed after retries") from last_error
 
     def wait_for_rate_limit(self) -> None:
-        elapsed = monotonic() - self.last_request_at
-        if elapsed < self.min_interval_seconds:
-            sleep(self.min_interval_seconds - elapsed)
-        self.last_request_at = monotonic()
+        gridstatus_request_limiter.wait(
+            min_interval_seconds=self.min_interval_seconds,
+        )
 
     def parse_csv(self, text: str) -> list[dict[str, Any]]:
         sample = text[:2048]

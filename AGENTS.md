@@ -189,11 +189,14 @@ The project currently includes:
 
 中文：
 
-Elecheck 目前在 GUI 中有一个主页：`Elecheck 易能电易查`，下面分为三个 tab：
+Elecheck 目前在 GUI 中有一个主页：`Elecheck 易能电易查`，下面分为六个 tab：
 
-- `现货价格`
-- `代理购电价格`
-- `增量机制电价`
+- `现货价格分析`
+- `现货价格数据`
+- `代理购电分析`
+- `代理购电数据`
+- `增量机制分析`
+- `增量机制数据`
 
 ### 6.1 现货价格 / Clear Price
 
@@ -218,6 +221,9 @@ powertrade crawl elecheck_clear_price --area 江苏 --start-date 2026-05-10 --en
 - 如果已有历史现货数据，更新会从各地区最新日期往前顺延一天开始。
 - 支持进度弹窗、最小化、暂停、继续、结束并保存、放弃采集。
 - 支持筛选、CSV 导出、清空数据。
+- `现货价格分析` 只对单一地区、单一日期作图，叠加日前与实时原始粒度折线，并展示共同时间点价差和最近 30 个自然日日均价趋势。
+- 图表只读取 `endpoint = 'detail'` 且 `start_date = end_date` 的每日明细；不使用区间平均曲线，不插值，不补零，也不进行跨地区或跨数据源比较。
+- 图表支持前后有数据日期导航、数据完整度提示，以及当前数据 CSV 和完整画布 PNG 导出；采集完成后会自动刷新。
 
 相关表：
 
@@ -331,17 +337,20 @@ WMPFDebugger
 
 English:
 
-Elecheck currently has a main GUI page named `Elecheck 易能电易查` with three tabs:
+Elecheck currently has a main GUI page named `Elecheck 易能电易查` with six tabs:
 
-- `现货价格` / Clear Price
-- `代理购电价格` / Purchasing Price
-- `增量机制电价` / Mechanism Electricity Price
+- `现货价格分析` / Clear Price Analysis
+- `现货价格数据` / Clear Price Records
+- `代理购电分析` / Purchasing Price Analysis
+- `代理购电数据` / Purchasing Price Records
+- `增量机制分析` / Mechanism Price Analysis
+- `增量机制数据` / Mechanism Price Records
 
 The main implementation points are:
 
-- Clear price uses `elecheck_clear_price`, stores data in `elecheck_clear_price_records`, and uses `elecheck_area_records.earliest_clear_price_date` to guide valid date choices.
-- Purchasing price uses several purchasing spiders, with the GUI primarily using `elecheck_purchasing_national_range`. Data starts from `2024-02` and is stored in `elecheck_purchasing_records`.
-- Mechanism electricity price uses `elecheck_mechanism_electricity_price` and stores data in `elecheck_mechanism_electricity_price_records`.
+- Clear price uses `elecheck_clear_price`, stores data in `elecheck_clear_price_records`, and uses `elecheck_area_records.earliest_clear_price_date` to guide valid date choices. Its analysis tab shows single-area intraday day-ahead and real-time prices, exact-time spread, and a 30-calendar-day daily-average trend without interpolation or zero filling.
+- Purchasing price uses several purchasing spiders, with the GUI primarily using `elecheck_purchasing_national_range`. Data starts from `2024-02` and is stored in `elecheck_purchasing_records`. Its analysis tab reads only `national_table` records and shows monthly cost composition, total-price trend, and selected-month provincial ranking.
+- Mechanism electricity price uses `elecheck_mechanism_electricity_price` and stores data in `elecheck_mechanism_electricity_price_records`. Its analysis tab treats the table as a current snapshot and compares the 2026 mechanism price with the coal benchmark by region and generation category; it does not invent a historical trend.
 - Packet capture for Elecheck was validated with WeChat for Windows 3.9.12, WMPF version 14315, and WMPFDebugger. Keep this known-good setup when recapturing mini-program traffic. WMPF 19921 and 14185 previously failed with `version config not found`.
 
 ## 7. 统一鉴权逻辑 / Unified Credential Logic
@@ -970,6 +979,61 @@ pytest: 65 passed, 124 warnings
 English:
 
 Week 9 strengthened the Elexon integration with seven additional GB query entries for supply tightness, interconnector flows, and non-BM balancing-service summaries. The reference interconnector endpoint is used only for inline explanations and parameter guidance, not as a separate GUI page. The Elexon GUI now exposes clearer labels and inline concept notes, while records continue to be stored in `elexon_records`.
+
+### 15.4 2026-07-13 第十周分析看板、指标汇总和定时任务 / Week 10 Dashboard, Metrics, and Scheduling
+
+中文：
+
+第十周方向从“新增数据源”转为“把已有数据变成可持续更新和可视化分析工具”。本轮没有新增任何 ENTSO-E 数据集或外部 API。
+
+新增能力：
+
+- `Elecheck 易能电易查` 内新增 `现货价格分析` 子页，使用 Tkinter + Matplotlib 展示单地区日内日前/实时价格、共同时间点价差和最近 30 个自然日日均趋势。
+- 图表按真实 `time96` 时间绘制，兼容 5、15、30、60 分钟粒度及 `24:00`；不同粒度不重采样、不插值、不补零。
+- Elecheck 内新增 `代理购电分析`，展示单省月度费用构成、合计价趋势和所选月份省际高低价端；只读取 `national_table`，不混入全国极值记录。
+- Elecheck 内新增 `增量机制分析`，使用哑铃图比较燃煤基准价和 26 年增量机制电价，并展示当前地区各电源类型；只分析当前快照，不保存或虚构历史。
+- 顶层通用 `分析看板` 暂时从 GUI 隐藏，相关指标汇总代码和 CLI 保留，供后续数据源内部看板复用。
+- GUI 顶层新增 `定时任务/数据维护` 页签，用于本地任务配置、启停、运行日志和 Windows 任务计划安装/卸载。
+- 新增日维度指标表 `dashboard_daily_metrics`，从 `market_records`、`entsoe_records`、`elexon_records`、`gridstatus_records`、`elecheck_clear_price_records` 汇总价格、负荷、发电、潮流等数值。
+- 新增本地任务表 `scheduled_jobs` 和运行日志表 `scheduled_job_runs`。任务配置不保存 token，采集时仍读取 `.auth/credentials.json`。
+- 打包版 `PowertradeCrawler.exe` 支持 `--headless schedule-run JOB_ID`，用于 Windows 任务计划程序。
+
+常用命令：
+
+```powershell
+powertrade metrics-rebuild --start-date 2026-06-01 --end-date 2026-07-01
+powertrade schedule-create-templates
+powertrade schedule-list
+powertrade schedule-run 1 --force
+powertrade schedule-install-windows 1
+powertrade schedule-uninstall-windows 1
+powertrade maintenance-run --analyze --vacuum
+```
+
+实现位置：
+
+```text
+src/powertrade_crawler/metrics.py
+src/powertrade_crawler/scheduler.py
+src/powertrade_crawler/dashboard_gui.py
+src/powertrade_crawler/elecheck_dashboard.py
+src/powertrade_crawler/elecheck_business_dashboard.py
+```
+
+验证记录：
+
+```text
+ruff check src tests scripts: passed
+pytest -q: 96 passed
+Elecheck GUI smoke (live and empty databases): passed
+PyInstaller build: passed
+packaged exe headless smoke: exit code 0
+packaged exe GUI process smoke: passed
+```
+
+English:
+
+Week 10 adds local dashboarding, daily metric aggregation, and scheduled jobs for existing data sources. No new ENTSO-E datasets or external APIs were added. The packaged executable can run scheduled jobs in headless mode for Windows Task Scheduler.
 
 ## 16. ENTSO-E 参数、时间与区域语义 / Parameter, Time, and Area Semantics
 
