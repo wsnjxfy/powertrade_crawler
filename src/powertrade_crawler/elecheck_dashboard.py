@@ -9,7 +9,7 @@ from pathlib import Path
 from statistics import fmean
 from tkinter import BOTH, LEFT, W, X, StringVar, messagebox, ttk
 from tkinter.filedialog import asksaveasfilename
-from typing import Any
+from typing import Any, Literal
 
 from powertrade_crawler.config import get_settings
 
@@ -890,33 +890,46 @@ def format_hover_x(value: float, kind: str) -> str:
 def export_elecheck_intraday_csv(
     output_path: Path,
     data: ElecheckPriceDashboardData,
+    series: Literal["all", "day_ahead", "real_time", "spread"] = "all",
 ) -> int:
+    if series not in {"all", "day_ahead", "real_time", "spread"}:
+        raise ValueError(f"Unsupported Elecheck spot export series: {series}")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     day_values = {point.minute: point.value for point in data.day_ahead}
     real_values = {point.minute: point.value for point in data.real_time}
-    minutes = sorted(day_values.keys() | real_values.keys())
+    if series == "day_ahead":
+        minutes = sorted(day_values)
+        fieldnames = ["日期", "地区", "时点", "日前价格", "单位"]
+    elif series == "real_time":
+        minutes = sorted(real_values)
+        fieldnames = ["日期", "地区", "时点", "实时价格", "单位"]
+    elif series == "spread":
+        minutes = sorted(day_values.keys() & real_values.keys())
+        fieldnames = ["日期", "地区", "时点", "价差", "单位"]
+    else:
+        minutes = sorted(day_values.keys() | real_values.keys())
+        fieldnames = ["日期", "地区", "时点", "日前价格", "实时价格", "价差", "单位"]
     with output_path.open("w", newline="", encoding="utf-8-sig") as file:
-        writer = csv.DictWriter(
-            file,
-            fieldnames=["日期", "地区", "时点", "日前价格", "实时价格", "价差", "单位"],
-        )
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
         for minute in minutes:
             day_value = day_values.get(minute)
             real_value = real_values.get(minute)
-            writer.writerow(
-                {
-                    "日期": data.selected_date.isoformat(),
-                    "地区": data.area.area_name,
-                    "时点": format_minutes(minute),
-                    "日前价格": "" if day_value is None else day_value,
-                    "实时价格": "" if real_value is None else real_value,
-                    "价差": (
-                        ""
-                        if day_value is None or real_value is None
-                        else real_value - day_value
-                    ),
-                    "单位": PRICE_UNIT,
-                }
-            )
+            row = {
+                "日期": data.selected_date.isoformat(),
+                "地区": data.area.area_name,
+                "时点": format_minutes(minute),
+                "单位": PRICE_UNIT,
+            }
+            if series in {"all", "day_ahead"}:
+                row["日前价格"] = "" if day_value is None else day_value
+            if series in {"all", "real_time"}:
+                row["实时价格"] = "" if real_value is None else real_value
+            if series in {"all", "spread"}:
+                row["价差"] = (
+                    ""
+                    if day_value is None or real_value is None
+                    else real_value - day_value
+                )
+            writer.writerow(row)
     return len(minutes)

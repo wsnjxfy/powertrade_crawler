@@ -1,19 +1,25 @@
+import subprocess
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.scheduler import (
+    build_scheduled_spider_kwargs,
     build_windows_task_command,
     create_default_job_templates,
     create_scheduled_job,
+    delete_scheduled_job,
     list_recent_job_runs,
     list_scheduled_jobs,
     parse_params_json,
     resolve_job_date_window,
     run_scheduled_job,
     sanitize_message,
+    scheduled_run_exit_code,
 )
-from powertrade_crawler.storage import init_db
+from powertrade_crawler.storage import ScheduledJobRow, get_session, init_db
 
 
 def prepare_db(tmp_path: Path, monkeypatch):
@@ -104,8 +110,11 @@ def test_windows_task_command_uses_headless_schedule_run(tmp_path: Path, monkeyp
     assert command[:2] == ["schtasks", "/Create"]
     assert "/TN" in command
     assert "/TR" in command
-    assert "schedule-run" in command[command.index("/TR") + 1]
-    assert str(job.id) in command[command.index("/TR") + 1]
+    invocation = command[command.index("/TR") + 1]
+    assert "desktop_launcher.py" in invocation
+    assert "--headless" in invocation
+    assert "schedule-run" in invocation
+    assert str(job.id) in invocation
     assert command[command.index("/SC") + 1] == "DAILY"
     assert command[command.index("/ST") + 1] == "02:15"
 
@@ -122,3 +131,94 @@ def test_default_templates_are_created_disabled(tmp_path: Path, monkeypatch):
 def test_params_json_and_message_sanitizing():
     assert parse_params_json('{"area": "DE-LU"}') == {"area": "DE-LU"}
     assert "secret" not in sanitize_message("failed securityToken=secret&documentType=A65")
+
+
+def test_elecheck_clear_price_converts_exclusive_window_to_inclusive_daily_kwargs():
+    kwargs = build_scheduled_spider_kwargs(
+        "elecheck_clear_price",
+        params={"area_code": "320000000000", "daily": False},
+        start=date(2026, 7, 12),
+        end=date(2026, 7, 13),
+    )
+
+    assert kwargs == {
+        "area_code": "320000000000",
+        "daily": True,
+        "start_date": "2026-07-12",
+        "end_date": "2026-07-12",
+    }
+
+
+def test_entsoe_keeps_exclusive_scheduled_window():
+    kwargs = build_scheduled_spider_kwargs(
+        "entsoe_actual_total_load",
+        params={"area": "DE-LU"},
+        start=date(2026, 7, 12),
+        end=date(2026, 7, 13),
+    )
+
+    assert kwargs == {
+        "area": "DE-LU",
+        "start_date": "2026-07-12",
+        "end_date": "2026-07-13",
+    }
+
+
+def test_crawl_job_rejects_date_window_for_non_date_spider(tmp_path: Path, monkeypatch):
+    prepare_db(tmp_path, monkeypatch)
+
+    with pytest.raises(ValueError, match="date_mode=none"):
+        create_scheduled_job(
+            name="purchasing range",
+            job_type="crawl",
+            spider_name="elecheck_purchasing_national_range",
+            schedule_kind="daily",
+            schedule_time="02:00",
+            date_mode="last-30-days",
+        )
+
+
+def test_delete_installed_job_requires_or_removes_windows_task(tmp_path: Path, monkeypatch):
+    prepare_db(tmp_path, monkeypatch)
+    job = create_scheduled_job(
+        name="installed metrics",
+        job_type="metrics",
+        schedule_kind="daily",
+        schedule_time="02:00",
+        date_mode="last-30-days",
+    )
+    with get_session() as session:
+        row = session.get(ScheduledJobRow, job.id)
+        row.windows_task_name = "PowertradeCrawler_test"
+        session.commit()
+
+    with pytest.raises(ValueError, match="Uninstall the Windows task"):
+        delete_scheduled_job(job.id)
+    assert len(list_scheduled_jobs()) == 1
+
+    def fail_uninstall(_job_id):
+        raise subprocess.CalledProcessError(1, ["schtasks", "/Delete"])
+
+    monkeypatch.setattr(
+        "powertrade_crawler.scheduler.uninstall_windows_task",
+        fail_uninstall,
+    )
+    with pytest.raises(RuntimeError, match="local job definition was kept"):
+        delete_scheduled_job(job.id, remove_windows_task=True)
+    assert len(list_scheduled_jobs()) == 1
+
+    removed_job_ids = []
+    monkeypatch.setattr(
+        "powertrade_crawler.scheduler.uninstall_windows_task",
+        lambda job_id: removed_job_ids.append(job_id),
+    )
+    delete_scheduled_job(job.id, remove_windows_task=True)
+
+    assert removed_job_ids == [job.id]
+    assert list_scheduled_jobs() == []
+
+
+def test_scheduled_run_exit_code_marks_only_failures_as_process_errors():
+    assert scheduled_run_exit_code("failed") == 1
+    assert scheduled_run_exit_code("success") == 0
+    assert scheduled_run_exit_code("skipped") == 0

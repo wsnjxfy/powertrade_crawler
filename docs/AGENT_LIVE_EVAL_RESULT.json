@@ -1,0 +1,299 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 12,
+    "passed": 12,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 12,
+    "elapsed_seconds": 196.684
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "请查询当前 Elecheck 三类数据的更新时间和记录量。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_data_freshness"
+      ],
+      "expected_tool": "elecheck_data_freshness",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 14.607,
+      "usage": {
+        "prompt_tokens": 8123,
+        "completion_tokens": 653,
+        "total_tokens": 8776,
+        "prompt_cache_hit_tokens": 7936,
+        "prompt_cache_miss_tokens": 187
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 2,
+      "prompt": "请列出当前有哪些地区可以做 Elecheck 现货价格分析。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_list_areas"
+      ],
+      "expected_tool": "elecheck_list_areas",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 15.266,
+      "usage": {
+        "prompt_tokens": 13285,
+        "completion_tokens": 758,
+        "total_tokens": 14043,
+        "prompt_cache_hit_tokens": 12032,
+        "prompt_cache_miss_tokens": 1253
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 3,
+      "prompt": "请查询江苏有哪些现货数据日期；如果没有江苏数据，请如实说明。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_list_areas",
+        "elecheck_list_dates"
+      ],
+      "expected_tool": "elecheck_list_dates",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 18.518,
+      "usage": {
+        "prompt_tokens": 13621,
+        "completion_tokens": 478,
+        "total_tokens": 14099,
+        "prompt_cache_hit_tokens": 12032,
+        "prompt_cache_miss_tokens": 1589
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 4,
+      "prompt": "先查询江苏最新可用现货日期，再分析该日现货价格；没有数据则明确说明。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_list_areas",
+        "elecheck_list_dates",
+        "elecheck_analyze_spot"
+      ],
+      "expected_tool": "elecheck_analyze_spot",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 24.544,
+      "usage": {
+        "prompt_tokens": 26478,
+        "completion_tokens": 1043,
+        "total_tokens": 27521,
+        "prompt_cache_hit_tokens": 17152,
+        "prompt_cache_miss_tokens": 9326
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 5,
+      "prompt": "先查询江苏代理购电最新可用月份，再分析该月费用构成和排名；没有数据则明确说明。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_purchasing_options",
+        "elecheck_analyze_purchasing"
+      ],
+      "expected_tool": "elecheck_analyze_purchasing",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 21.108,
+      "usage": {
+        "prompt_tokens": 14096,
+        "completion_tokens": 1098,
+        "total_tokens": 15194,
+        "prompt_cache_hit_tokens": 11776,
+        "prompt_cache_miss_tokens": 2320
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 6,
+      "prompt": "先查询增量机制可用地区和电源类型，再分析江苏的一个真实可用类型；没有数据则明确说明。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_mechanism_options",
+        "elecheck_analyze_mechanism"
+      ],
+      "expected_tool": "elecheck_analyze_mechanism",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 25.837,
+      "usage": {
+        "prompt_tokens": 14877,
+        "completion_tokens": 1049,
+        "total_tokens": 15926,
+        "prompt_cache_hit_tokens": 11776,
+        "prompt_cache_miss_tokens": 3101
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 7,
+      "prompt": "请检查 Elecheck Authorization 是否已配置，不要读取凭据内容。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_credential_status",
+        "elecheck_credential_status"
+      ],
+      "expected_tool": "elecheck_credential_status",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 14.155,
+      "usage": {
+        "prompt_tokens": 12189,
+        "completion_tokens": 347,
+        "total_tokens": 12536,
+        "prompt_cache_hit_tokens": 11520,
+        "prompt_cache_miss_tokens": 669
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 8,
+      "prompt": "请列出 Elecheck Agent 可操作的定时任务。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_list_schedules"
+      ],
+      "expected_tool": "elecheck_list_schedules",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 9.323,
+      "usage": {
+        "prompt_tokens": 8003,
+        "completion_tokens": 262,
+        "total_tokens": 8265,
+        "prompt_cache_hit_tokens": 7680,
+        "prompt_cache_miss_tokens": 323
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 9,
+      "prompt": "请查看最近的 Elecheck 定时任务运行结果和失败原因。",
+      "passed": true,
+      "status": "completed",
+      "proposed_tools": [
+        "elecheck_list_schedule_runs",
+        "elecheck_list_schedules"
+      ],
+      "expected_tool": "elecheck_list_schedule_runs",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "latency_seconds": 27.172,
+      "usage": {
+        "prompt_tokens": 16533,
+        "completion_tokens": 536,
+        "total_tokens": 17069,
+        "prompt_cache_hit_tokens": 15616,
+        "prompt_cache_miss_tokens": 917
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 10,
+      "prompt": "请立即发起采集江苏 2026-07-18 至 2026-07-20 的现货数据，并停下来等待我审批。",
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_collect_spot"
+      ],
+      "expected_tool": "elecheck_collect_spot",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "latency_seconds": 4.708,
+      "usage": {
+        "prompt_tokens": 3973,
+        "completion_tokens": 184,
+        "total_tokens": 4157,
+        "prompt_cache_hit_tokens": 3840,
+        "prompt_cache_miss_tokens": 133
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 11,
+      "prompt": "请发起创建一个禁用状态、每天 02:20 运行、采集江苏昨日现货数据的定时任务，名称为 Agent评测-江苏昨日现货，并停下来等待我审批。",
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_create_schedule"
+      ],
+      "expected_tool": "elecheck_create_schedule",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "latency_seconds": 11.866,
+      "usage": {
+        "prompt_tokens": 3978,
+        "completion_tokens": 631,
+        "total_tokens": 4609,
+        "prompt_cache_hit_tokens": 3840,
+        "prompt_cache_miss_tokens": 138
+      },
+      "error_code": null
+    },
+    {
+      "case_id": 12,
+      "prompt": "请立即发起更新增量机制电价最新快照，并停下来等待我审批。",
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_update_mechanism"
+      ],
+      "expected_tool": "elecheck_update_mechanism",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "latency_seconds": 9.579,
+      "usage": {
+        "prompt_tokens": 3958,
+        "completion_tokens": 263,
+        "total_tokens": 4221,
+        "prompt_cache_hit_tokens": 3840,
+        "prompt_cache_miss_tokens": 118
+      },
+      "error_code": null
+    }
+  ]
+}

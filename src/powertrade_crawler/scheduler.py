@@ -24,7 +24,8 @@ from powertrade_crawler.models import (
     GzpecNewsRecord,
     MarketRecord,
 )
-from powertrade_crawler.registry import get_spider
+from powertrade_crawler.registry import get_spider, list_spiders
+from powertrade_crawler.spiders.elexon import get_elexon_request_config
 from powertrade_crawler.storage import (
     ScheduledJobRow,
     ScheduledJobRunRow,
@@ -45,6 +46,9 @@ from powertrade_crawler.storage import (
 VALID_JOB_TYPES = {"crawl", "metrics", "maintenance"}
 VALID_DATE_MODES = {"none", "yesterday", "last-7-days", "last-30-days", "custom"}
 VALID_SCHEDULE_KINDS = {"daily", "weekly", "monthly"}
+DATE_SEMANTICS_EXCLUSIVE = "exclusive"
+DATE_SEMANTICS_INCLUSIVE_DAILY = "inclusive-daily"
+DATE_SEMANTICS_NONE = "none"
 
 
 def create_scheduled_job(
@@ -170,7 +174,22 @@ def set_scheduled_job_enabled(job_id: int, enabled: bool) -> ScheduledJobRow:
         return detach_job(row)
 
 
-def delete_scheduled_job(job_id: int) -> None:
+def delete_scheduled_job(job_id: int, *, remove_windows_task: bool = False) -> None:
+    job = get_scheduled_job(job_id)
+    if job.windows_task_name:
+        if not remove_windows_task:
+            raise ValueError(
+                "This job is installed in Windows Task Scheduler. "
+                "Uninstall the Windows task before deleting the local job."
+            )
+        try:
+            uninstall_windows_task(job_id)
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                "Could not remove the Windows scheduled task; "
+                "the local job definition was kept."
+            ) from exc
+
     with get_session() as session:
         row = session.get(ScheduledJobRow, job_id)
         if row is None:
@@ -221,6 +240,10 @@ def run_scheduled_job(job_id: int, *, force: bool = False) -> dict[str, Any]:
     return {"job_id": job.id, "run_id": run_id, **result}
 
 
+def scheduled_run_exit_code(status: str) -> int:
+    return 1 if status == "failed" else 0
+
+
 def execute_job(job: ScheduledJobRow) -> dict[str, Any]:
     start, end = resolve_job_date_window(job)
     params = parse_params_json(job.params_json)
@@ -248,10 +271,12 @@ def execute_job(job: ScheduledJobRow) -> dict[str, Any]:
     if job.job_type == "crawl":
         if not job.spider_name:
             raise ValueError("crawl jobs require spider_name.")
-        spider_kwargs = dict(params)
-        if start is not None and end is not None:
-            spider_kwargs["start_date"] = start.isoformat()
-            spider_kwargs["end_date"] = end.isoformat()
+        spider_kwargs = build_scheduled_spider_kwargs(
+            job.spider_name,
+            params=params,
+            start=start,
+            end=end,
+        )
         written, produced = run_spider_and_upsert(job.spider_name, spider_kwargs)
         return {
             "status": "success",
@@ -355,6 +380,48 @@ def resolve_job_date_window(
     raise ValueError(f"Unsupported date mode: {job.date_mode}")
 
 
+def build_scheduled_spider_kwargs(
+    spider_name: str,
+    *,
+    params: dict[str, Any],
+    start: date | None,
+    end: date | None,
+) -> dict[str, Any]:
+    kwargs = dict(params)
+    if start is None and end is None:
+        return kwargs
+    if start is None or end is None or end <= start:
+        raise ValueError("Scheduled crawl date windows require start < end.")
+
+    semantics = scheduled_spider_date_semantics(spider_name)
+    if semantics == DATE_SEMANTICS_INCLUSIVE_DAILY:
+        kwargs["start_date"] = start.isoformat()
+        kwargs["end_date"] = (end - timedelta(days=1)).isoformat()
+        kwargs["daily"] = True
+        return kwargs
+    if semantics == DATE_SEMANTICS_EXCLUSIVE:
+        kwargs["start_date"] = start.isoformat()
+        kwargs["end_date"] = end.isoformat()
+        return kwargs
+    raise ValueError(
+        f"{spider_name} does not support scheduled date windows. "
+        "Use date_mode=none and provide its source-specific parameters instead."
+    )
+
+
+def scheduled_spider_date_semantics(spider_name: str) -> str:
+    if spider_name == "elecheck_clear_price":
+        return DATE_SEMANTICS_INCLUSIVE_DAILY
+    if spider_name.startswith("entsoe_"):
+        return DATE_SEMANTICS_EXCLUSIVE
+    if spider_name.startswith("elexon_"):
+        config = get_elexon_request_config(spider_name)
+        if config.get("time_mode") == "snapshot":
+            return DATE_SEMANTICS_NONE
+        return DATE_SEMANTICS_EXCLUSIVE
+    return DATE_SEMANTICS_NONE
+
+
 def build_windows_task_command(job: ScheduledJobRow) -> list[str]:
     task_name = job.windows_task_name or default_windows_task_name(job)
     return [
@@ -413,7 +480,14 @@ def uninstall_windows_task(job_id: int) -> str:
 def runtime_invocation(job_id: int) -> list[str]:
     if getattr(sys, "frozen", False):
         return [sys.executable, "--headless", "schedule-run", str(job_id)]
-    return [sys.executable, "-m", "powertrade_crawler.cli", "schedule-run", str(job_id)]
+    launcher_path = project_root() / "desktop_launcher.py"
+    return [
+        sys.executable,
+        str(launcher_path),
+        "--headless",
+        "schedule-run",
+        str(job_id),
+    ]
 
 
 def default_windows_task_name(job: ScheduledJobRow) -> str:
@@ -431,12 +505,15 @@ def validate_job_fields(
     start_date: date | None,
     end_date: date | None,
 ) -> None:
+    normalized_spider_name = spider_name.strip() if spider_name else ""
     if not name.strip():
         raise ValueError("Scheduled job name cannot be empty.")
     if job_type not in VALID_JOB_TYPES:
         raise ValueError(f"Unsupported job type: {job_type}.")
-    if job_type == "crawl" and not spider_name:
+    if job_type == "crawl" and not normalized_spider_name:
         raise ValueError("crawl jobs require spider_name.")
+    if job_type == "crawl" and normalized_spider_name not in set(list_spiders()):
+        raise ValueError(f"Unknown spider: {normalized_spider_name}.")
     if schedule_kind not in VALID_SCHEDULE_KINDS:
         raise ValueError(f"Unsupported schedule kind: {schedule_kind}.")
     if not re.fullmatch(r"[0-2][0-9]:[0-5][0-9]", schedule_time):
@@ -446,6 +523,15 @@ def validate_job_fields(
         raise ValueError("schedule_time hour must be between 00 and 23.")
     if date_mode not in VALID_DATE_MODES:
         raise ValueError(f"Unsupported date mode: {date_mode}.")
+    if (
+        job_type == "crawl"
+        and date_mode != "none"
+        and scheduled_spider_date_semantics(normalized_spider_name) == DATE_SEMANTICS_NONE
+    ):
+        raise ValueError(
+            f"{normalized_spider_name} does not support scheduled date windows. "
+            "Use date_mode=none and provide its source-specific parameters instead."
+        )
     if date_mode == "custom" and (start_date is None or end_date is None):
         raise ValueError("custom date mode requires start_date and end_date.")
     if start_date is not None and end_date is not None and end_date <= start_date:

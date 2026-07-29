@@ -148,6 +148,17 @@ def test_csv_and_png_exports_keep_missing_values_empty(tmp_path: Path):
     assert rows[-1]["时点"] == "24:00"
     assert rows[-1]["价差"] == "-20.0"
 
+    day_ahead_path = tmp_path / "day-ahead.csv"
+    assert export_elecheck_intraday_csv(
+        day_ahead_path,
+        data,
+        series="day_ahead",
+    ) == 2
+    with day_ahead_path.open(newline="", encoding="utf-8-sig") as file:
+        day_ahead_rows = list(csv.DictReader(file))
+    assert list(day_ahead_rows[0]) == ["日期", "地区", "时点", "日前价格", "单位"]
+    assert all("实时价格" not in row and "价差" not in row for row in day_ahead_rows)
+
     figure = Figure(figsize=(8, 6), layout="constrained")
     hover_series = draw_elecheck_price_figure(figure, data)
     png_path = tmp_path / "chart.png"

@@ -997,6 +997,8 @@ Week 9 strengthened the Elexon integration with seven additional GB query entrie
 - 新增日维度指标表 `dashboard_daily_metrics`，从 `market_records`、`entsoe_records`、`elexon_records`、`gridstatus_records`、`elecheck_clear_price_records` 汇总价格、负荷、发电、潮流等数值。
 - 新增本地任务表 `scheduled_jobs` 和运行日志表 `scheduled_job_runs`。任务配置不保存 token，采集时仍读取 `.auth/credentials.json`。
 - 打包版 `PowertradeCrawler.exe` 支持 `--headless schedule-run JOB_ID`，用于 Windows 任务计划程序。
+- 定时采集的日期参数按 spider 语义适配：ENTSO-E 和非快照 Elexon 使用半开日期区间；Elecheck 现货转换为逐日、结束日包含的请求；其他不支持日期窗口的 spider 必须使用 `date_mode=none`。
+- `schedule-run` 失败时返回非零进程退出码；源码模式 Windows 任务通过 `desktop_launcher.py --headless` 启动以固定项目工作目录；删除本地任务会先同步卸载已安装的 Windows 任务，卸载失败则保留本地定义。
 
 常用命令：
 
@@ -1031,9 +1033,51 @@ packaged exe headless smoke: exit code 0
 packaged exe GUI process smoke: passed
 ```
 
+2026-07-22 提交后调度修复验证：`ruff check src tests scripts` 通过，`pytest -q` 为
+`106 passed`。修复覆盖失败退出码、源码模式工作目录、按 spider 适配日期窗口，以及删除
+本地任务时同步卸载 Windows 任务。
+
 English:
 
 Week 10 adds local dashboarding, daily metric aggregation, and scheduled jobs for existing data sources. No new ENTSO-E datasets or external APIs were added. The packaged executable can run scheduled jobs in headless mode for Windows Task Scheduler.
+
+### 15.5 2026-07-27 第十一周 Elecheck 分析 Agent / Week 11 Elecheck Agent
+
+第十一周新增 `src/powertrade_crawler/agent/` 自研单 Agent 框架，不使用 OpenAI SDK 或
+Agent SDK。Provider 通过 `httpx` 调用硅基流动 OpenAI 兼容接口，支持原生
+Function Calling 与严格 JSON Action 降级，并通过 Pydantic、SQLite 和统一工具注册表
+实现结构化答案、持久会话、阶段事件、分级审批、参数摘要失效和重复执行防护。
+
+Elecheck 内新增 `智能 Agent` GUI 子页，CLI 入口为 `powertrade agent`。只读分析与
+预设目录导出可自动执行；采集和 Elecheck 调度变更需要审批；Windows 计划任务安装/
+卸载需要强化审批。Agent 不拥有删除、任意 SQL、Shell、任意文件、数据库维护、凭据
+修改或跨数据源能力。
+
+Agent 现货写工具同时支持单地区最多 31 天采集，以及普通审批后的“更新全部数据”。
+后者与 GUI 按钮共用目标生成规则：从各地区已采最新日期往前一天开始更新到指定结束
+日期，模型不能提供或篡改地区列表。今天/昨天/前天的未指定地区更新请求使用本地
+确定性路由直接进入全部更新审批，避免依赖模型工具选择。
+
+`elecheck_update_all_spot` 在 Agent GUI 中使用独立进度对话框显示当前地区、逐日请求
+进度、抓取条数和写入条数；“结束并保存”在当前逐日请求落库后停止剩余请求。
+
+凭据槽位为 `siliconflow_api_key`，同时兼容已有文件中的 `SILICONFLOW_API_KEY`；
+具体值绝不能进入 SQLite、提示词、日志、任务参数、评测报告或 Git。默认模型配置提供
+可切换的 Qwen 免费档位和 DeepSeek advanced 档位，模型 ID 仍可运行时修改。
+
+验证记录：
+
+```text
+offline Agent eval: 9/9 passed
+live SiliconFlow eval: 12/12 passed
+tool selection / parameter validation / approval boundary: 100%
+pytest: 131 passed
+ruff and compileall: passed
+```
+
+完整说明见 `docs/AGENT_MVP_GUIDE.md`，安全审查与威胁模型见
+`docs/AGENT_SECURITY_REVIEW.md` 和 `docs/AGENT_THREAT_MODEL.md`，
+在线脱敏报告见 `docs/AGENT_LIVE_EVAL_RESULT.json`。
 
 ## 16. ENTSO-E 参数、时间与区域语义 / Parameter, Time, and Area Semantics
 

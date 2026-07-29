@@ -9,6 +9,7 @@ CredentialName = Literal[
     "elecheck_authorization",
     "entsoe_security_token",
     "elexon_api_key",
+    "siliconflow_api_key",
 ]
 
 CREDENTIAL_NAMES: tuple[CredentialName, ...] = (
@@ -16,8 +17,12 @@ CREDENTIAL_NAMES: tuple[CredentialName, ...] = (
     "elecheck_authorization",
     "entsoe_security_token",
     "elexon_api_key",
+    "siliconflow_api_key",
 )
 _PROCESS_CREDENTIALS: dict[CredentialName, str] = {}
+_FILE_KEY_ALIASES: dict[CredentialName, tuple[str, ...]] = {
+    "siliconflow_api_key": ("siliconflow_api_key", "SILICONFLOW_API_KEY"),
+}
 
 
 def get_project_root() -> Path:
@@ -44,11 +49,13 @@ def read_credentials(path: Path | None = None) -> dict[str, str]:
         return {}
     if not isinstance(payload, dict):
         return {}
-    return {
-        name: str(payload[name]).strip()
-        for name in CREDENTIAL_NAMES
-        if payload.get(name)
-    }
+    credentials: dict[str, str] = {}
+    for name in CREDENTIAL_NAMES:
+        candidate_keys = _FILE_KEY_ALIASES.get(name, (name,))
+        value = next((payload.get(key) for key in candidate_keys if payload.get(key)), None)
+        if value:
+            credentials[name] = str(value).strip()
+    return credentials
 
 
 def get_credential(
@@ -75,6 +82,10 @@ def save_credential(
     credentials = read_credentials(credential_path)
     credentials[name] = normalized
     credential_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        credential_path.parent.chmod(0o700)
+    except OSError:
+        pass
     credential_path.write_text(
         json.dumps(
             {key: credentials.get(key, "") for key in CREDENTIAL_NAMES},
@@ -84,6 +95,10 @@ def save_credential(
         + "\n",
         encoding="utf-8",
     )
+    try:
+        credential_path.chmod(0o600)
+    except OSError:
+        pass
     return credential_path
 
 

@@ -50,6 +50,9 @@ from powertrade_crawler.elecheck_business_dashboard import (
     ElecheckMechanismDashboardApp,
     ElecheckPurchasingDashboardApp,
 )
+from powertrade_crawler.elecheck_collection import (
+    build_clear_price_full_coverage_targets as build_shared_clear_price_targets,
+)
 from powertrade_crawler.elecheck_dashboard import ElecheckPriceDashboardApp
 from powertrade_crawler.spiders.elecheck import (
     ElecheckClearPriceSpider,
@@ -2219,6 +2222,7 @@ class ElecheckDataApp:
         self.clear_price_dashboard: ElecheckPriceDashboardApp | None = None
         self.purchasing_dashboard: ElecheckPurchasingDashboardApp | None = None
         self.mechanism_dashboard: ElecheckMechanismDashboardApp | None = None
+        self.agent_app = None
 
         self.purchasing_month_var = StringVar()
         self.purchasing_province_var = StringVar()
@@ -2261,6 +2265,12 @@ class ElecheckDataApp:
     def build_layout(self) -> None:
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill=BOTH, expand=True, padx=8, pady=8)
+
+        from powertrade_crawler.agent.gui import ElecheckAgentApp
+
+        agent_frame = ttk.Frame(notebook)
+        notebook.add(agent_frame, text="智能 Agent")
+        self.agent_app = ElecheckAgentApp(agent_frame)
 
         dashboard_frame = ttk.Frame(notebook)
         notebook.add(dashboard_frame, text="现货价格分析")
@@ -2868,51 +2878,11 @@ class ElecheckDataApp:
         *,
         latest_dates: dict[str, str] | None = None,
     ) -> list[dict[str, str]]:
-        date.fromisoformat(end_date)
-        areas = self.repository.clear_price_area_targets()
-        if not areas:
-            raise ValueError("没有可采集的地区。请先运行 powertrade init-db。")
-
-        latest_dates = latest_dates or {}
-        targets = []
-        missing_earliest = []
-        skipped_after_end = []
-        for area in areas:
-            area_name = str(area["area_name"])
-            area_code = str(area["area_code"])
-            earliest_date = area["earliest_clear_price_date"]
-            if not earliest_date:
-                missing_earliest.append(f"{area_name}({area_code})")
-                continue
-            if area_code in latest_dates:
-                target_start = date.fromisoformat(latest_dates[area_code]) - timedelta(days=1)
-                earliest = date.fromisoformat(str(earliest_date))
-                if target_start < earliest:
-                    target_start = earliest
-                target_start_date = target_start.isoformat()
-            else:
-                target_start_date = str(earliest_date)
-            if date.fromisoformat(target_start_date) > date.fromisoformat(end_date):
-                skipped_after_end.append(f"{area_name}({area_code})")
-                continue
-            targets.append(
-                {
-                    "area_name": area_name,
-                    "area_code": area_code,
-                    "start_date": target_start_date,
-                    "end_date": end_date,
-                }
-            )
-
-        if missing_earliest:
-            preview = "、".join(missing_earliest[:8])
-            suffix = "..." if len(missing_earliest) > 8 else ""
-            raise ValueError(f"以下地区缺少最早可用日期，无法全覆盖采集：{preview}{suffix}")
-        if not targets:
-            preview = "、".join(skipped_after_end[:8])
-            suffix = "..." if len(skipped_after_end) > 8 else ""
-            raise ValueError(f"没有可采集的地区。以下地区最早可用日期晚于结束日期：{preview}{suffix}")
-        return targets
+        return build_shared_clear_price_targets(
+            self.repository.db_path,
+            end_date,
+            latest_dates=latest_dates,
+        )
 
     def show_clear_price_crawl_dialog(
         self,

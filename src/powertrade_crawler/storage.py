@@ -392,6 +392,87 @@ class ScheduledJobRunRow(Base):
     output_json: Mapped[str] = mapped_column(Text)
 
 
+class AgentSettingRow(Base):
+    __tablename__ = "agent_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    endpoint: Mapped[str] = mapped_column(String(500))
+    model_id: Mapped[str] = mapped_column(String(240))
+    advanced_model_id: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    model_profile: Mapped[str] = mapped_column(String(40), default="free")
+    reasoning_effort: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    protocol: Mapped[str] = mapped_column(String(40), default="auto")
+    detected_protocol: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime)
+
+
+class AgentSessionRow(Base):
+    __tablename__ = "agent_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class AgentMessageRow(Base):
+    __tablename__ = "agent_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    role: Mapped[str] = mapped_column(String(40), index=True)
+    content_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class AgentRunRow(Base):
+    __tablename__ = "agent_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    protocol: Mapped[str] = mapped_column(String(40))
+    model_id: Mapped[str] = mapped_column(String(240))
+    model_calls: Mapped[int] = mapped_column(Integer, default=0)
+    pending_context_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    usage_json: Mapped[str] = mapped_column(Text, default="{}")
+    stop_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class AgentToolCallRow(Base):
+    __tablename__ = "agent_tool_calls"
+
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    tool_name: Mapped[str] = mapped_column(String(160), index=True)
+    risk_level: Mapped[str] = mapped_column(String(40), index=True)
+    arguments_json: Mapped[str] = mapped_column(Text)
+    arguments_hash: Mapped[str] = mapped_column(String(64))
+    approval_status: Mapped[str] = mapped_column(String(40), index=True)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class AgentEventRow(Base):
+    __tablename__ = "agent_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    stage: Mapped[str] = mapped_column(String(60), index=True)
+    detail_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
 DEFAULT_ELECHECK_AREA_RECORDS = [
     ElecheckAreaRecord(
         area_name="山西",

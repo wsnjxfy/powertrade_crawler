@@ -29,7 +29,19 @@ def test_credentials_are_saved_in_one_json_file(tmp_path):
         "elecheck_authorization": "elecheck-token",
         "entsoe_security_token": "entsoe-token",
         "elexon_api_key": "elexon-key",
+        "siliconflow_api_key": "",
     }
+
+
+def test_siliconflow_credential_accepts_uppercase_file_key(tmp_path):
+    path = tmp_path / ".auth" / "credentials.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({"SILICONFLOW_API_KEY": "silicon-key"}),
+        encoding="utf-8",
+    )
+
+    assert get_credential("siliconflow_api_key", path=path) == "silicon-key"
 
 
 def test_process_credential_temporarily_overrides_file(tmp_path):

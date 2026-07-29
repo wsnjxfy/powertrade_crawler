@@ -46,6 +46,7 @@ from powertrade_crawler.scheduler import (
     parse_optional_date,
     parse_params_json,
     run_scheduled_job,
+    scheduled_run_exit_code,
     set_scheduled_job_enabled,
     uninstall_windows_task,
 )
@@ -76,8 +77,10 @@ from powertrade_crawler.storage import (
     upsert_gzpec_news_records,
     upsert_records,
 )
+from powertrade_crawler.agent.cli import agent_app
 
 app = typer.Typer(help="Power trading data crawler.")
+app.add_typer(agent_app, name="agent")
 
 ELECHECK_SPIDERS = {
     "elecheck_clear_price",
@@ -100,6 +103,7 @@ CREDENTIAL_ALIASES = {
     "elecheck": "elecheck_authorization",
     "entsoe": "entsoe_security_token",
     "elexon": "elexon_api_key",
+    "siliconflow": "siliconflow_api_key",
 }
 
 
@@ -475,6 +479,9 @@ def schedule_run(
         f"Job {result['job_id']} run {result['run_id']}: {result['status']} - "
         f"{result['message']}"
     )
+    exit_code = scheduled_run_exit_code(result["status"])
+    if exit_code:
+        raise typer.Exit(code=exit_code)
 
 
 @app.command("schedule-enable")
@@ -499,11 +506,11 @@ def schedule_disable(
 def schedule_delete(
     job_id: Annotated[int, typer.Argument(help="Scheduled job id.")],
 ) -> None:
-    """Delete a local scheduled job definition."""
+    """Delete a local job and its installed Windows task, if present."""
     init_db()
     try:
-        delete_scheduled_job(job_id)
-    except ValueError as exc:
+        delete_scheduled_job(job_id, remove_windows_task=True)
+    except (RuntimeError, ValueError) as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(f"Deleted scheduled job {job_id}.")
 
@@ -573,7 +580,9 @@ def show_credentials_status() -> None:
 def set_credential(
     name: Annotated[
         str,
-        typer.Argument(help="Credential name: gridstatus, elecheck, entsoe, or elexon."),
+        typer.Argument(
+            help="Credential name: gridstatus, elecheck, entsoe, elexon, or siliconflow."
+        ),
     ],
 ) -> None:
     """Securely save one credential in .auth/credentials.json."""

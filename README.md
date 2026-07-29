@@ -462,6 +462,73 @@ powertrade maintenance-run --analyze --vacuum
 PowertradeCrawler.exe --headless schedule-run 1
 ```
 
+调度日期会按数据源语义转换：ENTSO-E 和非快照 Elexon 使用结束日期不包含的区间；
+Elecheck 现货价格会转换为逐日、结束日期包含的请求，保证结果可直接进入专题看板。
+不支持日期窗口的 spider 必须使用 `date_mode=none`，并通过参数 JSON 提供月份等数据源专用参数。
+失败的 `schedule-run` 会返回非零进程退出码；删除本地任务时，如已安装 Windows 任务，
+会先同步卸载，卸载失败则保留本地任务定义。源码模式的 Windows 任务也统一通过
+`desktop_launcher.py --headless` 启动，确保工作目录指向项目根目录。
+
 定时任务不保存任何 API key 或 token，采集时仍统一读取 `.auth/credentials.json`。
+
+## 11. Elecheck 电力市场分析 Agent MVP
+
+第十一周在项目内自建了轻量单 Agent 框架，不依赖 OpenAI SDK 或任何 Agent SDK。
+模型通过现有 `httpx` 调用硅基流动的 OpenAI 兼容接口；GUI 的
+`Elecheck 易能电易查 -> 智能 Agent` 和 CLI 共用同一套工具注册、参数校验、审批、
+幂等、持久会话和审计逻辑。
+
+设置硅基流动凭据并检查运行条件：
+
+```powershell
+powertrade set-credential siliconflow
+powertrade agent config show
+powertrade agent doctor --json
+```
+
+默认保留两个可切换配置：
+
+- 免费档位：`Qwen/Qwen2.5-7B-Instruct`
+- 高质量档位：`deepseek-ai/DeepSeek-V4-Flash`
+
+模型 ID、Endpoint、档位和工具协议都可修改，不依赖固定免费模型：
+
+```powershell
+powertrade agent config set --profile free
+powertrade agent config set --profile advanced --reasoning-effort high
+```
+
+常用 Agent 命令：
+
+```powershell
+powertrade agent chat --message "分析江苏最新可用日的现货价格"
+powertrade agent chat --message "帮我把 Elecheck 现货数据更新到今天"
+powertrade agent sessions list
+powertrade agent approvals list
+powertrade agent approvals approve TOOL_CALL_ID
+powertrade agent tools list
+powertrade agent eval --mode offline --json
+powertrade agent eval --mode live --limit 12 --output reports/agent-live-eval.json
+```
+
+只读查询、分析和写入预设目录 `exports/agent/<session>/` 的 CSV/PNG 导出可自动执行。
+采集、创建/运行/启停 Elecheck 定时任务需要用户审批；安装或卸载 Windows 计划任务
+需要二次确认。Agent 提供仅限 Elecheck 业务表的受控只读 SQL 查询，用于最高、最低、
+排名、计数和筛选；查询使用表/字段/函数白名单、只读连接、单语句、超时和 200 行上限。
+月度现货日均价最高/最低日期使用专用统计工具：先计算各地区日均价，再做地区等权平均，
+并返回日期及地区覆盖，避免模型为常见业务问题反复试探 SQL。
+Agent 不拥有 SQL 写入、删除业务数据、删除本地任务、Shell、任意文件访问、数据库维护
+或凭据修改能力。API Key 不进入 SQLite、提示词、任务参数、日志或评测报告。
+
+Agent 执行全部现货更新时会弹出下载进度对话框，按地区和逐日请求显示抓取/写入数量；
+可选择“结束并保存”停止后续请求，已完成的逐日数据会保留。
+
+完整架构、工具清单、审批规则和评测说明见：
+
+```text
+docs/AGENT_MVP_GUIDE.md
+docs/AGENT_SECURITY_REVIEW.md
+docs/AGENT_THREAT_MODEL.md
+```
 
 

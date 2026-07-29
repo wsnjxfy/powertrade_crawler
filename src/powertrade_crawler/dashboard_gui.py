@@ -516,11 +516,17 @@ class ScheduleDataApp:
         job_id = self.selected_job_id()
         if job_id is None:
             return
-        if not messagebox.askyesno("确认删除", f"删除本地任务 {job_id}？"):
+        if not messagebox.askyesno(
+            "确认删除",
+            (
+                f"删除本地任务 {job_id}？\n\n"
+                "如果该任务已安装到 Windows 任务计划程序，将同时卸载。"
+            ),
+        ):
             return
         try:
-            delete_scheduled_job(job_id)
-        except ValueError as exc:
+            delete_scheduled_job(job_id, remove_windows_task=True)
+        except (RuntimeError, ValueError) as exc:
             messagebox.showerror("删除任务失败", str(exc))
             return
         self.summary_var.set(f"已删除任务 {job_id}。")

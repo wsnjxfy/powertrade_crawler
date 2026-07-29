@@ -7,11 +7,14 @@ a = Analysis(
     binaries=[],
     datas=[
         ('configs', 'configs'),
+        ('src/powertrade_crawler/agent/data', 'powertrade_crawler/agent/data'),
         ('.env.example', '.'),
         ('EXE_README.txt', '.'),
     ],
     hiddenimports=[
         'powertrade_crawler.gui',
+        'powertrade_crawler.agent.gui',
+        'powertrade_crawler.agent.evaluation',
         'matplotlib.backends.backend_tkagg',
     ],
     hookspath=[],
