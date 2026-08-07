@@ -14,8 +14,9 @@ src/powertrade_crawler/agent/
 
 主要模块：
 
-- `provider.py`：`LLMProvider` 抽象、基于 `httpx` 的 `SiliconFlowProvider` 和测试用
+- `provider.py`：`LLMProvider` 抽象、基于 `httpx` 的 `FreeLLMRouterProvider` 和测试用
   `FakeProvider`。
+- `../llm_router.py`：项目外客户端配置加载、路由器启动、免费渠道/告警查询和策略校验。
 - `tools.py`：Pydantic 参数模型、JSON Schema、工具注册和统一执行入口。
 - `elecheck_tools.py`：Elecheck 分析、导出、采集和调度 allowlist。
 - `loop.py`：最多 8 轮的模型调用、工具选择、审批暂停/恢复、幂等执行和结构化答案。
@@ -28,12 +29,12 @@ src/powertrade_crawler/agent/
 默认 Endpoint：
 
 ```text
-https://api.siliconflow.cn/v1
+http://127.0.0.1:8317/v1
 ```
 
-模型配置保存在 `agent_settings`，不包含 API Key。默认提供免费 Qwen 和高质量 DeepSeek
-两个可修改的模型 ID。DeepSeek advanced 档位支持发送 `reasoning_effort`，但隐藏推理
-不会显示或写入日志。
+模型策略保存在 `agent_settings`，不包含 API Key。默认 `smart-auto` 只在免费池中自动
+选择；也可以固定到 `/v1/providers` 中 `tier=free` 且 `available=true` 的
+`provider/<渠道ID>`。全部免费渠道不可用时明确失败，不回退付费接口。
 
 运行时优先探测原生 `tool_calls`。不稳定或不支持时，可切换严格 JSON Action：
 
@@ -59,23 +60,25 @@ https://api.siliconflow.cn/v1
 
 ## 3. 凭据配置
 
-推荐使用隐藏输入命令：
+免费池客户端配置位于项目外：
 
-```powershell
-powertrade set-credential siliconflow
+```text
+%USERPROFILE%\.config\llm-router\client-free.env
 ```
 
-统一凭据层同时兼容 `.auth/credentials.json` 中的标准键
-`siliconflow_api_key` 和已有的大写键 `SILICONFLOW_API_KEY`。状态检查只输出
-configured/missing：
+运行时从该文件读取 OpenAI 兼容 Endpoint、`smart-auto` 和本地免费池 Key。项目内只允许
+通过 `LLM_ROUTER_CLIENT_ENV` 配置另一个外部文件路径，不保存密钥。状态和策略检查：
 
 ```powershell
-powertrade credentials-status
 powertrade agent doctor --json
+powertrade agent config providers
+powertrade agent config alerts
+powertrade agent config strategy
 ```
 
-API Key 只在 Provider 构造 HTTP Authorization 请求头时读取。它不会进入提示词、
-SQLite、定时任务参数、事件、日志、异常详情或评测报告。
+本地免费池 Key 只在 Provider 构造 HTTP Authorization 请求头时读取。它不会进入提示词、
+SQLite、定时任务参数、事件、日志、异常详情或评测报告。运行审计只保存响应头中非敏感的
+实际渠道、上游模型和告警数量。
 
 ## 4. 工具和审批
 

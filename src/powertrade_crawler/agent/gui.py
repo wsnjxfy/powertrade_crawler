@@ -31,12 +31,16 @@ from powertrade_crawler.agent.schemas import (
     RiskLevel,
     RunStatus,
 )
-from powertrade_crawler.credentials import save_credential
+from powertrade_crawler.llm_router import (
+    DEFAULT_MODEL_STRATEGY,
+    FreeRouterManagementClient,
+)
 
 
 STAGE_LABELS = {
     "model_request": "请求模型",
     "model_retry": "模型超时重试",
+    "model_completed": "模型响应",
     "intent_routed": "识别明确意图",
     "tool_proposed": "提出工具",
     "approval_required": "等待审批",
@@ -1139,6 +1143,12 @@ class ElecheckAgentApp:
             return f"{detail['code']}: {detail.get('message', '')}"
         if "call_number" in detail:
             return f"第 {detail['call_number']} 次"
+        if "router_provider" in detail:
+            return (
+                f"渠道={detail.get('router_provider') or '未返回'}；"
+                f"模型={detail.get('upstream_model') or '未返回'}；"
+                f"告警={detail.get('router_alert_count', '未知')}"
+            )
         return json.dumps(detail, ensure_ascii=False)[:200]
 
     @staticmethod
@@ -1166,66 +1176,62 @@ class AgentSettingsDialog:
         self.dialog.grab_set()
         self.endpoint_var = StringVar(value=config["endpoint"])
         self.model_var = StringVar(value=config["model_id"])
-        self.advanced_model_var = StringVar(value=config["advanced_model_id"] or "")
-        self.profile_var = StringVar(value=config["model_profile"])
         self.protocol_var = StringVar(value=config["protocol"])
-        self.reasoning_var = StringVar(value=config["reasoning_effort"] or "high")
-        self.key_var = StringVar()
+        self.status_var = StringVar(value="正在读取免费渠道和告警…")
         self._build()
+        self.refresh_channels()
 
     def _build(self) -> None:
         frame = ttk.Frame(self.dialog, padding=12)
         frame.pack(fill=BOTH, expand=True)
-        rows = [
-            ("API Key（留空不修改）", self.key_var, True),
-            ("Endpoint", self.endpoint_var, False),
-            ("免费模型 ID", self.model_var, False),
-            ("高质量模型 ID", self.advanced_model_var, False),
-        ]
-        for index, (label, variable, secret) in enumerate(rows):
-            ttk.Label(frame, text=label).grid(row=index, column=0, sticky="w", pady=4)
-            ttk.Entry(
-                frame,
-                textvariable=variable,
-                width=58,
-                show="*" if secret else "",
-            ).grid(row=index, column=1, sticky="ew", pady=4)
-
-        ttk.Label(frame, text="模型档位").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Combobox(
+        ttk.Label(frame, text="Endpoint").grid(row=0, column=0, sticky="w", pady=4)
+        ttk.Entry(
             frame,
-            textvariable=self.profile_var,
-            values=("free", "advanced"),
+            textvariable=self.endpoint_var,
             state="readonly",
-        ).grid(row=4, column=1, sticky="ew", pady=4)
-        ttk.Label(frame, text="工具协议").grid(row=5, column=0, sticky="w", pady=4)
+            width=58,
+        ).grid(row=0, column=1, sticky="ew", pady=4)
+        ttk.Label(frame, text="免费模型策略").grid(
+            row=1, column=0, sticky="w", pady=4
+        )
+        self.model_combo = ttk.Combobox(
+            frame,
+            textvariable=self.model_var,
+            values=(DEFAULT_MODEL_STRATEGY, self.model_var.get()),
+            state="readonly",
+        )
+        self.model_combo.grid(row=1, column=1, sticky="ew", pady=4)
+        ttk.Label(frame, text="工具协议").grid(row=2, column=0, sticky="w", pady=4)
         ttk.Combobox(
             frame,
             textvariable=self.protocol_var,
             values=("auto", "native", "json"),
             state="readonly",
-        ).grid(row=5, column=1, sticky="ew", pady=4)
-        ttk.Label(frame, text="高级推理强度").grid(row=6, column=0, sticky="w", pady=4)
-        ttk.Combobox(
-            frame,
-            textvariable=self.reasoning_var,
-            values=("low", "medium", "high"),
-            state="readonly",
-        ).grid(row=6, column=1, sticky="ew", pady=4)
+        ).grid(row=2, column=1, sticky="ew", pady=4)
 
         note = (
-            "API Key 仅写入 .auth/credentials.json，不写入数据库、提示词或日志。\n"
-            "默认免费模型为 Qwen；advanced 档位使用 DeepSeek，隐藏推理不会显示。"
+            "密钥运行时只从项目外 client-free.env 读取，不在此显示或保存。\n"
+            "smart-auto 只使用免费渠道；固定渠道仅允许 tier=free 且 available=true。"
         )
         ttk.Label(frame, text=note, foreground="#555555").grid(
-            row=7,
+            row=3,
             column=0,
             columnspan=2,
             sticky="w",
             pady=(8, 4),
         )
+        ttk.Label(frame, textvariable=self.status_var, foreground="#555555").grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            pady=(2, 4),
+        )
         buttons = ttk.Frame(frame)
-        buttons.grid(row=8, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        buttons.grid(row=5, column=0, columnspan=2, sticky="e", pady=(8, 0))
+        ttk.Button(buttons, text="刷新渠道", command=self.refresh_channels).pack(
+            side=LEFT, padx=4
+        )
         ttk.Button(buttons, text="保存", command=self.save).pack(side=LEFT)
         ttk.Button(buttons, text="保存并测试", command=self.save_and_test).pack(
             side=LEFT, padx=4
@@ -1233,21 +1239,45 @@ class AgentSettingsDialog:
         ttk.Button(buttons, text="关闭", command=self.dialog.destroy).pack(side=LEFT)
         frame.columnconfigure(1, weight=1)
 
+    def refresh_channels(self) -> None:
+        self.status_var.set("正在读取免费渠道和告警…")
+
+        def worker() -> None:
+            try:
+                with FreeRouterManagementClient.from_external_config() as router:
+                    providers = router.list_providers()
+                    alerts = router.list_alerts()
+                strategies = [
+                    str(row["directModel"])
+                    for row in providers
+                    if row.get("tier") == "free"
+                    and row.get("available") is True
+                    and row.get("directModel")
+                ]
+                values = tuple(dict.fromkeys([DEFAULT_MODEL_STRATEGY, *strategies]))
+                status = f"可用免费渠道 {len(strategies)} 个；当前告警 {len(alerts)} 条。"
+            except Exception as exc:
+                values = (DEFAULT_MODEL_STRATEGY, self.model_var.get())
+                status = f"免费池状态读取失败：{exc}"
+
+            def apply_result() -> None:
+                if self.dialog.winfo_exists():
+                    self.model_combo.configure(values=values)
+                    self.status_var.set(status)
+
+            self.dialog.after(0, apply_result)
+
+        threading.Thread(target=worker, daemon=True).start()
+
     def save(self, *, close: bool = True) -> bool:
         try:
-            key = self.key_var.get().strip()
-            if key:
-                save_credential("siliconflow_api_key", key)
-                self.key_var.set("")
             self.repository.set_config(
                 endpoint=self.endpoint_var.get(),
                 model_id=self.model_var.get(),
-                advanced_model_id=self.advanced_model_var.get(),
-                model_profile=self.profile_var.get(),
+                model_profile="free",
                 protocol=self.protocol_var.get(),
-                reasoning_effort=self.reasoning_var.get(),
             )
-        except ValueError as exc:
+        except Exception as exc:
             messagebox.showerror("设置无效", str(exc), parent=self.dialog)
             return False
         if close:
@@ -1293,7 +1323,16 @@ class AgentSettingsDialog:
             detected = "native" if response.tool_calls else "json"
             self.repository.set_config(detected_protocol=detected)
             self.result_queue.put(
-                ("connection", (True, f"连接成功；检测协议：{detected}"))
+                (
+                    "connection",
+                    (
+                        True,
+                        f"连接成功；协议：{detected}；命中渠道："
+                        f"{response.router_provider or '未返回'}；上游模型："
+                        f"{response.upstream_model or '未返回'}；告警："
+                        f"{response.router_alert_count if response.router_alert_count is not None else '未知'}",
+                    ),
+                )
             )
         except Exception as exc:
             self.result_queue.put(("connection", (False, str(exc))))

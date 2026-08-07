@@ -29,6 +29,7 @@ powertrade = "powertrade_crawler.cli:app"
 
 [tool.setuptools.package-data]
 "powertrade_crawler.agent" = ["data/*.json"]
+"powertrade_crawler.market_agent" = ["data/*.json"]
 
 [tool.ruff]
 line-length = 100

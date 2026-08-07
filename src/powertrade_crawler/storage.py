@@ -439,6 +439,9 @@ class AgentRunRow(Base):
     answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     usage_json: Mapped[str] = mapped_column(Text, default="{}")
+    router_provider: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    upstream_model: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    router_alert_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stop_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
     updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
@@ -464,6 +467,90 @@ class AgentToolCallRow(Base):
 
 class AgentEventRow(Base):
     __tablename__ = "agent_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    stage: Mapped[str] = mapped_column(String(60), index=True)
+    detail_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class MarketAgentSettingRow(Base):
+    __tablename__ = "market_agent_settings"
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    endpoint: Mapped[str] = mapped_column(String(500))
+    model_id: Mapped[str] = mapped_column(String(240))
+    advanced_model_id: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    model_profile: Mapped[str] = mapped_column(String(40), default="free")
+    reasoning_effort: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    protocol: Mapped[str] = mapped_column(String(40), default="auto")
+    detected_protocol: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime)
+
+
+class MarketAgentSessionRow(Base):
+    __tablename__ = "market_agent_sessions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    title: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class MarketAgentMessageRow(Base):
+    __tablename__ = "market_agent_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    role: Mapped[str] = mapped_column(String(40), index=True)
+    content_json: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class MarketAgentRunRow(Base):
+    __tablename__ = "market_agent_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    protocol: Mapped[str] = mapped_column(String(40))
+    model_id: Mapped[str] = mapped_column(String(240))
+    model_calls: Mapped[int] = mapped_column(Integer, default=0)
+    pending_context_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    answer_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    usage_json: Mapped[str] = mapped_column(Text, default="{}")
+    router_provider: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    upstream_model: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    router_alert_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stop_requested: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class MarketAgentToolCallRow(Base):
+    __tablename__ = "market_agent_tool_calls"
+
+    id: Mapped[str] = mapped_column(String(160), primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), index=True)
+    session_id: Mapped[str] = mapped_column(String(36), index=True)
+    tool_name: Mapped[str] = mapped_column(String(160), index=True)
+    risk_level: Mapped[str] = mapped_column(String(40), index=True)
+    arguments_json: Mapped[str] = mapped_column(Text)
+    arguments_hash: Mapped[str] = mapped_column(String(64))
+    approval_status: Mapped[str] = mapped_column(String(40), index=True)
+    status: Mapped[str] = mapped_column(String(40), index=True)
+    result_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+    updated_at: Mapped[DateTime] = mapped_column(DateTime, index=True)
+
+
+class MarketAgentEventRow(Base):
+    __tablename__ = "market_agent_events"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     run_id: Mapped[str] = mapped_column(String(36), index=True)
@@ -710,7 +797,33 @@ def init_db() -> None:
     add_gridstatus_description_chinese_column_if_missing(engine)
     add_elecheck_area_earliest_clear_price_date_column_if_missing(engine)
     add_elecheck_clear_price_chart_index_if_missing(engine)
+    add_agent_router_metadata_columns_if_missing(engine)
     upsert_elecheck_area_records(DEFAULT_ELECHECK_AREA_RECORDS)
+
+
+def add_agent_router_metadata_columns_if_missing(engine) -> None:
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    definitions = {
+        "router_provider": "VARCHAR(160)",
+        "upstream_model": "VARCHAR(240)",
+        "router_alert_count": "INTEGER",
+    }
+    with engine.begin() as connection:
+        for table_name in ("agent_runs", "market_agent_runs"):
+            if table_name not in existing_tables:
+                continue
+            existing_columns = {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            for column_name, sql_type in definitions.items():
+                if column_name not in existing_columns:
+                    connection.execute(
+                        text(
+                            f"ALTER TABLE {table_name} "
+                            f"ADD COLUMN {column_name} {sql_type}"
+                        )
+                    )
 
 
 def drop_redundant_gzpec_tables_if_exists(engine) -> None:

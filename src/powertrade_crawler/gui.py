@@ -5553,6 +5553,8 @@ class ElexonDataApp:
 
 
 def launch_gui() -> None:
+    from powertrade_crawler.market_agent.gui import MarketAgentApp
+
     db_path = prepare_gui_database()
     root = Tk()
     root.title("Powertrade Crawler 数据浏览器")
@@ -5571,11 +5573,13 @@ def launch_gui() -> None:
     elecheck_tab = ttk.Frame(notebook)
     entsoe_tab = ttk.Frame(notebook)
     elexon_tab = ttk.Frame(notebook)
+    market_agent_tab = ttk.Frame(notebook)
     schedule_tab = ttk.Frame(notebook)
     notebook.add(gridstatus_tab, text="GridStatus")
     notebook.add(elecheck_tab, text="Elecheck 易能电易查")
     notebook.add(entsoe_tab, text="ENTSO-E 欧洲")
     notebook.add(elexon_tab, text="Elexon 英国")
+    notebook.add(market_agent_tab, text="多数据源 Agent")
     notebook.add(schedule_tab, text="定时任务/数据维护")
 
     GridStatusMetadataApp(
@@ -5586,5 +5590,6 @@ def launch_gui() -> None:
     ElecheckDataApp(elecheck_tab, ElecheckDataRepository(db_path))
     EntsoeDataApp(entsoe_tab, EntsoeDataRepository(db_path))
     ElexonDataApp(elexon_tab, ElexonDataRepository(db_path))
+    MarketAgentApp(market_agent_tab)
     ScheduleDataApp(schedule_tab)
     root.mainloop()

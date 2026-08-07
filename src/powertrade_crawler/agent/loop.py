@@ -22,11 +22,11 @@ from powertrade_crawler.agent.prompts import (
     native_system_prompt,
 )
 from powertrade_crawler.agent.provider import (
+    FreeLLMRouterProvider,
     LLMProvider,
     ProviderError,
     ProviderProtocolError,
     ProviderTimeoutError,
-    SiliconFlowProvider,
 )
 from powertrade_crawler.agent.repository import AgentRepository
 from powertrade_crawler.agent.schemas import (
@@ -44,8 +44,11 @@ from powertrade_crawler.agent.schemas import (
 )
 from powertrade_crawler.agent.security import arguments_hash, redact_text, redact_value
 from powertrade_crawler.agent.tools import ToolContext, ToolRegistry
-from powertrade_crawler.credentials import get_credential
 from powertrade_crawler.elecheck_collection import clear_price_area_targets
+from powertrade_crawler.llm_router import (
+    FreeRouterManagementClient,
+    load_free_router_config,
+)
 
 
 MAX_MODEL_CALLS = 8
@@ -55,29 +58,26 @@ EventCallback = Callable[[dict[str, Any]], None]
 
 def build_configured_provider(
     repository: AgentRepository,
-) -> tuple[SiliconFlowProvider, dict[str, Any]]:
+) -> tuple[FreeLLMRouterProvider, dict[str, Any]]:
     config = repository.get_config()
-    api_key = get_credential("siliconflow_api_key")
-    if not api_key:
-        raise ValueError(
-            "SiliconFlow API Key 未配置。请运行 powertrade set-credential siliconflow。"
-        )
-    profile = config["model_profile"]
-    model_id = (
-        config["advanced_model_id"] if profile == "advanced" else config["model_id"]
-    )
+    router_config = load_free_router_config()
+    model_id = config["model_id"]
     if not model_id:
         raise ValueError("Agent 模型 ID 未配置。")
-    extra_body = {}
-    if profile == "advanced" and config.get("reasoning_effort"):
-        extra_body["reasoning_effort"] = config["reasoning_effort"]
-    provider = SiliconFlowProvider(
-        api_key=api_key,
+    with FreeRouterManagementClient(router_config) as router:
+        router.ensure_running(start_if_needed=True)
+        strategy = router.ensure_strategy_available(model_id)
+    provider = FreeLLMRouterProvider(
+        api_key=router_config.api_key,
         model_id=model_id,
-        endpoint=config["endpoint"],
-        extra_body=extra_body,
+        endpoint=router_config.api_base,
     )
-    return provider, {**config, "active_model_id": model_id}
+    return provider, {
+        **config,
+        "endpoint": router_config.api_base,
+        "active_model_id": model_id,
+        "router_strategy": strategy,
+    }
 
 
 class AgentLoop:
@@ -91,6 +91,7 @@ class AgentLoop:
         model_id: str = "",
         event_callback: EventCallback | None = None,
         max_model_calls: int = MAX_MODEL_CALLS,
+        close_provider_after_run: bool = False,
     ) -> None:
         self.provider = provider
         self.repository = repository or AgentRepository()
@@ -99,6 +100,7 @@ class AgentLoop:
         self.model_id = model_id
         self.event_callback = event_callback
         self.max_model_calls = max_model_calls
+        self.close_provider_after_run = close_provider_after_run
 
     @classmethod
     def from_config(
@@ -120,9 +122,22 @@ class AgentLoop:
             protocol=configured_protocol,
             model_id=config["active_model_id"],
             event_callback=event_callback,
+            close_provider_after_run=True,
         )
 
     def chat(
+        self,
+        message: str,
+        *,
+        session_id: str | None = None,
+    ) -> AgentRunResult:
+        try:
+            return self._chat(message, session_id=session_id)
+        finally:
+            if self.close_provider_after_run:
+                self.provider.close()
+
+    def _chat(
         self,
         message: str,
         *,
@@ -199,6 +214,13 @@ class AgentLoop:
         )
 
     def resume(self, tool_call_id: str) -> AgentRunResult:
+        try:
+            return self._resume(tool_call_id)
+        finally:
+            if self.close_provider_after_run:
+                self.provider.close()
+
+    def _resume(self, tool_call_id: str) -> AgentRunResult:
         call = self.repository.get_tool_call(tool_call_id)
         run = self.repository.get_run(call["run_id"])
         if run["status"] != RunStatus.AWAITING_APPROVAL.value:
@@ -367,6 +389,22 @@ class AgentLoop:
                 run_id,
                 model_calls=model_calls,
                 usage=usage,
+                router_provider=response.router_provider,
+                upstream_model=response.upstream_model,
+                router_alert_count=response.router_alert_count,
+            )
+            self._event(
+                run_id,
+                session_id,
+                "model_completed",
+                {
+                    "model_calls": model_calls,
+                    "finish_reason": response.finish_reason,
+                    "protocol": protocol.value,
+                    "router_provider": response.router_provider,
+                    "upstream_model": response.upstream_model,
+                    "router_alert_count": response.router_alert_count,
+                },
             )
             if self.repository.is_stopped(run_id):
                 return self._stopped(run_id, session_id, usage)

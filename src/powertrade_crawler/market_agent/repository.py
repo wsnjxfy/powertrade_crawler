@@ -4,10 +4,11 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
+
 from sqlalchemy import desc
 
-from powertrade_crawler.agent.schemas import AgentProtocol, RiskLevel, RunStatus
-from powertrade_crawler.agent.security import arguments_hash, redact_text, redact_value
+from powertrade_crawler.market_agent.schemas import AgentProtocol, RiskLevel, RunStatus
+from powertrade_crawler.market_agent.security import arguments_hash, redact_text, redact_value
 from powertrade_crawler.llm_router import (
     DEFAULT_MODEL_STRATEGY,
     DEFAULT_ROUTER_ENDPOINT,
@@ -17,12 +18,12 @@ from powertrade_crawler.llm_router import (
     validate_router_endpoint,
 )
 from powertrade_crawler.storage import (
-    AgentEventRow,
-    AgentMessageRow,
-    AgentRunRow,
-    AgentSessionRow,
-    AgentSettingRow,
-    AgentToolCallRow,
+    MarketAgentEventRow,
+    MarketAgentMessageRow,
+    MarketAgentRunRow,
+    MarketAgentSessionRow,
+    MarketAgentSettingRow,
+    MarketAgentToolCallRow,
     get_session,
     init_db,
 )
@@ -31,6 +32,8 @@ from powertrade_crawler.storage import (
 DEFAULT_ENDPOINT = DEFAULT_ROUTER_ENDPOINT
 DEFAULT_FREE_MODEL = DEFAULT_MODEL_STRATEGY
 DEFAULT_ADVANCED_MODEL = None
+MAX_CONTEXT_MESSAGES = 20
+MAX_CONTEXT_CHARS = 24_000
 
 
 def utc_now_naive() -> datetime:
@@ -50,13 +53,13 @@ def json_loads(value: str | None, default: Any) -> Any:
         return default
 
 
-class AgentRepository:
+class MarketAgentRepository:
     def __init__(self) -> None:
         init_db()
 
     def get_config(self) -> dict[str, Any]:
         with get_session() as session:
-            row = session.get(AgentSettingRow, 1)
+            row = session.get(MarketAgentSettingRow, 1)
             if row is None:
                 return {
                     "endpoint": DEFAULT_ENDPOINT,
@@ -99,22 +102,18 @@ class AgentRepository:
         detected_protocol: str | None = None,
     ) -> dict[str, Any]:
         current = self.get_config()
-        next_endpoint = validate_router_endpoint(
-            endpoint if endpoint is not None else current["endpoint"]
-        )
-        next_model = validate_model_strategy(
-            model_id if model_id is not None else current["model_id"]
-        )
-        next_advanced_model = None
+        next_endpoint = validate_router_endpoint(endpoint or current["endpoint"])
         next_profile = model_profile or current["model_profile"]
-        next_reasoning_effort = reasoning_effort or current["reasoning_effort"]
-        next_protocol = protocol if protocol is not None else current["protocol"]
-        if next_protocol not in {item.value for item in AgentProtocol}:
-            raise ValueError("protocol must be auto, native, or json.")
+        next_reasoning = reasoning_effort or current["reasoning_effort"]
+        next_protocol = protocol or current["protocol"]
         if next_profile != "free":
             raise ValueError("免费 LLM 网关只支持 free 模型档位。")
-        if next_reasoning_effort not in {None, "low", "medium", "high"}:
+        if next_protocol not in {item.value for item in AgentProtocol}:
+            raise ValueError("protocol must be auto, native, or json.")
+        if next_reasoning not in {"low", "medium", "high"}:
             raise ValueError("reasoning_effort must be low, medium, or high.")
+        next_model = validate_model_strategy(model_id or current["model_id"])
+        next_advanced = None
         if advanced_model_id:
             raise ValueError("请使用 provider/<渠道ID> 指定免费渠道，不再使用 advanced_model_id。")
         if endpoint is not None or model_id is not None:
@@ -125,26 +124,26 @@ class AgentRepository:
                     router.ensure_strategy_available(next_model)
         now = utc_now_naive()
         with get_session() as session:
-            row = session.get(AgentSettingRow, 1)
+            row = session.get(MarketAgentSettingRow, 1)
             if row is None:
-                row = AgentSettingRow(
+                row = MarketAgentSettingRow(
                     id=1,
-                    endpoint=next_endpoint.rstrip("/"),
+                    endpoint=next_endpoint,
                     model_id=next_model,
-                    advanced_model_id=next_advanced_model,
+                    advanced_model_id=next_advanced,
                     model_profile=next_profile,
-                    reasoning_effort=next_reasoning_effort,
+                    reasoning_effort=next_reasoning,
                     protocol=next_protocol,
                     detected_protocol=detected_protocol,
                     updated_at=now,
                 )
                 session.add(row)
             else:
-                row.endpoint = next_endpoint.rstrip("/")
+                row.endpoint = next_endpoint
                 row.model_id = next_model
-                row.advanced_model_id = next_advanced_model
+                row.advanced_model_id = next_advanced
                 row.model_profile = next_profile
-                row.reasoning_effort = next_reasoning_effort
+                row.reasoning_effort = next_reasoning
                 row.protocol = next_protocol
                 if detected_protocol is not None:
                     row.detected_protocol = detected_protocol
@@ -157,7 +156,7 @@ class AgentRepository:
         now = utc_now_naive()
         with get_session() as session:
             session.add(
-                AgentSessionRow(
+                MarketAgentSessionRow(
                     id=session_id,
                     title=(title.strip() or "新会话")[:200],
                     created_at=now,
@@ -171,16 +170,15 @@ class AgentRepository:
         if not session_id:
             return self.create_session(title)
         with get_session() as session:
-            row = session.get(AgentSessionRow, session_id)
-            if row is None:
-                raise ValueError(f"Unknown agent session: {session_id}")
+            if session.get(MarketAgentSessionRow, session_id) is None:
+                raise ValueError(f"Unknown market agent session: {session_id}")
         return session_id
 
     def list_sessions(self) -> list[dict[str, Any]]:
         with get_session() as session:
             rows = (
-                session.query(AgentSessionRow)
-                .order_by(desc(AgentSessionRow.updated_at))
+                session.query(MarketAgentSessionRow)
+                .order_by(desc(MarketAgentSessionRow.updated_at))
                 .all()
             )
             return [
@@ -195,14 +193,20 @@ class AgentRepository:
 
     def get_session_record(self, session_id: str) -> dict[str, Any]:
         with get_session() as session:
-            row = session.get(AgentSessionRow, session_id)
+            row = session.get(MarketAgentSessionRow, session_id)
             if row is None:
-                raise ValueError(f"Unknown agent session: {session_id}")
+                raise ValueError(f"Unknown market agent session: {session_id}")
             messages = (
-                session.query(AgentMessageRow)
-                .filter(AgentMessageRow.session_id == session_id)
-                .order_by(AgentMessageRow.id)
+                session.query(MarketAgentMessageRow)
+                .filter(MarketAgentMessageRow.session_id == session_id)
+                .order_by(MarketAgentMessageRow.id)
                 .all()
+            )
+            latest_run = (
+                session.query(MarketAgentRunRow)
+                .filter(MarketAgentRunRow.session_id == session_id)
+                .order_by(desc(MarketAgentRunRow.created_at))
+                .first()
             )
             return {
                 "id": row.id,
@@ -219,31 +223,32 @@ class AgentRepository:
                     }
                     for message in messages
                 ],
+                "latest_run_id": latest_run.id if latest_run else None,
             }
 
     def delete_session(self, session_id: str) -> None:
         with get_session() as session:
-            row = session.get(AgentSessionRow, session_id)
+            row = session.get(MarketAgentSessionRow, session_id)
             if row is None:
-                raise ValueError(f"Unknown agent session: {session_id}")
+                raise ValueError(f"Unknown market agent session: {session_id}")
             run_ids = [
-                value
-                for (value,) in session.query(AgentRunRow.id)
-                .filter(AgentRunRow.session_id == session_id)
+                item
+                for (item,) in session.query(MarketAgentRunRow.id)
+                .filter(MarketAgentRunRow.session_id == session_id)
                 .all()
             ]
             if run_ids:
-                session.query(AgentEventRow).filter(
-                    AgentEventRow.run_id.in_(run_ids)
+                session.query(MarketAgentEventRow).filter(
+                    MarketAgentEventRow.run_id.in_(run_ids)
                 ).delete(synchronize_session=False)
-                session.query(AgentToolCallRow).filter(
-                    AgentToolCallRow.run_id.in_(run_ids)
+                session.query(MarketAgentToolCallRow).filter(
+                    MarketAgentToolCallRow.run_id.in_(run_ids)
                 ).delete(synchronize_session=False)
-                session.query(AgentRunRow).filter(
-                    AgentRunRow.id.in_(run_ids)
+                session.query(MarketAgentRunRow).filter(
+                    MarketAgentRunRow.id.in_(run_ids)
                 ).delete(synchronize_session=False)
-            session.query(AgentMessageRow).filter(
-                AgentMessageRow.session_id == session_id
+            session.query(MarketAgentMessageRow).filter(
+                MarketAgentMessageRow.session_id == session_id
             ).delete(synchronize_session=False)
             session.delete(row)
             session.commit()
@@ -258,7 +263,10 @@ class AgentRepository:
     ) -> int:
         now = utc_now_naive()
         with get_session() as session:
-            row = AgentMessageRow(
+            session_row = session.get(MarketAgentSessionRow, session_id)
+            if session_row is None:
+                raise ValueError(f"Unknown market agent session: {session_id}")
+            row = MarketAgentMessageRow(
                 session_id=session_id,
                 run_id=run_id,
                 role=role,
@@ -266,44 +274,46 @@ class AgentRepository:
                 created_at=now,
             )
             session.add(row)
-            session_row = session.get(AgentSessionRow, session_id)
-            if session_row is None:
-                raise ValueError(f"Unknown agent session: {session_id}")
             session_row.updated_at = now
             if role == "user" and session_row.title == "新会话":
-                if isinstance(content, dict):
-                    text = str(content.get("content") or "")
-                else:
-                    text = str(content)
-                session_row.title = (redact_text(text).strip() or "新会话")[:60]
+                raw = content.get("content", "") if isinstance(content, dict) else str(content)
+                session_row.title = (redact_text(str(raw)).strip() or "新会话")[:60]
             session.commit()
             session.refresh(row)
             return int(row.id)
 
     def model_messages(self, session_id: str) -> list[dict[str, Any]]:
-        record = self.get_session_record(session_id)
-        messages: list[dict[str, Any]] = []
-        for row in record["messages"]:
+        rows = self.get_session_record(session_id)["messages"]
+        candidates: list[dict[str, str]] = []
+        for row in rows:
             if row["role"] not in {"user", "assistant"}:
                 continue
             content = row["content"]
-            if isinstance(content, dict) and "content" in content:
-                messages.append({"role": row["role"], "content": content["content"]})
-            else:
-                messages.append(
-                    {
-                        "role": row["role"],
-                        "content": json.dumps(content, ensure_ascii=False),
-                    }
-                )
-        return messages
+            text = (
+                str(content.get("content"))
+                if isinstance(content, dict) and "content" in content
+                else json.dumps(content, ensure_ascii=False)
+            )
+            candidates.append({"role": row["role"], "content": text})
+        selected: list[dict[str, str]] = []
+        char_count = 0
+        for item in reversed(candidates[-MAX_CONTEXT_MESSAGES:]):
+            next_count = char_count + len(item["content"])
+            if selected and next_count > MAX_CONTEXT_CHARS:
+                break
+            if next_count > MAX_CONTEXT_CHARS:
+                item = {**item, "content": item["content"][-MAX_CONTEXT_CHARS:]}
+                next_count = len(item["content"])
+            selected.append(item)
+            char_count = next_count
+        return list(reversed(selected))
 
     def create_run(self, session_id: str, *, protocol: str, model_id: str) -> str:
         run_id = str(uuid4())
         now = utc_now_naive()
         with get_session() as session:
             session.add(
-                AgentRunRow(
+                MarketAgentRunRow(
                     id=run_id,
                     session_id=session_id,
                     status=RunStatus.RUNNING.value,
@@ -324,9 +334,9 @@ class AgentRepository:
 
     def get_run(self, run_id: str) -> dict[str, Any]:
         with get_session() as session:
-            row = session.get(AgentRunRow, run_id)
+            row = session.get(MarketAgentRunRow, run_id)
             if row is None:
-                raise ValueError(f"Unknown agent run: {run_id}")
+                raise ValueError(f"Unknown market agent run: {run_id}")
             return {
                 "id": row.id,
                 "session_id": row.session_id,
@@ -346,48 +356,35 @@ class AgentRepository:
                 "updated_at": row.updated_at.isoformat(),
             }
 
-    def update_run(
-        self,
-        run_id: str,
-        *,
-        status: str | None = None,
-        model_calls: int | None = None,
-        pending_context: dict[str, Any] | None = None,
-        clear_pending_context: bool = False,
-        answer: dict[str, Any] | None = None,
-        error: dict[str, Any] | None = None,
-        usage: dict[str, Any] | None = None,
-        router_provider: str | None = None,
-        upstream_model: str | None = None,
-        router_alert_count: int | None = None,
-        stop_requested: bool | None = None,
-    ) -> None:
+    def update_run(self, run_id: str, **changes: Any) -> None:
         with get_session() as session:
-            row = session.get(AgentRunRow, run_id)
+            row = session.get(MarketAgentRunRow, run_id)
             if row is None:
-                raise ValueError(f"Unknown agent run: {run_id}")
-            if status is not None:
-                row.status = status
-            if model_calls is not None:
-                row.model_calls = model_calls
-            if pending_context is not None:
-                row.pending_context_json = json_dumps(pending_context)
-            elif clear_pending_context:
+                raise ValueError(f"Unknown market agent run: {run_id}")
+            scalar_fields = {
+                "status",
+                "model_calls",
+                "stop_requested",
+                "protocol",
+                "router_provider",
+                "upstream_model",
+                "router_alert_count",
+            }
+            json_fields = {
+                "pending_context": "pending_context_json",
+                "answer": "answer_json",
+                "error": "error_json",
+                "usage": "usage_json",
+            }
+            for key in scalar_fields:
+                if key in changes:
+                    setattr(row, key, changes[key])
+            for key, column in json_fields.items():
+                if key in changes:
+                    value = changes[key]
+                    setattr(row, column, json_dumps(value) if value is not None else None)
+            if changes.get("clear_pending_context"):
                 row.pending_context_json = None
-            if answer is not None:
-                row.answer_json = json_dumps(answer)
-            if error is not None:
-                row.error_json = json_dumps(error)
-            if usage is not None:
-                row.usage_json = json_dumps(usage)
-            if router_provider is not None:
-                row.router_provider = router_provider
-            if upstream_model is not None:
-                row.upstream_model = upstream_model
-            if router_alert_count is not None:
-                row.router_alert_count = router_alert_count
-            if stop_requested is not None:
-                row.stop_requested = stop_requested
             row.updated_at = utc_now_naive()
             session.commit()
 
@@ -407,7 +404,7 @@ class AgentRepository:
         now = utc_now_naive()
         safe_detail = redact_value(detail or {})
         with get_session() as session:
-            row = AgentEventRow(
+            row = MarketAgentEventRow(
                 run_id=run_id,
                 session_id=session_id,
                 stage=stage,
@@ -429,9 +426,9 @@ class AgentRepository:
     def list_events(self, run_id: str) -> list[dict[str, Any]]:
         with get_session() as session:
             rows = (
-                session.query(AgentEventRow)
-                .filter(AgentEventRow.run_id == run_id)
-                .order_by(AgentEventRow.id)
+                session.query(MarketAgentEventRow)
+                .filter(MarketAgentEventRow.run_id == run_id)
+                .order_by(MarketAgentEventRow.id)
                 .all()
             )
             return [
@@ -457,29 +454,24 @@ class AgentRepository:
         digest = arguments_hash(arguments)
         now = utc_now_naive()
         with get_session() as session:
-            row = session.get(AgentToolCallRow, call_id)
+            row = session.get(MarketAgentToolCallRow, call_id)
             if row is not None:
                 if row.arguments_hash != digest or row.tool_name != tool_name:
-                    raise ValueError(
-                        "Tool call id was reused with changed parameters; prior approval is invalid."
-                    )
+                    raise ValueError("Tool call id was reused with changed parameters.")
                 return self._tool_call_dict(row)
             duplicate = (
-                session.query(AgentToolCallRow)
+                session.query(MarketAgentToolCallRow)
                 .filter(
-                    AgentToolCallRow.run_id == run_id,
-                    AgentToolCallRow.tool_name == tool_name,
-                    AgentToolCallRow.arguments_hash == digest,
+                    MarketAgentToolCallRow.run_id == run_id,
+                    MarketAgentToolCallRow.tool_name == tool_name,
+                    MarketAgentToolCallRow.arguments_hash == digest,
                 )
-                .order_by(AgentToolCallRow.created_at)
                 .first()
             )
             if duplicate is not None:
                 return self._tool_call_dict(duplicate)
-            approval_status = (
-                "not_required" if risk_level == RiskLevel.AUTO else "pending"
-            )
-            row = AgentToolCallRow(
+            approval = "not_required" if risk_level == RiskLevel.AUTO else "pending"
+            row = MarketAgentToolCallRow(
                 id=call_id,
                 run_id=run_id,
                 session_id=session_id,
@@ -487,7 +479,7 @@ class AgentRepository:
                 risk_level=risk_level.value,
                 arguments_json=json_dumps(arguments),
                 arguments_hash=digest,
-                approval_status=approval_status,
+                approval_status=approval,
                 status="proposed",
                 result_json=None,
                 error_json=None,
@@ -501,27 +493,27 @@ class AgentRepository:
 
     def get_tool_call(self, call_id: str) -> dict[str, Any]:
         with get_session() as session:
-            row = session.get(AgentToolCallRow, call_id)
+            row = session.get(MarketAgentToolCallRow, call_id)
             if row is None:
-                raise ValueError(f"Unknown agent tool call: {call_id}")
+                raise ValueError(f"Unknown market agent tool call: {call_id}")
             return self._tool_call_dict(row)
-
-    def list_pending_approvals(self) -> list[dict[str, Any]]:
-        with get_session() as session:
-            rows = (
-                session.query(AgentToolCallRow)
-                .filter(AgentToolCallRow.approval_status == "pending")
-                .order_by(AgentToolCallRow.created_at)
-                .all()
-            )
-            return [self._tool_call_dict(row) for row in rows]
 
     def list_tool_calls(self, run_id: str) -> list[dict[str, Any]]:
         with get_session() as session:
             rows = (
-                session.query(AgentToolCallRow)
-                .filter(AgentToolCallRow.run_id == run_id)
-                .order_by(AgentToolCallRow.created_at, AgentToolCallRow.id)
+                session.query(MarketAgentToolCallRow)
+                .filter(MarketAgentToolCallRow.run_id == run_id)
+                .order_by(MarketAgentToolCallRow.created_at, MarketAgentToolCallRow.id)
+                .all()
+            )
+            return [self._tool_call_dict(row) for row in rows]
+
+    def list_pending_approvals(self) -> list[dict[str, Any]]:
+        with get_session() as session:
+            rows = (
+                session.query(MarketAgentToolCallRow)
+                .filter(MarketAgentToolCallRow.approval_status == "pending")
+                .order_by(MarketAgentToolCallRow.created_at)
                 .all()
             )
             return [self._tool_call_dict(row) for row in rows]
@@ -534,18 +526,32 @@ class AgentRepository:
         expected_arguments_hash: str | None = None,
     ) -> dict[str, Any]:
         with get_session() as session:
-            row = session.get(AgentToolCallRow, call_id)
+            row = session.get(MarketAgentToolCallRow, call_id)
             if row is None:
-                raise ValueError(f"Unknown agent tool call: {call_id}")
+                raise ValueError(f"Unknown market agent tool call: {call_id}")
             if row.approval_status != "pending":
-                raise ValueError(
-                    f"Tool call {call_id} is not pending approval "
-                    f"(current: {row.approval_status})."
-                )
+                raise ValueError(f"Tool call {call_id} is not pending approval.")
             if expected_arguments_hash and row.arguments_hash != expected_arguments_hash:
                 raise ValueError("Tool parameters changed; approval is no longer valid.")
             row.approval_status = "approved" if approved else "rejected"
             row.status = "approved" if approved else "rejected"
+            row.updated_at = utc_now_naive()
+            session.commit()
+            session.refresh(row)
+            return self._tool_call_dict(row)
+
+    def begin_tool_call(self, call_id: str) -> dict[str, Any]:
+        with get_session() as session:
+            row = session.get(MarketAgentToolCallRow, call_id)
+            if row is None:
+                raise ValueError(f"Unknown market agent tool call: {call_id}")
+            if row.status == "success":
+                return self._tool_call_dict(row)
+            if row.status in {"executing", "failed"}:
+                raise ValueError("Incomplete write is not retried automatically.")
+            if row.approval_status not in {"not_required", "approved"}:
+                raise ValueError("Tool call has not been approved.")
+            row.status = "executing"
             row.updated_at = utc_now_naive()
             session.commit()
             session.refresh(row)
@@ -559,9 +565,9 @@ class AgentRepository:
         error: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         with get_session() as session:
-            row = session.get(AgentToolCallRow, call_id)
+            row = session.get(MarketAgentToolCallRow, call_id)
             if row is None:
-                raise ValueError(f"Unknown agent tool call: {call_id}")
+                raise ValueError(f"Unknown market agent tool call: {call_id}")
             if row.status == "success":
                 return self._tool_call_dict(row)
             row.status = "success" if error is None else "failed"
@@ -572,28 +578,8 @@ class AgentRepository:
             session.refresh(row)
             return self._tool_call_dict(row)
 
-    def begin_tool_call(self, call_id: str) -> dict[str, Any]:
-        with get_session() as session:
-            row = session.get(AgentToolCallRow, call_id)
-            if row is None:
-                raise ValueError(f"Unknown agent tool call: {call_id}")
-            if row.status == "success":
-                return self._tool_call_dict(row)
-            if row.status in {"executing", "failed"}:
-                raise ValueError(
-                    "Tool call execution is incomplete or failed; automatic retry is blocked "
-                    "to avoid duplicate side effects. Check local data or task state first."
-                )
-            if row.approval_status not in {"not_required", "approved"}:
-                raise ValueError("Tool call has not been approved for execution.")
-            row.status = "executing"
-            row.updated_at = utc_now_naive()
-            session.commit()
-            session.refresh(row)
-            return self._tool_call_dict(row)
-
     @staticmethod
-    def _tool_call_dict(row: AgentToolCallRow) -> dict[str, Any]:
+    def _tool_call_dict(row: MarketAgentToolCallRow) -> dict[str, Any]:
         return {
             "id": row.id,
             "run_id": row.run_id,

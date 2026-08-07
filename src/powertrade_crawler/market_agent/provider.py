@@ -4,13 +4,13 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Any
-from uuid import uuid4
 from urllib.parse import urlparse
+from uuid import uuid4
 
 import httpx
 
-from powertrade_crawler.agent.schemas import ProviderResponse, ProviderToolCall
-from powertrade_crawler.agent.security import redact_text
+from powertrade_crawler.market_agent.schemas import ProviderResponse, ProviderToolCall
+from powertrade_crawler.market_agent.security import redact_text
 
 
 class ProviderError(RuntimeError):
@@ -44,7 +44,7 @@ class LLMProvider(ABC):
         tools: list[dict[str, Any]] | None = None,
         json_mode: bool = False,
     ) -> ProviderResponse:
-        """Return one model response without executing any tool."""
+        """Return one model response without executing tools."""
 
     def list_models(self) -> list[str]:
         raise NotImplementedError
@@ -240,7 +240,7 @@ class FakeProvider(LLMProvider):
             raise ProviderProtocolError("FakeProvider has no scripted response left.") from exc
 
     def list_models(self) -> list[str]:
-        return ["fake/elecheck-agent"]
+        return ["fake/multi-source-market-agent"]
 
     def close(self) -> None:
         self.closed = True

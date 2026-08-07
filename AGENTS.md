@@ -1079,6 +1079,31 @@ ruff and compileall: passed
 `docs/AGENT_SECURITY_REVIEW.md` 和 `docs/AGENT_THREAT_MODEL.md`，
 在线脱敏报告见 `docs/AGENT_LIVE_EVAL_RESULT.json`。
 
+### 15.6 2026-08-03 免费 LLM 统一网关 / Free LLM Router
+
+Elecheck Agent 与独立多数据源 Agent 已统一接入本机 OpenAI 兼容免费池。运行时只从
+项目外 `%USERPROFILE%\.config\llm-router\client-free.env` 读取
+`LLM_API_BASE`、`LLM_API_URL`、`LLM_MODEL` 和 `LLM_API_KEY`；不得把免费池密钥或任何
+上游平台原始 Key 写进源码、README、示例配置、SQLite、提示词、日志、评测报告或 Git。
+项目内 `.env.example` 只提供不含密钥的可选配置路径。
+
+两个 Agent 默认模型策略均为 `smart-auto`。固定渠道只能使用 `/v1/providers` 中
+`tier=free` 且 `available=true` 的 `provider/<渠道ID>`，全部免费渠道不可用时明确失败，
+不得回退硅基流动直连或任何付费接口。`/v1/alerts` 用于失效/过期告警；每次成功响应的
+`x-llm-router-provider`、`x-llm-router-upstream-model`、
+`x-llm-router-alert-count` 必须写入对应 Agent 的运行记录和阶段事件。
+
+共享接入层为 `src/powertrade_crawler/llm_router.py`。多数据源 Agent 仍不得导入
+`powertrade_crawler.agent.*`；两个 Agent 可各自导入这层中立基础设施。CLI 管理入口为：
+
+```powershell
+powertrade agent config providers|alerts|strategy|use-provider|use-auto
+powertrade market-agent config providers|alerts|strategy|use-provider|use-auto
+```
+
+本地路由器不可用时可执行同目录固定 `start.ps1`，但只能访问回环地址；如果项目和路由器
+不在同一台电脑，必须给出部署限制，不得擅自暴露到公网。
+
 ## 16. ENTSO-E 参数、时间与区域语义 / Parameter, Time, and Area Semantics
 
 中文：

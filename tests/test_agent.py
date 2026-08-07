@@ -55,7 +55,7 @@ def structured_answer(conclusion="完成"):
 def test_agent_tables_and_default_models_are_created(agent_database):
     repository = AgentRepository()
 
-    assert repository.get_config()["model_id"] == "Qwen/Qwen2.5-7B-Instruct"
+    assert repository.get_config()["model_id"] == "smart-auto"
     with sqlite3.connect(agent_database) as connection:
         tables = {
             row[0]
@@ -71,6 +71,39 @@ def test_agent_tables_and_default_models_are_created(agent_database):
         "agent_tool_calls",
         "agent_events",
     } <= tables
+
+
+def test_agent_persists_free_router_route_metadata(agent_database):
+    repository = AgentRepository()
+    provider = FakeProvider(
+        [
+            ProviderResponse(
+                content=json.dumps(structured_answer()),
+                raw_protocol="json",
+                router_provider="free-route",
+                upstream_model="upstream/model",
+                router_alert_count=1,
+            )
+        ]
+    )
+    loop = AgentLoop(
+        provider,
+        repository=repository,
+        protocol=AgentProtocol.JSON,
+        model_id="smart-auto",
+    )
+
+    result = loop.chat("测试路由记录")
+    run = repository.get_run(result.run_id)
+
+    assert run["router_provider"] == "free-route"
+    assert run["upstream_model"] == "upstream/model"
+    assert run["router_alert_count"] == 1
+    assert any(
+        event["stage"] == "model_completed"
+        and event["detail"]["router_provider"] == "free-route"
+        for event in repository.list_events(result.run_id)
+    )
 
 
 def test_agent_session_title_is_redacted(agent_database):

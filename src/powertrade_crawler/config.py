@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     elecheck_area_code: str = "320000000000"
     elecheck_start_date: str | None = None
     elecheck_end_date: str | None = None
+    llm_router_client_env: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

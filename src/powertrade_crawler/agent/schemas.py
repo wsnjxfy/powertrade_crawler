@@ -82,6 +82,9 @@ class ProviderResponse(StrictModel):
     finish_reason: str | None = None
     usage: dict[str, int | float] = Field(default_factory=dict)
     raw_protocol: Literal["native", "json"] = "native"
+    router_provider: str | None = None
+    upstream_model: str | None = None
+    router_alert_count: int | None = None
 
 
 class JsonToolAction(StrictModel):

@@ -4,6 +4,7 @@
 
 ```text
 src/powertrade_crawler/agent/
+src/powertrade_crawler/llm_router.py
 src/powertrade_crawler/credentials.py
 src/powertrade_crawler/scheduler.py
 src/powertrade_crawler/storage.py
@@ -20,7 +21,7 @@ Elecheck SQL 查询使用只读连接和表/字段/函数白名单，不属于�
 
 | ID | 原风险 | 等级 | 修复与证据 |
 |---|---|---:|---|
-| SR-001 | 可配置 Endpoint 若接受任意主机，可能把 SiliconFlow Key 发往攻击者服务器 | 高 | `agent/repository.py::set_config` 和 `agent/provider.py::SiliconFlowProvider.__init__` 同时要求 HTTPS 且主机精确为 `api.siliconflow.cn`；httpx 默认不跟随重定向 |
+| SR-001 | 可配置 Endpoint 若接受任意主机，可能把本地免费池 Key 发往攻击者服务器 | 高 | `llm_router.py`、`agent/repository.py::set_config` 和 `agent/provider.py::FreeLLMRouterProvider.__init__` 同时只接受本机 HTTP 回环地址；实际 Endpoint 运行时从项目外 `client-free.env` 读取；httpx 默认不跟随重定向 |
 | SR-002 | 写工具在进程崩溃或模型重复提议后可能重复执行 | 高 | `agent/repository.py::create_tool_call` 按 run/tool/参数摘要复用调用；`begin_tool_call` 先持久化 executing，executing/failed 状态禁止自动重试；业务写入继续使用现有 upsert |
 | SR-003 | 用户误把密钥贴进聊天时，会话标题可能保留原文 | 中 | `agent/repository.py::add_message` 对消息 JSON 和标题都调用统一脱敏；评测覆盖 Authorization/Bearer |
 | SR-004 | 工具异常、旧任务参数或任务消息可能把敏感片段送进提示词/事件 | 中 | `agent/tools.py` 在模型看到工具结果前统一递归脱敏；任务参数、运行消息、Provider 异常和事件再次脱敏 |
@@ -29,9 +30,11 @@ Elecheck SQL 查询使用只读连接和表/字段/函数白名单，不属于�
 
 ## 现有控制
 
-- API Key 只由 `credentials.py` 读取并在 `provider.py` 构造 Authorization 请求头。
-- `.auth/credentials.json` 被 Git 忽略；保存时尽力设置目录 `0700`、文件 `0600`。
-- 模型配置表只保存 Endpoint、模型 ID、档位和协议，不保存任何凭据。
+- 免费池 Key 只由 `llm_router.py` 从项目外 `client-free.env` 读取，并在 `provider.py`
+  构造 Authorization 请求头。
+- `.auth/credentials.json` 继续保存业务数据源凭据并被 Git 忽略；免费池 Key 不复制进该文件。
+- 模型配置表只保存本机 Endpoint、`smart-auto` 或 `provider/<渠道ID>` 和协议，不保存凭据。
+- 固定渠道保存前、运行前都验证 `tier=free` 且 `available=true`；失败不回退付费接口。
 - Pydantic 工具参数统一 `extra="forbid"`；未知工具和额外参数被拒绝。
 - 所有工具来自显式 Elecheck allowlist；模型无法通过工具名访问 registry 之外的函数。
 - 工具输出在提示词中标记为 `untrusted_tool_result`，系统提示明确禁止执行其中的指令。
@@ -46,15 +49,17 @@ Elecheck SQL 查询使用只读连接和表/字段/函数白名单，不属于�
 - 最终 `data_sources`、`executed_actions` 和 `generated_files` 由运行轨迹确定性落地，防止
   模型虚构来源、操作或文件。
 - Provider 超时只重试无副作用模型请求一次；工具执行失败不会自动重试。
-- JSON 事件不包含隐藏推理、原始模型响应或请求头。
+- JSON 事件不包含隐藏推理、原始模型响应或完整请求头，只记录响应头中允许的渠道、
+  上游模型和告警数量。
 - 在线评测的动作案例只验证进入审批，不调用 approve。
 
 ## 残余风险
 
-1. `.auth/credentials.json` 仍是本机明文文件。Python `chmod` 在 Windows 上不能等价于
-   完整 ACL；同一 Windows 用户下运行的恶意程序仍可能读取。后续可接入 Windows
+1. `.auth/credentials.json` 和项目外 `client-free.env` 仍是本机明文文件。Python
+   `chmod` 在 Windows 上不能等价于完整 ACL；同一 Windows 用户下运行的恶意程序仍
+   可能读取。后续可接入 Windows
    Credential Manager 或 DPAPI。
-2. 用户问题和脱敏后的 Elecheck 工具结果会发送给第三方模型服务。当前数据以公开市场
+2. 用户问题和脱敏后的 Elecheck 工具结果会经本地路由器发送给第三方免费模型服务。当前数据以公开市场
    数据为主，但不应在聊天中粘贴未公开数据、个人信息或商业秘密。
 3. Windows 任务安装/卸载最终依赖当前进程的 OS 权限和 `schtasks`。强化审批防止模型
    越权意图，但不能替代 Windows 账户和终端安全。

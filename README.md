@@ -474,29 +474,35 @@ Elecheck 现货价格会转换为逐日、结束日期包含的请求，保证�
 ## 11. Elecheck 电力市场分析 Agent MVP
 
 第十一周在项目内自建了轻量单 Agent 框架，不依赖 OpenAI SDK 或任何 Agent SDK。
-模型通过现有 `httpx` 调用硅基流动的 OpenAI 兼容接口；GUI 的
+模型通过现有 `httpx` 调用本机免费 LLM 统一网关的 OpenAI 兼容接口；GUI 的
 `Elecheck 易能电易查 -> 智能 Agent` 和 CLI 共用同一套工具注册、参数校验、审批、
 幂等、持久会话和审计逻辑。
 
-设置硅基流动凭据并检查运行条件：
+免费池客户端配置必须位于项目外的
+`%USERPROFILE%\.config\llm-router\client-free.env`。项目不读取或保存任何上游平台的
+原始 Key，也不会把本地免费池密钥写入 SQLite、日志、提示词、评测报告或 Git。
+如需改用另一个外部配置路径，只设置非敏感的 `LLM_ROUTER_CLIENT_ENV`。检查运行条件：
 
 ```powershell
-powertrade set-credential siliconflow
 powertrade agent config show
 powertrade agent doctor --json
 ```
 
-默认保留两个可切换配置：
-
-- 免费档位：`Qwen/Qwen2.5-7B-Instruct`
-- 高质量档位：`deepseek-ai/DeepSeek-V4-Flash`
-
-模型 ID、Endpoint、档位和工具协议都可修改，不依赖固定免费模型：
+默认策略为 `smart-auto`，只在免费渠道中自动选择；免费渠道额度耗尽、限流或失效时由
+本地路由器切换到其他免费渠道，所有免费渠道均不可用时明确失败，不会回退付费接口。
+也可以固定到 `tier=free` 且 `available=true` 的渠道：
 
 ```powershell
-powertrade agent config set --profile free
-powertrade agent config set --profile advanced --reasoning-effort high
+powertrade agent config providers
+powertrade agent config alerts
+powertrade agent config strategy
+powertrade agent config use-provider groq-gpt-oss-120b
+powertrade agent config use-auto
 ```
+
+`use-provider` 同时接受渠道 ID 和 `provider/<渠道ID>`；保存前会实时校验免费档位与可用
+状态。每次成功模型响应都会记录 `x-llm-router-provider`、
+`x-llm-router-upstream-model` 和 `x-llm-router-alert-count`，用于运行审计和 GUI 时间线。
 
 常用 Agent 命令：
 
@@ -530,5 +536,27 @@ docs/AGENT_MVP_GUIDE.md
 docs/AGENT_SECURITY_REVIEW.md
 docs/AGENT_THREAT_MODEL.md
 ```
+
+## 12. 独立多数据源 Agent 与统一免费模型网关
+
+多数据源 Agent 是独立的 `powertrade_crawler.market_agent` 系统，拥有单独的顶层 GUI
+页签、CLI 命令空间和 `market_agent_*` 会话表，不覆盖或导入 Elecheck Agent 包。
+它与 Elecheck Agent 只共享业务数据、采集基础设施和中立的免费 LLM 路由器客户端。
+
+免费模型管理命令与 Elecheck Agent 对称：
+
+```powershell
+powertrade market-agent doctor --online
+powertrade market-agent config providers
+powertrade market-agent config alerts
+powertrade market-agent config strategy
+powertrade market-agent config use-provider groq-gpt-oss-120b
+powertrade market-agent config use-auto
+```
+
+两个 Agent 的策略设置相互独立，但都只从项目外 `client-free.env` 读取同一个本地免费池
+密钥。GUI 的“模型设置”窗口可刷新免费渠道和告警，在 `smart-auto` 与当前可用的
+`provider/<渠道ID>` 之间切换。`127.0.0.1` 仅适用于与路由器同机运行；项目不会自动将
+本地网关暴露到公网。
 
 

@@ -10,7 +10,12 @@ from powertrade_crawler.agent.elecheck_tools import build_elecheck_tool_registry
 from powertrade_crawler.agent.loop import AgentLoop, build_configured_provider
 from powertrade_crawler.agent.repository import AgentRepository
 from powertrade_crawler.agent.schemas import AgentRunResult, RiskLevel
-from powertrade_crawler.credentials import get_credential
+from powertrade_crawler.llm_router import (
+    DEFAULT_MODEL_STRATEGY,
+    FreeRouterManagementClient,
+    LLMRouterError,
+    load_free_router_config,
+)
 
 
 EXIT_CONFIG = 2
@@ -121,7 +126,7 @@ def doctor(
         typer.Option("--json", help="使用稳定 JSON envelope 输出。"),
     ] = False,
 ) -> None:
-    """检查数据库、API Key、Endpoint、模型和工具协议。"""
+    """检查数据库、免费池配置、Endpoint、模型和工具协议。"""
     try:
         repository = AgentRepository()
         config = repository.get_config()
@@ -132,25 +137,21 @@ def doctor(
             json_output=json_output,
             exit_code=EXIT_CONFIG,
         )
+    try:
+        external_config = load_free_router_config()
+        router_config_check = {"ok": True, **external_config.safe_summary()}
+    except LLMRouterError as exc:
+        router_config_check = {"ok": False, "message": str(exc)}
     checks: dict[str, Any] = {
         "database": {"ok": True},
-        "api_key": {
-            "ok": bool(get_credential("siliconflow_api_key")),
-            "status": (
-                "configured"
-                if get_credential("siliconflow_api_key")
-                else "missing"
-            ),
-        },
+        "free_router_config": router_config_check,
         "endpoint": {
-            "ok": config["endpoint"].startswith("https://"),
+            "ok": config["endpoint"].startswith("http://127.0.0.1:"),
             "value": config["endpoint"],
         },
         "model": {
             "ok": bool(config["model_id"]),
-            "profile": config["model_profile"],
-            "free_model_id": config["model_id"],
-            "advanced_model_id": config["advanced_model_id"],
+            "strategy": config["model_id"],
         },
         "tool_protocol": {
             "ok": False,
@@ -159,7 +160,10 @@ def doctor(
         },
     }
     provider = None
-    if all(checks[name]["ok"] for name in ("api_key", "endpoint", "model")):
+    if all(
+        checks[name]["ok"]
+        for name in ("free_router_config", "endpoint", "model")
+    ):
         try:
             provider, active = build_configured_provider(repository)
             models = provider.list_models()
@@ -200,6 +204,12 @@ def doctor(
             detected = "native" if probe.tool_calls else "json"
             repository.set_config(detected_protocol=detected)
             checks["tool_protocol"].update({"ok": True, "detected": detected})
+            checks["last_route"] = {
+                "ok": bool(probe.router_provider),
+                "provider": probe.router_provider,
+                "upstream_model": probe.upstream_model,
+                "alert_count": probe.router_alert_count,
+            }
         except Exception as exc:
             checks["remote"] = {
                 "ok": False,
@@ -212,7 +222,14 @@ def doctor(
     overall = all(
         value.get("ok", False)
         for key, value in checks.items()
-        if key in {"database", "api_key", "endpoint", "model", "tool_protocol"}
+        if key
+        in {
+            "database",
+            "free_router_config",
+            "endpoint",
+            "model",
+            "tool_protocol",
+        }
     )
     if json_output:
         if overall:
@@ -277,10 +294,118 @@ def config_set(
             protocol=protocol,
             reasoning_effort=reasoning_effort,
         )
-    except ValueError as exc:
+    except (ValueError, LLMRouterError) as exc:
         fail(
             str(exc),
             code="invalid_config",
+            json_output=json_output,
+            exit_code=EXIT_CONFIG,
+        )
+    if json_output:
+        emit_json(ok=True, data=config)
+    else:
+        typer.echo(json.dumps(config, ensure_ascii=False, indent=2))
+
+
+@config_app.command("providers")
+def config_providers(
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """查询当前免费渠道及其可用状态。"""
+    try:
+        with FreeRouterManagementClient.from_external_config() as router:
+            providers = router.list_providers()
+    except LLMRouterError as exc:
+        fail(
+            str(exc),
+            code="router_unavailable",
+            json_output=json_output,
+            exit_code=EXIT_CONFIG,
+        )
+    if json_output:
+        emit_json(ok=True, data=providers)
+    else:
+        typer.echo(json.dumps(providers, ensure_ascii=False, indent=2))
+
+
+@config_app.command("alerts")
+def config_alerts(
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """查询免费渠道的失效或过期告警。"""
+    try:
+        with FreeRouterManagementClient.from_external_config() as router:
+            alerts = router.list_alerts()
+    except LLMRouterError as exc:
+        fail(
+            str(exc),
+            code="router_unavailable",
+            json_output=json_output,
+            exit_code=EXIT_CONFIG,
+        )
+    if json_output:
+        emit_json(ok=True, data=alerts)
+    else:
+        typer.echo(json.dumps(alerts, ensure_ascii=False, indent=2))
+
+
+@config_app.command("strategy")
+def config_strategy(
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """查询当前模型选择策略。"""
+    try:
+        repository = AgentRepository()
+        with FreeRouterManagementClient.from_external_config() as router:
+            strategy = router.describe_strategy(repository.get_config()["model_id"])
+    except LLMRouterError as exc:
+        fail(
+            str(exc),
+            code="router_unavailable",
+            json_output=json_output,
+            exit_code=EXIT_CONFIG,
+        )
+    if json_output:
+        emit_json(ok=True, data=strategy)
+    else:
+        typer.echo(json.dumps(strategy, ensure_ascii=False, indent=2))
+
+
+@config_app.command("use-auto")
+def config_use_auto(
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """恢复 smart-auto 免费自动选择策略。"""
+    try:
+        config = AgentRepository().set_config(model_id=DEFAULT_MODEL_STRATEGY)
+    except (ValueError, LLMRouterError) as exc:
+        fail(
+            str(exc),
+            code="invalid_strategy",
+            json_output=json_output,
+            exit_code=EXIT_CONFIG,
+        )
+    if json_output:
+        emit_json(ok=True, data=config)
+    else:
+        typer.echo(json.dumps(config, ensure_ascii=False, indent=2))
+
+
+@config_app.command("use-provider")
+def config_use_provider(
+    provider_id: Annotated[str, typer.Argument(help="免费渠道 ID。")],
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """固定到一个 tier=free 且 available=true 的渠道。"""
+    strategy = (
+        provider_id if provider_id.startswith("provider/") else f"provider/{provider_id}"
+    )
+    try:
+        config = AgentRepository().set_config(model_id=strategy)
+    except (ValueError, LLMRouterError) as exc:
+        fail(
+            str(exc),
+            code="invalid_strategy",
             json_output=json_output,
             exit_code=EXIT_CONFIG,
         )

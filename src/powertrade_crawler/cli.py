@@ -78,9 +78,11 @@ from powertrade_crawler.storage import (
     upsert_records,
 )
 from powertrade_crawler.agent.cli import agent_app
+from powertrade_crawler.market_agent.cli import market_agent_app
 
 app = typer.Typer(help="Power trading data crawler.")
 app.add_typer(agent_app, name="agent")
+app.add_typer(market_agent_app, name="market-agent")
 
 ELECHECK_SPIDERS = {
     "elecheck_clear_price",

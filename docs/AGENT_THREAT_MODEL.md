@@ -1,11 +1,15 @@
 # Elecheck Agent 威胁模型
 
+> 2026-08-03 更新：模型出口已从硅基流动直连改为本机回环地址上的免费 LLM 统一网关。
+> 免费池 Key 只从项目外 `client-free.env` 读取，固定渠道必须为可用免费渠道，且不存在
+> 付费回退。下文所有“第三方模型服务”均指由该本地路由器实际选择的免费上游渠道。
+
 ## Executive summary
 
 该 Agent 是无入站网络接口的单用户 Windows 桌面/CLI 工具，远程攻击面明显小于 Web
-服务。最重要的风险集中在三个边界：本地明文凭据与 SQLite 文件、发送给硅基流动的用户
+服务。最重要的风险集中在三个边界：本地明文凭据与 SQLite 文件、经免费路由器发送的用户
 问题及 Elecheck 工具结果、以及模型提出写操作后到用户审批和实际执行之间的完整性。
-仓库已通过官方主机限制、固定工具 allowlist、严格 Pydantic Schema、分级审批、参数摘要、
+仓库已通过本机回环地址限制、固定工具 allowlist、严格 Pydantic Schema、分级审批、参数摘要、
 幂等状态、统一脱敏和执行轨迹降低风险。结合用户确认的本地普通用户部署方式，目前没有
 critical 风险；剩余重点是防止操作者误把敏感数据输入第三方模型、保护本地 Windows
 账户，以及为未签名打包产物建立可信分发方式。
@@ -15,6 +19,7 @@ critical 风险；剩余重点是防止操作者误把敏感数据输入第三�
 范围：
 
 - Agent 运行时：`src/powertrade_crawler/agent/`
+- 免费路由器客户端：`src/powertrade_crawler/llm_router.py`
 - 凭据：`src/powertrade_crawler/credentials.py`
 - Agent SQLite 表：`src/powertrade_crawler/storage.py`
 - Elecheck 采集和调度复用：`src/powertrade_crawler/scheduler.py`
@@ -32,7 +37,7 @@ critical 风险；剩余重点是防止操作者误把敏感数据输入第三�
 - Agent 没有任意可写 SQL、Shell、任意文件读取、业务数据删除、任务删除、数据库维护、
   凭据修改或跨数据源工具。受控只读 SQL 仅开放 Elecheck 表/字段白名单，排除
   `raw_json`、Agent 会话和其他敏感表。
-- Agent 会把用户问题和固定 Elecheck 工具的脱敏结果发送给硅基流动。用户主动粘贴的
+- Agent 会把用户问题和固定 Elecheck 工具的脱敏结果经本地路由器发送给免费上游渠道。用户主动粘贴的
   敏感内容仍可能离开本机。
 - `.auth/`、`data/`、`dist/` 和本机操作系统安全不属于远程服务边界，但属于本地威胁。
 
@@ -48,11 +53,12 @@ critical 风险；剩余重点是防止操作者误把敏感数据输入第三�
 
 - 用户界面：Typer CLI 和 Tkinter GUI，接收问题、模型设置和审批决定。
 - Agent Loop：最多 8 次模型调用，解析原生 `tool_calls` 或严格 JSON Action。
-- Provider：使用 `httpx` 调用官方 SiliconFlow HTTPS API。
+- Provider：使用 `httpx` 调用本机回环地址上的 OpenAI 兼容免费 LLM 路由器。
 - Tool Registry：显式注册 Elecheck 工具并使用 Pydantic 拒绝未知工具和额外参数。
 - Agent Repository：在本地 SQLite 保存非敏感配置、会话、消息、运行、事件和工具调用。
 - Elecheck 工具：复用已有分析 repository、spider、upsert 和调度校验。
-- 凭据文件：本地 `.auth/credentials.json`，保存 SiliconFlow Key 和 Elecheck Authorization。
+- 凭据文件：项目外 `client-free.env` 保存本地免费池 Key；`.auth/credentials.json` 保存
+  Elecheck Authorization 等业务数据源凭据。
 - 操作系统边界：预设目录导出和普通用户权限下的 Windows `schtasks`。
 - 构建边界：Python 依赖、PyInstaller 和未签名本地发布物。
 
@@ -62,8 +68,8 @@ critical 风险；剩余重点是防止操作者误把敏感数据输入第三�
   参数、Pydantic 模型和显式确认负责校验。
 - CLI/GUI → Agent Loop：用户问题和停止信号；进程内调用；消息写库前脱敏，隐藏推理
   不展示。
-- Agent Loop → SiliconFlow：系统提示、用户问题、工具 Schema、脱敏工具结果；HTTPS
-  Bearer；主机被限制为 `api.siliconflow.cn`，有超时和一次无副作用重试。
+- Agent Loop → 本地免费路由器：系统提示、用户问题、工具 Schema、脱敏工具结果；HTTP
+  Bearer；主机只允许回环地址，有超时和一次无副作用重试；路由器再调用实际免费上游。
 - Agent Loop → Tool Registry：模型生成的工具名和参数；进程内调用；未知工具、额外
   字段和类型错误被拒绝；单次模型响应最多八个工具，按顺序执行并逐项暂停审批。
 - Tool Registry → SQLite：固定 Elecheck 分析、受控只读 SQL、会话和审计状态；
@@ -88,8 +94,9 @@ critical 风险；剩余重点是防止操作者误把敏感数据输入第三�
 flowchart LR
     U["Local user"] --> UI["CLI and GUI"]
     UI --> AL["Agent Loop"]
-    AL --> PR["SiliconFlow Provider"]
-    PR --> SF["SiliconFlow API"]
+    AL --> PR["Free LLM Router Provider"]
+    PR --> LR["Local free LLM router"]
+    LR --> SF["Selected free upstream"]
     AL --> TR["Tool Registry"]
     TR --> DB["Local SQLite"]
     TR --> EC["Elecheck API"]
@@ -105,7 +112,7 @@ flowchart LR
 
 | Asset | Why it matters | Security objective (C/I/A) |
 |---|---|---|
-| SiliconFlow API Key | 可消耗账户余额并代表用户调用模型 | C/I/A |
+| 本地免费池 Key | 可代表应用访问免费路由器并消耗免费额度 | C/I/A |
 | Elecheck Authorization | 可代表用户访问 Elecheck 接口 | C/I/A |
 | 用户问题和会话 | 可能包含个人、客户或未公开商业信息 | C/I |
 | Elecheck 市场数据和分析结果 | 业务判断依赖数值和口径准确 | I/A |
@@ -142,12 +149,13 @@ flowchart LR
 |---|---|---|---|---|
 | `powertrade agent` CLI | 本地命令行 | 用户 → 应用 | chat/config/sessions/approvals/tools/eval | `src/powertrade_crawler/agent/cli.py::agent_app` |
 | 智能 Agent GUI | Tkinter Elecheck 页签 | 用户 → 应用 | 后台线程、停止、审批、模型设置 | `src/powertrade_crawler/agent/gui.py::ElecheckAgentApp` |
-| 模型响应 | SiliconFlow HTTPS | 第三方服务 → Agent | 原生和 JSON 两种不可信协议 | `src/powertrade_crawler/agent/provider.py::SiliconFlowProvider.complete` |
-| Provider Endpoint | 本地配置 | 操作者配置 → 凭据边界 | 错误主机可能窃取 Key，现已锁定官方主机 | `src/powertrade_crawler/agent/repository.py::set_config` |
+| 模型响应 | 本地路由器与免费上游 | 第三方服务 → Agent | 原生和 JSON 两种不可信协议 | `src/powertrade_crawler/agent/provider.py::FreeLLMRouterProvider.complete` |
+| Provider Endpoint | 项目外配置 | 操作者配置 → 凭据边界 | 错误主机可能窃取 Key，现已锁定本机回环地址 | `src/powertrade_crawler/llm_router.py::load_free_router_config` |
 | 工具名和参数 | 模型响应 | 模型 → 本地能力 | Pydantic `extra=forbid` 和显式 registry | `src/powertrade_crawler/agent/tools.py::ToolRegistry` |
 | 审批恢复 | CLI/GUI | 用户决定 → 写工具 | 绑定工具调用 ID 和参数摘要 | `src/powertrade_crawler/agent/repository.py::decide_approval` |
 | Elecheck API 数据 | 外部 HTTPS | 数据源 → 分析工具 | 工具结果在进模型前递归脱敏 | `src/powertrade_crawler/agent/elecheck_tools.py` |
-| 凭据 JSON | 本地文件 | 文件系统 → Provider/Client | 明文、Git 忽略、尽力限制权限 | `src/powertrade_crawler/credentials.py::save_credential` |
+| 免费池环境文件 | 项目外本地文件 | 文件系统 → Provider | 明文、不进入项目与 Git | `src/powertrade_crawler/llm_router.py::load_free_router_config` |
+| 业务凭据 JSON | 本地文件 | 文件系统 → 数据源 Client | 明文、Git 忽略、尽力限制权限 | `src/powertrade_crawler/credentials.py::save_credential` |
 | Agent SQLite 表 | 本地文件 | 应用 → 持久状态 | 会话、运行、事件、工具调用 | `src/powertrade_crawler/storage.py::AgentRunRow` |
 | 导出路径 | 自动工具 | 应用 → 文件系统 | 固定目录、微秒时间戳、无用户路径参数 | `src/powertrade_crawler/agent/elecheck_tools.py::_export_path` |
 | Windows `schtasks` | 强化审批工具 | 应用 → OS | 参数列表、无 shell、普通用户权限 | `src/powertrade_crawler/scheduler.py::install_windows_task` |
@@ -159,7 +167,7 @@ flowchart LR
 1. 攻击者诱导用户把客户数据粘贴进 Agent → 文本通过 HTTPS 发给第三方模型 →
    敏感信息离开本地控制范围。
 2. 本地恶意程序取得当前用户权限 → 读取 `.auth/credentials.json` → 盗用
-   SiliconFlow 余额或 Elecheck Authorization。
+   免费模型额度或 Elecheck Authorization。
 3. 恶意模型输出伪造采集参数 → 尝试把单地区请求扩大为全部地区或超长日期 →
    单地区工具由 Pydantic 拒绝；合法的全部地区更新必须改用独立审批工具，模型只能
    提供结束日期，地区目录和逐地区起始日期由本地规则计算。
@@ -178,8 +186,8 @@ flowchart LR
 
 | Threat ID | Threat source | Prerequisites | Threat action | Impact | Impacted assets | Existing controls (evidence) | Gaps | Recommended mitigations | Detection ideas | Likelihood | Impact severity | Priority |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| TM-001 | 操作者错误、提示注入 | 用户把敏感数据输入聊天；或未来工具返回敏感字段 | 将个人、客户或未公开数据发送给 SiliconFlow | 第三方披露、合同或隐私风险 | 用户问题、敏感数据 | Agent 仅有 Elecheck allowlist 工具；SQL 只读且限制表/字段；消息和工具结果脱敏（`agent/tools.py`、`agent/elecheck_tools.py`、`agent/security.py`） | 无通用 DLP，无法识别所有商业秘密 | GUI/CLI 明示禁止粘贴敏感数据；为敏感环境增加本地模型或发送前数据分类/确认；保持工具最小化 | 记录脱敏命中次数和工具字段清单，不记录原文 | low | high | medium |
-| TM-002 | 本地恶意程序 | 已获得当前 Windows 用户读取权限 | 读取明文 `.auth` 并盗用 Key/token | 账户费用、数据源滥用 | 两类凭据、模型配额 | `.auth` Git 忽略；不写数据库/日志；`chmod` 尽力收紧（`credentials.py`） | Windows `chmod` 不等价于 ACL，未使用系统凭据库 | 使用 Windows Credential Manager/DPAPI；支持轮换和撤销；为余额设置限额 | 监控 SiliconFlow 用量和异常时间段；记录 credential-status 但不记录值 | low | high | medium |
+| TM-001 | 操作者错误、提示注入 | 用户把敏感数据输入聊天；或未来工具返回敏感字段 | 将个人、客户或未公开数据发送给免费上游模型 | 第三方披露、合同或隐私风险 | 用户问题、敏感数据 | Agent 仅有 Elecheck allowlist 工具；SQL 只读且限制表/字段；消息和工具结果脱敏（`agent/tools.py`、`agent/elecheck_tools.py`、`agent/security.py`） | 无通用 DLP，无法识别所有商业秘密 | GUI/CLI 明示禁止粘贴敏感数据；为敏感环境增加本地模型或发送前数据分类/确认；保持工具最小化 | 记录脱敏命中次数和工具字段清单，不记录原文 | low | high | medium |
+| TM-002 | 本地恶意程序 | 已获得当前 Windows 用户读取权限 | 读取明文 `client-free.env` 或 `.auth` 并盗用 Key/token | 免费额度、数据源滥用 | 两类凭据、模型配额 | 配置文件在项目外；`.auth` Git 忽略；不写数据库/日志；`chmod` 尽力收紧（`credentials.py`） | Windows `chmod` 不等价于 ACL，未使用系统凭据库 | 使用 Windows Credential Manager/DPAPI；支持轮换和撤销；为额度设置限额 | 监控免费路由器告警和异常时间段；只记录配置状态，不记录值 | low | high | medium |
 | TM-003 | 恶意或异常模型 | 模型能生成任意工具名和 JSON 参数 | 调用未授权能力或构造额外参数 | 非预期本地/网络操作 | 数据库完整性、任务状态 | 显式 Elecheck registry、未知工具拒绝、Pydantic `extra=forbid`（`agent/tools.py`、`agent/elecheck_tools.py`） | 模型仍可能消耗只读调用配额 | 保持 allowlist；新增工具时必须安全评审和风险分级 | 统计 unknown tool、validation failure 和循环上限事件 | medium | medium | medium |
 | TM-004 | 恶意模型、UI 欺骗 | 用户看到的参数与执行参数可能不一致 | 审批后替换地区、日期、任务或副作用 | 错误采集或调度变更 | 审批完整性、业务数据 | 规范化参数摘要、审批状态、强化审批精确工具名（`repository.py::decide_approval`、`agent/cli.py::decide_and_resume`） | 本地数据库可被同用户直接篡改 | 将审批摘要和结果纳入带密钥的审计链；GUI 突出参数差异 | 告警同一工具调用 ID 的参数冲突和失效审批 | low | high | medium |
 | TM-005 | 崩溃、超时、模型重复调用 | 工具可能在错误前已产生部分副作用 | 恢复或重试造成重复采集、建任务或 OS 操作 | 重复任务、额外请求、状态不一致 | 数据完整性、任务状态、配额 | run/tool/参数去重；executing/failed 禁止自动重试；业务 upsert（`repository.py::create_tool_call`、`begin_tool_call`） | 无跨进程事务覆盖外部 API 与本地提交 | 为每个写工具提供 reconcile/status 检查；外部服务支持时传幂等键 | 监控长期 executing、execution_state_unknown 和同参数重复提议 | low | medium | low |
