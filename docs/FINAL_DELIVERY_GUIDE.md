@@ -1,5 +1,10 @@
 # Powertrade Crawler 最终交付使用与验收指南
 
+> 多数据源 Agent 已增加完全离线的本地混合知识库。使用、维护、模型准备和故障处理见
+> [RAG_GUIDE.md](RAG_GUIDE.md)，第三方许可见
+> [THIRD_PARTY_NOTICES_RAG.md](THIRD_PARTY_NOTICES_RAG.md)。
+> 正式 Windows 发布必须通过 [Windows 签名与干净机发布门禁](WINDOWS_RELEASE_GATE.md)。
+
 适用版本：第十三周交付级打磨版
 验收日期：2026-08-10
 

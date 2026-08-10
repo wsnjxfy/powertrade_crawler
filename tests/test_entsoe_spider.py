@@ -15,8 +15,14 @@ from powertrade_crawler.spiders.entsoe import (
 DAY_AHEAD_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <Publication_MarketDocument xmlns="urn:iec62325.351:tc57wg16:451-3:publicationdocument:7:0">
   <TimeSeries>
+    <mRID>price-series-1</mRID>
+    <auction.type>A01</auction.type>
+    <businessType>A62</businessType>
+    <contract_MarketAgreement.type>A01</contract_MarketAgreement.type>
     <currency_Unit.name>EUR</currency_Unit.name>
     <price_Measure_Unit.name>MWH</price_Measure_Unit.name>
+    <classificationSequence_AttributeInstanceComponent.position>1</classificationSequence_AttributeInstanceComponent.position>
+    <curveType>A03</curveType>
     <Period>
       <timeInterval>
         <start>2026-06-01T00:00Z</start>
@@ -92,6 +98,12 @@ def test_entsoe_client_parses_day_ahead_price_xml():
     assert rows == [
         {
             "bidding_zone_eic": "10Y1001A1001A82H",
+            "series_mrid": "price-series-1",
+            "auction_type": "A01",
+            "business_type": "A62",
+            "contract_type": "A01",
+            "classification_sequence": 1,
+            "curve_type": "A03",
             "position": 1,
             "interval_start_utc": "2026-06-01T00:00Z",
             "interval_end_utc": "2026-06-01T01:00Z",
@@ -104,6 +116,12 @@ def test_entsoe_client_parses_day_ahead_price_xml():
         },
         {
             "bidding_zone_eic": "10Y1001A1001A82H",
+            "series_mrid": "price-series-1",
+            "auction_type": "A01",
+            "business_type": "A62",
+            "contract_type": "A01",
+            "classification_sequence": 1,
+            "curve_type": "A03",
             "position": 2,
             "interval_start_utc": "2026-06-01T01:00Z",
             "interval_end_utc": "2026-06-01T02:00Z",
@@ -142,12 +160,45 @@ def test_entsoe_client_builds_day_ahead_request_params(monkeypatch):
         "securityToken": "token",
         "documentType": "A44",
         "contract_MarketAgreement.type": "A01",
+        "classificationSequence_AttributeInstanceComponent.position": 1,
         "in_Domain": "10Y1001A1001A82H",
         "out_Domain": "10Y1001A1001A82H",
         "periodStart": "202606010000",
         "periodEnd": "202606020000",
     }
     assert len(rows) == 2
+
+
+def test_entsoe_client_keeps_only_primary_day_ahead_auction_sequence():
+    secondary = DAY_AHEAD_XML.replace(
+        "<mRID>price-series-1</mRID>",
+        "<mRID>price-series-2</mRID>",
+    ).replace(
+        "classificationSequence_AttributeInstanceComponent.position>1<",
+        "classificationSequence_AttributeInstanceComponent.position>2<",
+    )
+    second_series = secondary[secondary.index("  <TimeSeries>") : secondary.index("</Publication_MarketDocument>")]
+    combined = DAY_AHEAD_XML.replace(
+        "</Publication_MarketDocument>",
+        f"{second_series}</Publication_MarketDocument>",
+    )
+    client = EntsoeClient.__new__(EntsoeClient)
+    client.security_token = "token"
+
+    class Response:
+        text = combined
+
+    client.get = lambda params: Response()
+
+    rows = client.query_day_ahead_prices(
+        bidding_zone_eic="10Y1001A1001A82H",
+        period_start=datetime(2026, 6, 1, 0, 0),
+        period_end=datetime(2026, 6, 2, 0, 0),
+    )
+
+    assert len(rows) == 2
+    assert {row["classification_sequence"] for row in rows} == {1}
+    assert {row["series_mrid"] for row in rows} == {"price-series-1"}
 
 
 def test_entsoe_client_requests_exact_api_path(monkeypatch):
@@ -373,6 +424,12 @@ def test_entsoe_spider_maps_rows_to_market_records(monkeypatch):
                     "price": 51.23,
                     "currency": "EUR",
                     "unit": "EUR/MWH",
+                    "series_mrid": "price-series-1",
+                    "auction_type": "A01",
+                    "business_type": "A62",
+                    "contract_type": "A01",
+                    "classification_sequence": 1,
+                    "curve_type": "A03",
                 }
             ]
 

@@ -10,7 +10,8 @@
       "domain_mode": "same_pair",
       "params": {
         "documentType": "A44",
-        "contract_MarketAgreement.Type": "A01"
+        "contract_MarketAgreement.Type": "A01",
+        "classificationSequence_AttributeInstanceComponent.position": 1
       },
       "chunk_days": 31
     },

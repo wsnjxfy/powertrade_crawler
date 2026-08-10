@@ -405,7 +405,7 @@ def test_market_agent_package_does_not_import_original_agent():
 
 def test_registry_has_only_controlled_capabilities():
     registry = build_market_tool_registry()
-    assert len(registry.names()) == 18
+    assert len(registry.names()) == 19
     assert not {
         "sql",
         "shell",
@@ -1676,7 +1676,7 @@ def test_gui_result_format_and_cli_surface(market_database):
     assert help_result.exit_code == 0
     assert "doctor" in help_result.stdout
     report = run_offline_evaluation()
-    assert report["summary"] == {"total": 15, "passed": 15, "failed": 0}
+    assert report["summary"] == {"total": 17, "passed": 17, "failed": 0}
 
 
 def test_gui_ctrl_enter_sends_without_inserting_newline():

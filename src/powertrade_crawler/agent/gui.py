@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import queue
 import threading
 from collections.abc import Callable
 from tkinter import (
@@ -36,6 +35,7 @@ from powertrade_crawler.llm_router import (
     DEFAULT_MODEL_STRATEGY,
     FreeRouterManagementClient,
 )
+from powertrade_crawler.ui_dispatch import UiLifecycle
 
 
 STAGE_LABELS = {
@@ -88,9 +88,9 @@ class ElecheckAgentApp:
         on_navigate: Callable[[str], None] | None = None,
     ) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.on_navigate = on_navigate
         self.repository = AgentRepository()
-        self.queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.session_id: str | None = None
         self.current_run_id: str | None = None
         self.pending_result: AgentRunResult | None = None
@@ -106,7 +106,6 @@ class ElecheckAgentApp:
         self._render_conversation([])
         self._set_text(self.result_text, "当前会话暂无结构化结果。")
         self.refresh_sessions()
-        self.root.after(100, self.poll_queue)
 
     def _configure_styles(self) -> None:
         colors = AGENT_COLORS
@@ -287,7 +286,16 @@ class ElecheckAgentApp:
             orient="vertical",
             command=self.sessions_tree.yview,
         )
-        self.sessions_tree.configure(yscrollcommand=session_scroll.set)
+        session_scroll_x = ttk.Scrollbar(
+            left,
+            orient="horizontal",
+            command=self.sessions_tree.xview,
+        )
+        self.sessions_tree.configure(
+            yscrollcommand=session_scroll.set,
+            xscrollcommand=session_scroll_x.set,
+        )
+        session_scroll_x.pack(side="bottom", fill="x")
         session_scroll.pack(side=RIGHT, fill="y")
         self.sessions_tree.pack(side=LEFT, fill=BOTH, expand=True)
         self.sessions_tree.bind("<<TreeviewSelect>>", self.on_session_selected)
@@ -365,7 +373,16 @@ class ElecheckAgentApp:
             orient="vertical",
             command=self.event_tree.yview,
         )
-        self.event_tree.configure(yscrollcommand=event_scroll.set)
+        event_scroll_x = ttk.Scrollbar(
+            event_frame,
+            orient="horizontal",
+            command=self.event_tree.xview,
+        )
+        self.event_tree.configure(
+            yscrollcommand=event_scroll.set,
+            xscrollcommand=event_scroll_x.set,
+        )
+        event_scroll_x.pack(side="bottom", fill="x")
         event_scroll.pack(side=RIGHT, fill="y")
         self.event_tree.pack(side=LEFT, fill=BOTH, expand=True)
         self.event_tree.tag_configure("success", foreground=colors["primary"])
@@ -751,12 +768,12 @@ class ElecheckAgentApp:
         try:
             loop = AgentLoop.from_config(event_callback=self._queue_event)
             result = loop.chat(prompt, session_id=session_id)
-            self.queue.put(("result", result))
+            self.ui.post(self._handle_background, "result", result)
         except Exception as exc:
-            self.queue.put(("error", str(exc)))
+            self.ui.post(self._handle_background, "error", str(exc))
 
     def _queue_event(self, event: dict[str, Any]) -> None:
-        self.queue.put(("event", event))
+        self.ui.post(self._handle_background, "event", event)
 
     def stop_run(self) -> None:
         if self.current_run_id:
@@ -822,30 +839,24 @@ class ElecheckAgentApp:
                 event_callback=self._queue_event,
             )
             result = loop.resume(tool_call_id)
-            self.queue.put(("result", result))
+            self.ui.post(self._handle_background, "result", result)
         except Exception as exc:
-            self.queue.put(("error", str(exc)))
+            self.ui.post(self._handle_background, "error", str(exc))
 
-    def poll_queue(self) -> None:
-        try:
-            while True:
-                kind, payload = self.queue.get_nowait()
-                if kind == "event":
-                    self._handle_event(payload)
-                elif kind == "result":
-                    self._handle_result(payload)
-                elif kind == "error":
-                    self._set_busy(False, "运行失败")
-                    messagebox.showerror("Agent 错误", str(payload), parent=self.root)
-                elif kind == "connection":
-                    ok, message = payload
-                    if ok:
-                        messagebox.showinfo("连接测试", message, parent=self.root)
-                    else:
-                        messagebox.showerror("连接测试", message, parent=self.root)
-        except queue.Empty:
-            pass
-        self.root.after(100, self.poll_queue)
+    def _handle_background(self, kind: str, payload: Any) -> None:
+        if kind == "event":
+            self._handle_event(payload)
+        elif kind == "result":
+            self._handle_result(payload)
+        elif kind == "error":
+            self._set_busy(False, "运行失败")
+            messagebox.showerror("Agent 错误", str(payload), parent=self.root)
+        elif kind == "connection":
+            ok, message = payload
+            if ok:
+                messagebox.showinfo("连接测试", message, parent=self.root)
+            else:
+                messagebox.showerror("连接测试", message, parent=self.root)
 
     def _handle_event(self, event: dict[str, Any]) -> None:
         self.current_run_id = event.get("run_id") or self.current_run_id
@@ -898,8 +909,8 @@ class ElecheckAgentApp:
 
         dialog = Toplevel(self.root)
         dialog.title("Agent 正在更新 Elecheck 现货数据")
-        dialog.geometry("560x245")
-        dialog.resizable(False, False)
+        dialog.minsize(560, 245)
+        dialog.resizable(True, True)
         dialog.transient(self.root.winfo_toplevel())
         dialog.protocol("WM_DELETE_WINDOW", dialog.withdraw)
         self.update_progress_dialog = dialog
@@ -1032,7 +1043,7 @@ class ElecheckAgentApp:
         self.load_session(result.session_id)
 
     def open_settings(self) -> None:
-        dialog = AgentSettingsDialog(self.root, self.repository, self.queue)
+        dialog = AgentSettingsDialog(self.root, self.repository, self._handle_background)
         self.root.wait_window(dialog.dialog)
 
     def _set_busy(self, busy: bool, _status: str) -> None:
@@ -1187,13 +1198,14 @@ class AgentSettingsDialog:
         self,
         root,
         repository: AgentRepository,
-        result_queue: queue.Queue,
+        result_callback: Callable[[str, Any], None],
     ) -> None:
         self.root = root
         self.repository = repository
-        self.result_queue = result_queue
+        self.result_callback = result_callback
         config = repository.get_config()
         self.dialog = Toplevel(root)
+        self.ui = UiLifecycle(self.dialog)
         self.dialog.title("Elecheck Agent 模型设置")
         self.dialog.transient(root)
         self.dialog.grab_set()
@@ -1264,6 +1276,7 @@ class AgentSettingsDialog:
 
     def refresh_channels(self) -> None:
         self.status_var.set("正在读取免费渠道和告警…")
+        current_model_id = self.model_var.get()
 
         def worker() -> None:
             try:
@@ -1280,17 +1293,16 @@ class AgentSettingsDialog:
                 values = tuple(dict.fromkeys([DEFAULT_MODEL_STRATEGY, *strategies]))
                 status = f"可用免费渠道 {len(strategies)} 个；当前告警 {len(alerts)} 条。"
             except Exception as exc:
-                values = (DEFAULT_MODEL_STRATEGY, self.model_var.get())
+                values = (DEFAULT_MODEL_STRATEGY, current_model_id)
                 status = f"免费池状态读取失败：{exc}"
 
-            def apply_result() -> None:
-                if self.dialog.winfo_exists():
-                    self.model_combo.configure(values=values)
-                    self.status_var.set(status)
-
-            self.dialog.after(0, apply_result)
+            self.ui.post(self._apply_channel_result, values, status)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_channel_result(self, values: tuple[str, ...], status: str) -> None:
+        self.model_combo.configure(values=values)
+        self.status_var.set(status)
 
     def save(self, *, close: bool = True) -> bool:
         try:
@@ -1345,20 +1357,19 @@ class AgentSettingsDialog:
             )
             detected = "native" if response.tool_calls else "json"
             self.repository.set_config(detected_protocol=detected)
-            self.result_queue.put(
+            self.ui.post(
+                self.result_callback,
+                "connection",
                 (
-                    "connection",
-                    (
-                        True,
-                        f"连接成功；协议：{detected}；命中渠道："
-                        f"{response.router_provider or '未返回'}；上游模型："
-                        f"{response.upstream_model or '未返回'}；告警："
-                        f"{response.router_alert_count if response.router_alert_count is not None else '未知'}",
-                    ),
-                )
+                    True,
+                    f"连接成功；协议：{detected}；命中渠道："
+                    f"{response.router_provider or '未返回'}；上游模型："
+                    f"{response.upstream_model or '未返回'}；告警："
+                    f"{response.router_alert_count if response.router_alert_count is not None else '未知'}",
+                ),
             )
         except Exception as exc:
-            self.result_queue.put(("connection", (False, str(exc))))
+            self.ui.post(self.result_callback, "connection", (False, str(exc)))
         finally:
             if provider is not None:
                 provider.close()

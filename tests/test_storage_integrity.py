@@ -21,6 +21,7 @@ from powertrade_crawler.models import (
     MarketRecord,
 )
 from powertrade_crawler.storage import (
+    DEFAULT_ELECHECK_AREA_RECORDS,
     add_null_safe_unique_indexes_if_missing,
     get_engine,
     get_session,
@@ -48,6 +49,40 @@ def prepare_db(tmp_path: Path, monkeypatch) -> None:
 def row_count(table_name: str) -> int:
     with get_engine().connect() as connection:
         return int(connection.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar_one())
+
+
+def test_repeated_init_preserves_existing_elecheck_area_metadata(tmp_path: Path, monkeypatch):
+    prepare_db(tmp_path, monkeypatch)
+    default = DEFAULT_ELECHECK_AREA_RECORDS[0]
+    collected_at = datetime(2020, 1, 2, 3, 4, 5)
+    upsert_elecheck_area_records(
+        [
+            ElecheckAreaRecord(
+                area_name="用户保留地区名",
+                area_code=default.area_code,
+                detail_point_count=48,
+                source="user-maintained",
+                note="不得被重复启动覆盖",
+                collected_at=collected_at,
+            )
+        ]
+    )
+
+    init_db()
+
+    with get_engine().connect() as connection:
+        row = connection.execute(
+            text(
+                "SELECT area_name, detail_point_count, source, note, collected_at "
+                "FROM elecheck_area_records WHERE area_code = :area_code"
+            ),
+            {"area_code": default.area_code},
+        ).mappings().one()
+    assert row["area_name"] == "用户保留地区名"
+    assert row["detail_point_count"] == 48
+    assert row["source"] == "user-maintained"
+    assert row["note"] == "不得被重复启动覆盖"
+    assert str(row["collected_at"]).startswith("2020-01-02 03:04:05")
 
 
 def test_every_business_upsert_is_idempotent(tmp_path: Path, monkeypatch):

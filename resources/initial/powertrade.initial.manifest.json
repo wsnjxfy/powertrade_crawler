@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "generated_at_utc": "2026-08-10T08:55:56.202665Z",
+  "generated_at_utc": "2026-08-10T14:49:54Z",
   "purpose": "Lightweight packaged demo database",
   "database_file": "powertrade.initial.db",
-  "database_bytes": 8859648,
+  "database_bytes": 49315840,
   "contains_credentials": false,
   "source_counts": {
     "entsoe": 603,
@@ -25,6 +25,9 @@
     "elecheck_purchasing_records": 414,
     "elecheck_purchasing_area_records": 33,
     "elecheck_mechanism_electricity_price_records": 80,
-    "dashboard_daily_metrics": 1476
+    "dashboard_daily_metrics": 1476,
+    "rag_documents": 1410,
+    "rag_chunks": 2851,
+    "rag_index_state": 1
   }
 }

@@ -3,8 +3,11 @@
 ## 1. 目标与边界
 
 第十一周在 `powertrade_crawler` 内实现单 Agent MVP，用自然语言串联已有的 Elecheck
-分析、导出、采集和调度能力。框架不使用 Agent SDK，也不提供多 Agent、RAG、长期语义
+分析、导出、采集和调度能力。框架不使用 Agent SDK，也不为 Elecheck Agent 提供 RAG、长期语义
 记忆、跨数据源分析、任意 SQL 写入、Shell 或任意文件工具。
+
+这里的边界只适用于独立 Elecheck Agent。多数据源 Agent 后续增加了只读本地知识库，
+但没有改变 Elecheck Agent 的能力或审批边界，详见 `RAG_GUIDE.md`。
 
 核心实现位于：
 

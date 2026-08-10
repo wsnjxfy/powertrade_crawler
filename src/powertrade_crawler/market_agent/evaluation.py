@@ -14,7 +14,11 @@ from powertrade_crawler.market_agent.data_tools import (
     QuerySeriesArgs,
     build_market_tool_registry,
 )
-from powertrade_crawler.market_agent.loop import MarketAgentLoop, deterministic_route
+from powertrade_crawler.market_agent.loop import (
+    MarketAgentLoop,
+    candidate_tool_names,
+    deterministic_route,
+)
 from powertrade_crawler.market_agent.repository import MarketAgentRepository
 from powertrade_crawler.market_agent.schemas import RiskLevel
 
@@ -54,6 +58,7 @@ def run_offline_evaluation() -> dict[str, Any]:
         "market_analyze_elecheck_spot",
         "market_analyze_elecheck_purchasing",
         "market_analyze_elecheck_mechanism",
+        "market_search_knowledge",
         "market_search_gzpec_news",
         "market_get_gzpec_article",
         "market_export_result",
@@ -167,6 +172,25 @@ def run_offline_evaluation() -> dict[str, Any]:
             for case in live_cases
         ),
         "在线案例不少于30项，采集案例必须停在审批边界",
+    )
+    knowledge_cases = [
+        case for case in live_cases if str(case.get("id", "")).startswith("rag_")
+    ]
+    routed_knowledge_cases = sum(
+        candidate_tool_names(case["prompt"], registry)
+        == ["market_search_knowledge"]
+        for case in knowledge_cases
+    )
+    check(
+        "rag_agent_cases_present",
+        len(knowledge_cases) >= 20,
+        "至少20条知识问答真实口语评测",
+    )
+    check(
+        "rag_agent_static_tool_selection",
+        bool(knowledge_cases)
+        and routed_knowledge_cases / len(knowledge_cases) >= 0.90,
+        "知识问答确定性候选工具选择率不低于90%",
     )
     check(
         "independent_namespace",
@@ -294,7 +318,15 @@ def run_online_evaluation(
                 or result.answer.reference_items
                 or result.answer.datasets
                 or result.answer.dataset_catalog_summaries
+                or result.answer.knowledge_citations
             )
+        )
+        knowledge_citation_ok = not case.get("requires_knowledge_citations") or bool(
+            result.answer
+            and result.answer.knowledge_citations
+            and result.answer.citation_ids
+            and set(result.answer.citation_ids)
+            == {item.citation_id for item in result.answer.knowledge_citations}
         )
         tool_call_success = all(call["status"] == "success" for call in tool_calls)
         execution_ok = (
@@ -324,6 +356,7 @@ def run_online_evaluation(
                 or bool(result.answer and result.answer.business_metrics)
             )
             and result_content_ok
+            and knowledge_citation_ok
             and explanation_ok
             and execution_ok
             and (
@@ -349,6 +382,12 @@ def run_online_evaluation(
                 "data_sources": sorted(sources),
                 "units": sorted(actual_units),
                 "dataset_ids": sorted(actual_dataset_ids),
+                "citation_ids": (
+                    result.answer.citation_ids if result.answer else []
+                ),
+                "retrieval_mode": (
+                    result.answer.retrieval_mode if result.answer else "none"
+                ),
                 "conclusion": conclusion,
                 "error": result.error.model_dump(mode="json") if result.error else None,
                 "collection_executed": collection_executed,
@@ -357,6 +396,24 @@ def run_online_evaluation(
             }
         )
     passed = sum(1 for case in results if case["passed"])
+    paired_results = list(zip(results, selected_cases, strict=True))
+    knowledge_results = [
+        item
+        for item, case in paired_results
+        if str(case.get("id", "")).startswith("rag_")
+    ]
+    citation_required_results = [
+        item
+        for item, case in paired_results
+        if case.get("requires_knowledge_citations")
+    ]
+    knowledge_tool_selections = sum(
+        item["tool_names"] == ["market_search_knowledge"]
+        for item in knowledge_results
+    )
+    knowledge_citation_successes = sum(
+        bool(item["citation_ids"]) for item in citation_required_results
+    )
     return {
         "mode": "online",
         "cases": results,
@@ -368,5 +425,19 @@ def run_online_evaluation(
                 bool(case["collection_executed"]) for case in results
             ),
             "elapsed_seconds": round(time.perf_counter() - started, 3),
+            "knowledge_case_count": len(knowledge_results),
+            "knowledge_tool_selection_rate": (
+                round(knowledge_tool_selections / len(knowledge_results), 4)
+                if knowledge_results
+                else 1.0
+            ),
+            "knowledge_citation_success_rate": (
+                round(
+                    knowledge_citation_successes / len(citation_required_results),
+                    4,
+                )
+                if citation_required_results
+                else 1.0
+            ),
         },
     }

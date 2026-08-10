@@ -346,11 +346,13 @@ class ElecheckPriceDashboardApp:
         self.refresh_after_crawl(select_latest=True)
 
     def build_ui(self) -> None:
-        toolbar = ttk.Frame(self.root, padding=8)
+        toolbar = ttk.Frame(self.root, padding=(8, 8, 8, 4))
         toolbar.pack(fill=X)
-        ttk.Label(toolbar, text="地区").pack(side=LEFT, padx=(0, 4))
+        selection_row = ttk.Frame(toolbar)
+        selection_row.pack(fill=X)
+        ttk.Label(selection_row, text="地区").pack(side=LEFT, padx=(0, 4))
         self.area_combo = ttk.Combobox(
-            toolbar,
+            selection_row,
             textvariable=self.area_var,
             state="readonly",
             width=16,
@@ -358,22 +360,39 @@ class ElecheckPriceDashboardApp:
         self.area_combo.pack(side=LEFT, padx=(0, 10))
         self.area_combo.bind("<<ComboboxSelected>>", self.on_area_changed)
 
-        ttk.Label(toolbar, text="日期").pack(side=LEFT, padx=(0, 4))
+        ttk.Label(selection_row, text="日期").pack(side=LEFT, padx=(0, 4))
         self.date_combo = ttk.Combobox(
-            toolbar,
+            selection_row,
             textvariable=self.date_var,
             state="readonly",
             width=12,
         )
         self.date_combo.pack(side=LEFT, padx=(0, 6))
         self.date_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_chart())
-        self.previous_button = ttk.Button(toolbar, text="上一有数据日", command=self.show_previous_date)
+
+        action_row = ttk.Frame(toolbar)
+        action_row.pack(fill=X, pady=(6, 0))
+        self.previous_button = ttk.Button(
+            action_row,
+            text="上一有数据日",
+            command=self.show_previous_date,
+        )
         self.previous_button.pack(side=LEFT, padx=(0, 4))
-        self.next_button = ttk.Button(toolbar, text="下一有数据日", command=self.show_next_date)
+        self.next_button = ttk.Button(
+            action_row,
+            text="下一有数据日",
+            command=self.show_next_date,
+        )
         self.next_button.pack(side=LEFT, padx=(0, 8))
-        ttk.Button(toolbar, text="刷新", command=self.refresh_chart).pack(side=LEFT, padx=(0, 4))
-        ttk.Button(toolbar, text="导出 CSV", command=self.export_csv).pack(side=LEFT, padx=(0, 4))
-        ttk.Button(toolbar, text="导出 PNG", command=self.export_png).pack(side=LEFT)
+        ttk.Button(action_row, text="刷新", command=self.refresh_chart).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(action_row, text="导出 CSV", command=self.export_csv).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(action_row, text="导出 PNG", command=self.export_png).pack(side=LEFT)
 
         summary = ttk.Frame(self.root, padding=(8, 0, 8, 6))
         summary.pack(fill=X)
@@ -385,18 +404,23 @@ class ElecheckPriceDashboardApp:
                 self.completeness_var,
             )
         ):
-            if index:
-                ttk.Separator(summary, orient="vertical").pack(side=LEFT, fill="y", padx=10)
-            ttk.Label(summary, textvariable=variable).pack(side=LEFT)
+            summary.columnconfigure(index, weight=1, uniform="spot-summary")
+            ttk.Label(summary, textvariable=variable, anchor="center").grid(
+                row=0,
+                column=index,
+                sticky="ew",
+                padx=(0 if index == 0 else 5, 0 if index == 3 else 5),
+            )
 
-        chart_frame = ttk.Frame(self.root)
-        chart_frame.pack(fill=BOTH, expand=True, padx=8)
-        self.build_chart_canvas(chart_frame)
         ttk.Label(self.root, textvariable=self.status_var, anchor=W).pack(
             fill=X,
             padx=8,
-            pady=(3, 6),
+            pady=(0, 5),
         )
+
+        chart_frame = ttk.Frame(self.root)
+        chart_frame.pack(fill=BOTH, expand=True, padx=8, pady=(0, 6))
+        self.build_chart_canvas(chart_frame)
 
     def build_chart_canvas(self, parent) -> None:
         try:

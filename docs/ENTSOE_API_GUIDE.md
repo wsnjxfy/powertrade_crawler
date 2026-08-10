@@ -109,6 +109,10 @@ powertrade crawl DATASET `
 
 Without `--dry-run`, generic ENTSO-E records are written to `entsoe_records`. The compatibility command `entsoe_day_ahead_prices` still writes to `market_records`.
 
+兼容日前电价命令会明确请求 classification sequence 1。ENTSO-E 可能为同一报价区和时段发布多个拍卖序列；固定标准序列可以避免不同价格在 `market_records` 中相互覆盖。
+
+The compatibility day-ahead command explicitly requests classification sequence 1. ENTSO-E may publish multiple auction sequences for the same bidding zone and interval; keeping the standard sequence separate prevents different prices from overwriting one another in `market_records`.
+
 ## 3. 市场数据 / Market Data
 
 ### 3.1 日前电价 / Day-ahead Energy Prices

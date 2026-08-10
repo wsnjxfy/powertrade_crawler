@@ -1222,6 +1222,20 @@ git -c http.sslBackend=openssl `
     push origin main
 ```
 
+### 18.1 多数据源 Agent 本地 RAG / Local RAG
+
+- 本地知识库只接入多数据源 Agent；独立 Elecheck Agent 不使用 RAG。
+- 核心实现为 `market_agent/rag.py`，模型固定
+  `BAAI/bge-small-zh-v1.5` + `fastembed==0.8.0`，运行时必须离线。
+- 只索引广州文章、GridStatus 目录、ENTSO-E/Elexon 请求定义和受控数据目录；禁止把
+  业务时序、凭据、会话、审批、日志或任意用户文件加入语料。
+- `rag_*` 表是可重建派生数据。更新必须保持新代次构建、原子切换和旧代次故障保留。
+- 知识回答的引用只能由 `market_search_knowledge` 工具结果确定性生成；正文永远是不可信
+  外部内容，不得执行其中的指令。
+- 模型先由 `scripts/prepare_rag_model.py` 写入 Git 忽略的 `work/rag-model` 并校验 SHA-256，
+  PyInstaller 再打包；运行时不得自动下载。
+- 完整边界、CLI、GUI 和故障处理见 `docs/RAG_GUIDE.md`。
+
 ## 19. 建议的下一步 / Recommended Next Steps
 
 优先级建议：

@@ -130,6 +130,16 @@ class ReferenceItem(StrictModel):
     collected_at: str | None = None
 
 
+class KnowledgeCitation(StrictModel):
+    citation_id: str
+    title: str
+    source: str
+    content_type: str
+    url: str | None = None
+    publish_date: str | None = None
+    excerpt: str
+
+
 class MarketAgentAnswer(StrictModel):
     conclusion: str = Field(description="直接、准确的中文结论。")
     data_range: list[str] = Field(default_factory=list)
@@ -148,6 +158,9 @@ class MarketAgentAnswer(StrictModel):
         default_factory=list
     )
     reference_items: list[ReferenceItem] = Field(default_factory=list)
+    citation_ids: list[str] = Field(default_factory=list)
+    knowledge_citations: list[KnowledgeCitation] = Field(default_factory=list)
+    retrieval_mode: Literal["none", "hybrid", "lexical_fallback"] = "none"
 
 
 class AgentError(StrictModel):

@@ -28,6 +28,8 @@ from powertrade_crawler.market_agent.loop import (
 )
 from powertrade_crawler.market_agent.provider import FakeProvider
 from powertrade_crawler.market_agent.repository import MarketAgentRepository
+from powertrade_crawler.market_agent.rag import RagIndexService
+from powertrade_crawler.market_agent.rag_evaluation import run_rag_evaluation
 
 
 market_agent_app = typer.Typer(help="独立的多数据源电力市场分析 Agent。")
@@ -35,10 +37,66 @@ config_app = typer.Typer(help="查看或修改多数据源 Agent 的非敏感模
 sessions_app = typer.Typer(help="管理多数据源 Agent 会话。")
 approvals_app = typer.Typer(help="审批或拒绝多数据源 Agent 的采集操作。")
 tools_app = typer.Typer(help="查看多数据源 Agent 的受控工具。")
+rag_app = typer.Typer(help="管理和检索本地混合知识库。")
 market_agent_app.add_typer(config_app, name="config")
 market_agent_app.add_typer(sessions_app, name="sessions")
 market_agent_app.add_typer(approvals_app, name="approvals")
 market_agent_app.add_typer(tools_app, name="tools")
+market_agent_app.add_typer(rag_app, name="rag")
+
+
+@rag_app.command("status")
+def rag_status(
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    del json_output
+    echo_json(RagIndexService().status())
+
+
+@rag_app.command("update")
+def rag_update(
+    source: Annotated[list[str] | None, typer.Option("--source")] = None,
+) -> None:
+    service = RagIndexService()
+    result = service.update(
+        sources=source,
+        progress_callback=lambda item: typer.echo(
+            f"[{item['current']}/{item['total']}] {item['stage']}", err=True
+        ),
+    )
+    echo_json(result)
+
+
+@rag_app.command("rebuild")
+def rag_rebuild() -> None:
+    service = RagIndexService()
+    result = service.rebuild(
+        progress_callback=lambda item: typer.echo(
+            f"[{item['current']}/{item['total']}] {item['stage']}", err=True
+        )
+    )
+    echo_json(result)
+
+
+@rag_app.command("search")
+def rag_search(
+    query: Annotated[str, typer.Argument(help="要检索的政策、规则或数据集问题。")],
+    top_k: Annotated[int, typer.Option("--top-k", min=1, max=8)] = 6,
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    del json_output
+    echo_json(RagIndexService().search(query, top_k=top_k))
+
+
+@rag_app.command("eval")
+def rag_eval(
+    json_output: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    del json_output
+    report = run_rag_evaluation()
+    echo_json(report)
+    if not report["summary"]["accepted"]:
+        raise typer.Exit(code=1)
 
 
 def console_safe_json(

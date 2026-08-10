@@ -35,6 +35,7 @@ from powertrade_crawler.scheduler import (
 )
 from powertrade_crawler.registry import list_spiders
 from powertrade_crawler.spiders.entsoe import ENTSOE_BIDDING_ZONES
+from powertrade_crawler.ui_dispatch import UiLifecycle
 
 
 class DashboardDataApp:
@@ -48,6 +49,7 @@ class DashboardDataApp:
 
     def __init__(self, root) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         try:
             configured_areas = list_elecheck_source_update_areas()
         except (OSError, ValueError, sqlite3.Error):
@@ -248,10 +250,10 @@ class DashboardDataApp:
                 count = rebuild_dashboard_daily_metrics(start, end)
             except Exception as exc:
                 message = str(exc)
-                self.root.after(0, lambda: messagebox.showerror("重建指标失败", message))
-                self.root.after(0, lambda: self.summary_var.set("指标重建失败。"))
+                self.ui.post(messagebox.showerror, "重建指标失败", message)
+                self.ui.post(self.summary_var.set, "指标重建失败。")
                 return
-            self.root.after(0, lambda: self.on_rebuild_success(count))
+            self.ui.post(self.on_rebuild_success, count)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -372,6 +374,7 @@ class ScheduleDataApp:
 
     def __init__(self, root) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.summary_var = StringVar(value="Ready")
         self.name_var = StringVar(value="")
         self.job_type_var = StringVar(value="指标重建")
@@ -400,7 +403,7 @@ class ScheduleDataApp:
 
         body = ttk.PanedWindow(page, orient="horizontal")
         body.grid(row=0, column=0, sticky="nsew")
-        config_frame = ttk.Frame(body, width=390, padding=(0, 0, 10, 0))
+        config_frame = ttk.Frame(body, width=400, padding=(0, 0, 10, 0))
         config_frame.grid_propagate(False)
         workspace = ttk.Frame(body, style="AppSurface.TFrame")
         body.add(config_frame, weight=0)
@@ -497,6 +500,7 @@ class ScheduleDataApp:
             command=self.create_quick_source_job,
         ).grid(row=8, column=0, sticky="ew")
 
+        advanced_frame.columnconfigure(0, minsize=76)
         advanced_frame.columnconfigure(1, weight=1)
         ttk.Label(
             advanced_frame,
@@ -534,7 +538,7 @@ class ScheduleDataApp:
         )
         add_field(
             3,
-            "采集项目（高级标识）",
+            "项目标识",
             ttk.Combobox(
                 advanced_frame,
                 textvariable=self.spider_name_var,
@@ -577,7 +581,7 @@ class ScheduleDataApp:
             ),
         )
         date_row = ttk.Frame(advanced_frame)
-        add_field(6, "自定义日期（开始 / 结束）", date_row)
+        add_field(6, "自定义日期", date_row)
         date_row.columnconfigure(0, weight=1)
         date_row.columnconfigure(1, weight=1)
         ttk.Entry(date_row, textvariable=self.start_date_var, style="Compact.TEntry").grid(
@@ -598,7 +602,7 @@ class ScheduleDataApp:
         )
         ttk.Checkbutton(
             advanced_frame,
-            text="启用本地任务（需另行安装 Windows 触发器）",
+            text="启用本地任务",
             variable=self.enabled_var,
             style="Compact.TCheckbutton",
         ).grid(
@@ -640,30 +644,36 @@ class ScheduleDataApp:
         for column in range(5):
             actions.columnconfigure(column, weight=1, uniform="task-action")
         ttk.Button(actions, text="刷新", command=self.refresh).grid(row=0, column=0, sticky="ew")
-        ttk.Button(
+        self.enable_job_button = ttk.Button(
             actions,
             text="启用",
+            state="disabled",
             command=lambda: self.set_selected_enabled(True),
-        ).grid(row=0, column=1, sticky="ew", padx=(6, 0))
-        ttk.Button(
+        )
+        self.enable_job_button.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self.disable_job_button = ttk.Button(
             actions,
             text="禁用",
+            state="disabled",
             command=lambda: self.set_selected_enabled(False),
-        ).grid(row=0, column=2, sticky="ew", padx=(6, 0))
-        ttk.Button(
+        )
+        self.disable_job_button.grid(row=0, column=2, sticky="ew", padx=(6, 0))
+        self.run_job_button = ttk.Button(
             actions,
             text="立即运行",
             style="Primary.TButton",
+            state="disabled",
             command=self.run_selected,
-        ).grid(row=0, column=3, sticky="ew", padx=(6, 0))
-        more_button = ttk.Menubutton(actions, text="更多")
-        more_menu = Menu(more_button, tearoff=False)
+        )
+        self.run_job_button.grid(row=0, column=3, sticky="ew", padx=(6, 0))
+        self.more_job_button = ttk.Menubutton(actions, text="更多", state="disabled")
+        more_menu = Menu(self.more_job_button, tearoff=False)
         more_menu.add_command(label="安装到 Windows 任务计划", command=self.install_selected)
         more_menu.add_command(label="卸载 Windows 任务计划", command=self.uninstall_selected)
         more_menu.add_separator()
         more_menu.add_command(label="删除选中任务", command=self.delete_selected)
-        more_button.configure(menu=more_menu)
-        more_button.grid(row=0, column=4, sticky="ew", padx=(6, 0))
+        self.more_job_button.configure(menu=more_menu)
+        self.more_job_button.grid(row=0, column=4, sticky="ew", padx=(6, 0))
 
         self.jobs_tree = ttk.Treeview(
             jobs_frame,
@@ -693,6 +703,7 @@ class ScheduleDataApp:
         self.jobs_tree.configure(xscrollcommand=jobs_scroll.set)
         self.jobs_tree.grid(row=1, column=0, sticky="nsew")
         jobs_scroll.grid(row=2, column=0, sticky="ew")
+        self.jobs_tree.bind("<<TreeviewSelect>>", self._update_job_action_state)
 
         self.runs_tree = ttk.Treeview(
             runs_frame,
@@ -861,6 +872,13 @@ class ScheduleDataApp:
             return None
         return int(self.jobs_tree.item(selection[0], "values")[0])
 
+    def _update_job_action_state(self, _event=None) -> None:
+        state = "normal" if self.jobs_tree.selection() else "disabled"
+        self.enable_job_button.configure(state=state)
+        self.disable_job_button.configure(state=state)
+        self.run_job_button.configure(state=state)
+        self.more_job_button.configure(state=state)
+
     def set_selected_enabled(self, enabled: bool) -> None:
         job_id = self.selected_job_id()
         if job_id is None:
@@ -880,7 +898,7 @@ class ScheduleDataApp:
 
         def worker() -> None:
             result = run_scheduled_job(job_id, force=True)
-            self.root.after(0, lambda: self.on_run_done(result["status"], result["message"]))
+            self.ui.post(self.on_run_done, result["status"], result["message"])
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -971,6 +989,7 @@ class ScheduleDataApp:
                     run.message,
                 ),
             )
+        self._update_job_action_state()
         self.summary_var.set(message or "定时任务/数据维护：已刷新。")
 
     @staticmethod

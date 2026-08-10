@@ -76,6 +76,7 @@ from powertrade_crawler.storage import (
     upsert_gridstatus_dataset_metadata_records,
     upsert_records,
 )
+from powertrade_crawler.ui_dispatch import UiLifecycle, install_ui_dispatcher
 
 if TYPE_CHECKING:
     from powertrade_crawler.app_shell import PowertradeAppShell
@@ -348,6 +349,7 @@ class GridStatusMetadataApp:
         configure_window: bool = True,
     ) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.repository = repository
         self.current_row: sqlite3.Row | None = None
         self.result_rows: dict[str, sqlite3.Row] = {}
@@ -389,43 +391,50 @@ class GridStatusMetadataApp:
         style.configure("Toolbar.TFrame", padding=8)
 
     def build_layout(self) -> None:
-        toolbar = ttk.Frame(self.root, style="Toolbar.TFrame")
-        toolbar.pack(fill=X, padx=8, pady=(8, 0))
+        filter_panel = ttk.Frame(self.root, style="Toolbar.TFrame")
+        filter_panel.pack(fill=X, padx=8, pady=(8, 0))
+        filter_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        filter_bar.pack(fill=X)
 
-        ttk.Label(toolbar, text="关键词").pack(side=LEFT, padx=(0, 6))
-        keyword_entry = ttk.Entry(toolbar, textvariable=self.keyword_var, width=24)
+        ttk.Label(filter_bar, text="关键词").pack(side=LEFT, padx=(0, 6))
+        keyword_entry = ttk.Entry(filter_bar, textvariable=self.keyword_var, width=24)
         keyword_entry.pack(side=LEFT, padx=(0, 12))
         keyword_entry.bind("<Return>", lambda _event: self.refresh_results())
 
-        ttk.Label(toolbar, text="来源").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(filter_bar, text="来源").pack(side=LEFT, padx=(0, 6))
         self.source_combo = ttk.Combobox(
-            toolbar,
+            filter_bar,
             textvariable=self.source_var,
             width=10,
             state="readonly",
         )
         self.source_combo.pack(side=LEFT, padx=(0, 12))
 
-        ttk.Label(toolbar, text="频率").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(filter_bar, text="频率").pack(side=LEFT, padx=(0, 6))
         self.frequency_combo = ttk.Combobox(
-            toolbar,
+            filter_bar,
             textvariable=self.frequency_var,
             width=12,
             state="readonly",
         )
         self.frequency_combo.pack(side=LEFT, padx=(0, 12))
 
-        ttk.Label(toolbar, text="状态").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(filter_bar, text="状态").pack(side=LEFT, padx=(0, 6))
         self.status_combo = ttk.Combobox(
-            toolbar,
+            filter_bar,
             textvariable=self.status_var,
             width=10,
             state="readonly",
         )
         self.status_combo.pack(side=LEFT, padx=(0, 12))
 
-        ttk.Button(toolbar, text="搜索", command=self.refresh_results).pack(side=LEFT)
-        ttk.Button(toolbar, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+        filter_actions = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        filter_actions.pack(fill=X, pady=(5, 0))
+        ttk.Button(filter_actions, text="搜索", command=self.refresh_results).pack(side=LEFT)
+        ttk.Button(filter_actions, text="重置筛选", command=self.reset_filters).pack(
+            side=LEFT,
+            padx=(6, 0),
+        )
 
         catalog_actions = ttk.Frame(self.root, padding=(8, 6, 8, 4))
         catalog_actions.pack(fill=X)
@@ -444,10 +453,10 @@ class GridStatusMetadataApp:
             padx=(8, 0),
         )
         ttk.Label(
-            catalog_actions,
+            self.root,
             text="选择数据集后可在右侧查看字段、API 地址并下载数据。",
             style="Muted.TLabel",
-        ).pack(side=RIGHT)
+        ).pack(fill=X, padx=8, pady=(0, 5))
 
         status_bar = ttk.Frame(self.root)
         status_bar.pack(fill=X, side="bottom")
@@ -499,15 +508,17 @@ class GridStatusMetadataApp:
 
         action_bar = ttk.Frame(parent)
         action_bar.pack(fill=X, pady=(0, 8))
+        action_bar.columnconfigure(0, weight=1, uniform="dataset-action")
+        action_bar.columnconfigure(1, weight=1, uniform="dataset-action")
         ttk.Button(action_bar, text="复制 ID", command=self.copy_dataset_id).grid(
             row=0,
             column=0,
-            sticky="w",
+            sticky="ew",
         )
         ttk.Button(action_bar, text="复制 API 地址", command=self.copy_api_url).grid(
             row=0,
             column=1,
-            sticky="w",
+            sticky="ew",
             padx=(8, 0),
         )
         ttk.Button(
@@ -515,16 +526,11 @@ class GridStatusMetadataApp:
             text="下载 CSV",
             style="Primary.TButton",
             command=self.download_csv,
-        ).grid(row=0, column=2, sticky="w", padx=(8, 0))
-        ttk.Button(
-            action_bar,
-            text="更换 API key",
-            command=self.change_gridstatus_api_key,
-        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ).grid(row=1, column=0, sticky="ew", pady=(6, 0))
         ttk.Button(action_bar, text="打开来源", command=self.open_source_url).grid(
             row=1,
-            column=2,
-            sticky="w",
+            column=1,
+            sticky="ew",
             padx=(8, 0),
             pady=(6, 0),
         )
@@ -614,9 +620,9 @@ class GridStatusMetadataApp:
                 written = upsert_gridstatus_dataset_metadata_records(records)
             except Exception as exc:
                 message = str(exc)
-                self.root.after(0, lambda: self.on_catalog_refresh_error(message))
+                self.ui.post(self.on_catalog_refresh_error, message)
             else:
-                self.root.after(0, lambda: self.on_catalog_refresh_success(written))
+                self.ui.post(self.on_catalog_refresh_success, written)
             finally:
                 if spider is not None:
                     spider.close()
@@ -780,8 +786,8 @@ class GridStatusMetadataApp:
     def ask_gridstatus_api_key(self) -> str | None:
         dialog = Toplevel(self.root)
         dialog.title("设置 GridStatus API key")
-        dialog.geometry("560x250")
-        dialog.resizable(False, False)
+        dialog.minsize(560, 250)
+        dialog.resizable(True, True)
         dialog.transient(self.root)
         dialog.grab_set()
 
@@ -842,8 +848,8 @@ class GridStatusMetadataApp:
     def show_download_options(self, metadata: dict[str, object]) -> None:
         dialog = Toplevel(self.root)
         dialog.title("下载数据")
-        dialog.geometry("650x430")
-        dialog.resizable(False, False)
+        dialog.minsize(650, 430)
+        dialog.resizable(True, True)
 
         dataset_id = str(metadata["dataset_id"])
         start, end = suggested_download_range(metadata)
@@ -1107,8 +1113,8 @@ class GridStatusMetadataApp:
 
         dialog = Toplevel(self.root)
         dialog.title("正在下载")
-        dialog.geometry("480x210")
-        dialog.resizable(False, False)
+        dialog.minsize(480, 210)
+        dialog.resizable(True, True)
         dialog.attributes("-toolwindow", False)
         dialog.protocol("WM_DELETE_WINDOW", self.cancel_download)
 
@@ -1179,21 +1185,18 @@ class GridStatusMetadataApp:
             result = download_dataset_csv_adaptive(
                 metadata=metadata,
                 output_path=output_path,
-                progress=lambda message: self.root.after(
-                    0,
-                    lambda message=message: self.update_download_message(message),
-                ),
+                progress=lambda message: self.ui.post(self.update_download_message, message),
                 control=control,
                 output_format=output_format,
             )
         except DownloadCancelled as exc:
             message = str(exc)
-            self.root.after(0, lambda message=message: self.on_download_cancelled(dataset_id, message))
+            self.ui.post(self.on_download_cancelled, dataset_id, message)
         except Exception as exc:
             message = str(exc)
-            self.root.after(0, lambda message=message: self.on_download_error(dataset_id, message))
+            self.ui.post(self.on_download_error, dataset_id, message)
         else:
-            self.root.after(0, lambda: self.on_download_success(dataset_id, result.output_path, result))
+            self.ui.post(self.on_download_success, dataset_id, result.output_path, result)
 
     def update_download_message(self, message) -> None:
         if isinstance(message, dict):
@@ -2116,8 +2119,8 @@ class DatePickerDialog:
 
         self.dialog = Toplevel(root)
         self.dialog.title("选择日期")
-        self.dialog.geometry("460x430")
-        self.dialog.resizable(False, False)
+        self.dialog.minsize(460, 430)
+        self.dialog.resizable(True, True)
         self.dialog.transient(root.winfo_toplevel())
         self.dialog.grab_set()
 
@@ -2249,6 +2252,7 @@ class ElecheckDataApp:
         on_navigate=None,
     ) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.repository = repository
         self.on_navigate = on_navigate
         self.summary_var = StringVar(value="Ready")
@@ -2321,12 +2325,9 @@ class ElecheckDataApp:
     def build_layout(self) -> None:
         notebook = ttk.Notebook(self.root)
         notebook.pack(fill=BOTH, expand=True, padx=8, pady=8)
+        self.notebook = notebook
 
         from powertrade_crawler.agent.gui import ElecheckAgentApp
-
-        agent_frame = ttk.Frame(notebook)
-        notebook.add(agent_frame, text="智能 Agent")
-        self.agent_app = ElecheckAgentApp(agent_frame, on_navigate=self.on_navigate)
 
         dashboard_frame = ttk.Frame(notebook)
         notebook.add(dashboard_frame, text="现货价格分析")
@@ -2352,6 +2353,10 @@ class ElecheckDataApp:
         )
         self.mechanism_tree, self.mechanism_raw_text = self.build_mechanism_tab(notebook)
 
+        agent_frame = ttk.Frame(notebook)
+        notebook.add(agent_frame, text="智能 Agent")
+        self.agent_app = ElecheckAgentApp(agent_frame, on_navigate=self.on_navigate)
+
         status_bar = ttk.Frame(self.root)
         status_bar.pack(fill=X, side="bottom")
         ttk.Label(status_bar, textvariable=self.summary_var, anchor=W).pack(fill=X, padx=8, pady=4)
@@ -2360,10 +2365,16 @@ class ElecheckDataApp:
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="现货价格数据")
 
-        crawl_bar = ttk.Frame(frame, style="Toolbar.TFrame")
-        crawl_bar.pack(fill=X)
-        ttk.Label(crawl_bar, text="地区").pack(side=LEFT, padx=(0, 6))
-        self.clear_area_combo = ttk.Combobox(crawl_bar, textvariable=self.clear_area_var, width=16)
+        crawl_panel = ttk.LabelFrame(frame, text="在线采集", padding=8)
+        crawl_panel.pack(fill=X, padx=8, pady=(6, 3))
+        crawl_scope_bar = ttk.Frame(crawl_panel, style="ToolbarRow.TFrame")
+        crawl_scope_bar.pack(fill=X)
+        ttk.Label(crawl_scope_bar, text="地区").pack(side=LEFT, padx=(0, 6))
+        self.clear_area_combo = ttk.Combobox(
+            crawl_scope_bar,
+            textvariable=self.clear_area_var,
+            width=16,
+        )
         self.clear_area_combo.pack(side=LEFT, padx=(0, 8))
         self.clear_area_combo.bind(
             "<<ComboboxSelected>>",
@@ -2373,9 +2384,9 @@ class ElecheckDataApp:
             "<FocusOut>",
             lambda _event: self.update_clear_price_earliest_hint(adjust_start_date=False),
         )
-        ttk.Label(crawl_bar, text="开始日期").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(crawl_scope_bar, text="开始日期").pack(side=LEFT, padx=(0, 6))
         ttk.Entry(
-            crawl_bar,
+            crawl_scope_bar,
             textvariable=self.clear_start_date_var,
             width=12,
             state="readonly",
@@ -2384,7 +2395,7 @@ class ElecheckDataApp:
             padx=(0, 4),
         )
         ttk.Button(
-            crawl_bar,
+            crawl_scope_bar,
             text="选择",
             width=5,
             command=lambda: self.pick_date(self.clear_start_date_var),
@@ -2392,14 +2403,9 @@ class ElecheckDataApp:
             side=LEFT,
             padx=(0, 8),
         )
-        ttk.Label(
-            crawl_bar,
-            textvariable=self.clear_earliest_date_hint_var,
-            foreground="#666666",
-        ).pack(side=LEFT, padx=(0, 10))
-        ttk.Label(crawl_bar, text="结束日期").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(crawl_scope_bar, text="结束日期").pack(side=LEFT, padx=(0, 6))
         ttk.Entry(
-            crawl_bar,
+            crawl_scope_bar,
             textvariable=self.clear_end_date_var,
             width=12,
             state="readonly",
@@ -2408,7 +2414,7 @@ class ElecheckDataApp:
             padx=(0, 4),
         )
         ttk.Button(
-            crawl_bar,
+            crawl_scope_bar,
             text="选择",
             width=5,
             command=lambda: self.pick_date(self.clear_end_date_var),
@@ -2416,103 +2422,132 @@ class ElecheckDataApp:
             side=LEFT,
             padx=(0, 8),
         )
-        ttk.Label(crawl_bar, text="采集凭据（可留空）").pack(side=LEFT, padx=(0, 6))
-        ttk.Entry(crawl_bar, textvariable=self.clear_authorization_var, width=16, show="*").pack(
+
+        ttk.Label(
+            crawl_panel,
+            textvariable=self.clear_earliest_date_hint_var,
+            foreground="#666666",
+        ).pack(fill=X, pady=(5, 3))
+
+        crawl_action_bar = ttk.Frame(crawl_panel, style="ToolbarRow.TFrame")
+        crawl_action_bar.pack(fill=X)
+        crawl_actions = ttk.Frame(crawl_action_bar, style="ToolbarRow.TFrame")
+        crawl_actions.pack(side=RIGHT)
+        ttk.Label(crawl_action_bar, text="采集凭据（可留空）").pack(side=LEFT, padx=(0, 6))
+        ttk.Entry(
+            crawl_action_bar,
+            textvariable=self.clear_authorization_var,
+            width=16,
+            show="*",
+        ).pack(
             side=LEFT,
             padx=(0, 8),
         )
         self.clear_crawl_button = ttk.Button(
-            crawl_bar,
-            text="开始采集",
+            crawl_actions,
+            text="采集指定范围",
+            width=12,
             command=self.start_clear_price_crawl,
         )
         self.clear_crawl_button.pack(side=LEFT)
         self.clear_full_crawl_button = ttk.Button(
-            crawl_bar,
-            text="爬取全部数据",
+            crawl_actions,
+            text="全地区采集/更新",
+            width=16,
+            style="Primary.TButton",
             command=self.start_clear_price_full_coverage_crawl,
         )
         self.clear_full_crawl_button.pack(side=LEFT, padx=(6, 0))
 
-        toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
-        toolbar.pack(fill=X)
+        filter_panel = ttk.LabelFrame(frame, text="本地数据筛选", padding=8)
+        filter_panel.pack(fill=X, padx=8, pady=3)
+        primary_filter_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        primary_filter_bar.pack(fill=X)
 
-        ttk.Label(toolbar, text="筛选地区").pack(side=LEFT, padx=(0, 3))
+        ttk.Label(primary_filter_bar, text="筛选地区").pack(side=LEFT, padx=(0, 3))
         self.clear_filter_area_combo = ttk.Combobox(
-            toolbar,
+            primary_filter_bar,
             textvariable=self.clear_filter_area_var,
             width=12,
         )
         self.clear_filter_area_combo.pack(side=LEFT, padx=(0, 5))
-        ttk.Label(toolbar, text="日期起").pack(side=LEFT, padx=(0, 3))
+        ttk.Label(primary_filter_bar, text="日期起").pack(side=LEFT, padx=(0, 3))
         ttk.Entry(
-            toolbar,
+            primary_filter_bar,
             textvariable=self.clear_filter_start_date_var,
             width=10,
             state="readonly",
         ).pack(side=LEFT, padx=(0, 2))
         ttk.Button(
-            toolbar,
+            primary_filter_bar,
             text="选择",
             width=4,
             command=lambda: self.pick_date(self.clear_filter_start_date_var),
         ).pack(side=LEFT, padx=(0, 5))
-        ttk.Label(toolbar, text="日期止").pack(side=LEFT, padx=(0, 3))
+        ttk.Label(primary_filter_bar, text="日期止").pack(side=LEFT, padx=(0, 3))
         ttk.Entry(
-            toolbar,
+            primary_filter_bar,
             textvariable=self.clear_filter_end_date_var,
             width=10,
             state="readonly",
         ).pack(side=LEFT, padx=(0, 2))
         ttk.Button(
-            toolbar,
+            primary_filter_bar,
             text="选择",
             width=4,
             command=lambda: self.pick_date(self.clear_filter_end_date_var),
         ).pack(side=LEFT, padx=(0, 5))
-        ttk.Label(toolbar, text="结果接口").pack(side=LEFT, padx=(0, 3))
+
+        secondary_filter_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        secondary_filter_bar.pack(fill=X, pady=(5, 0))
+        ttk.Label(secondary_filter_bar, text="结果接口").pack(side=LEFT, padx=(0, 3))
         self.clear_endpoint_combo = ttk.Combobox(
-            toolbar,
+            secondary_filter_bar,
             textvariable=self.clear_filter_endpoint_var,
             values=["", "detail", "statistics"],
             width=8,
             state="readonly",
         )
         self.clear_endpoint_combo.pack(side=LEFT, padx=(0, 5))
-        ttk.Label(toolbar, text="结果指标").pack(side=LEFT, padx=(0, 3))
+        ttk.Label(secondary_filter_bar, text="结果指标").pack(side=LEFT, padx=(0, 3))
         self.clear_metric_combo = ttk.Combobox(
-            toolbar,
+            secondary_filter_bar,
             textvariable=self.clear_filter_metric_var,
             width=13,
         )
         self.clear_metric_combo.pack(side=LEFT, padx=(0, 5))
-        ttk.Label(toolbar, text="时点").pack(side=LEFT, padx=(0, 3))
+        ttk.Label(secondary_filter_bar, text="时点").pack(side=LEFT, padx=(0, 3))
         self.clear_time96_combo = ttk.Combobox(
-            toolbar,
+            secondary_filter_bar,
             textvariable=self.clear_filter_time96_var,
             width=6,
         )
         self.clear_time96_combo.pack(side=LEFT, padx=(0, 5))
-        ttk.Button(toolbar, text="刷新", width=6, command=self.refresh_clear_price).pack(side=LEFT)
-        ttk.Button(toolbar, text="重置", width=6, command=self.reset_clear_price).pack(
+
+        filter_action_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        filter_action_bar.pack(fill=X, pady=(5, 0))
+        ttk.Button(
+            filter_action_bar,
+            text="刷新结果",
+            command=self.refresh_clear_price,
+        ).pack(side=LEFT)
+        ttk.Button(filter_action_bar, text="重置筛选", command=self.reset_clear_price).pack(
             side=LEFT,
-            padx=(4, 0),
+            padx=(6, 0),
         )
         ttk.Button(
-            toolbar,
-            text="导出",
-            width=6,
+            filter_action_bar,
+            text="导出 CSV",
             command=lambda: self.export_rows("clear"),
         ).pack(
             side=LEFT,
-            padx=(4, 0),
+            padx=(6, 0),
         )
         ttk.Button(
-            toolbar,
+            filter_action_bar,
             text="清空数据",
-            width=8,
             command=self.clear_all_clear_price_records,
-        ).pack(side=LEFT, padx=(4, 0))
+        ).pack(side=RIGHT)
 
         columns = ("date", "endpoint", "area_code", "time96", "metric", "value", "unit")
         tree, raw_text = self.build_result_panel(frame, columns, self.on_select_clear_price)
@@ -2531,46 +2566,9 @@ class ElecheckDataApp:
     def build_purchasing_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="代理购电数据")
-        toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
-        toolbar.pack(fill=X)
 
-        ttk.Label(toolbar, text="月份").pack(side=LEFT, padx=(0, 6))
-        self.purchasing_month_combo = ttk.Combobox(
-            toolbar,
-            textvariable=self.purchasing_month_var,
-            width=12,
-        )
-        self.purchasing_month_combo.pack(side=LEFT, padx=(0, 10))
-        ttk.Label(toolbar, text="省份").pack(side=LEFT, padx=(0, 6))
-        self.purchasing_province_combo = ttk.Combobox(
-            toolbar,
-            textvariable=self.purchasing_province_var,
-            width=14,
-        )
-        self.purchasing_province_combo.pack(side=LEFT, padx=(0, 10))
-        ttk.Label(toolbar, text="类型").pack(side=LEFT, padx=(0, 6))
-        self.purchasing_kind_combo = ttk.Combobox(
-            toolbar,
-            textvariable=self.purchasing_kind_var,
-            width=18,
-        )
-        self.purchasing_kind_combo.pack(side=LEFT, padx=(0, 10))
-        ttk.Label(toolbar, text="指标").pack(side=LEFT, padx=(0, 6))
-        self.purchasing_metric_combo = ttk.Combobox(
-            toolbar,
-            textvariable=self.purchasing_metric_var,
-            width=24,
-        )
-        self.purchasing_metric_combo.pack(side=LEFT, padx=(0, 10))
-        ttk.Button(toolbar, text="搜索", command=self.refresh_purchasing).pack(side=LEFT)
-        ttk.Button(toolbar, text="重置", command=self.reset_purchasing).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(toolbar, text="导出 CSV", command=lambda: self.export_rows("purchasing")).pack(
-            side=LEFT,
-            padx=(8, 0),
-        )
-
-        collect_toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
-        collect_toolbar.pack(fill=X)
+        collect_toolbar = ttk.LabelFrame(frame, text="在线采集", padding=8)
+        collect_toolbar.pack(fill=X, padx=8, pady=(6, 3))
         ttk.Label(collect_toolbar, text="采集凭据（可留空）").pack(side=LEFT, padx=(0, 4))
         ttk.Entry(
             collect_toolbar,
@@ -2581,16 +2579,70 @@ class ElecheckDataApp:
         self.purchasing_collect_button = ttk.Button(
             collect_toolbar,
             text="采集全部",
-            width=8,
+            width=10,
+            style="Primary.TButton",
             command=self.start_purchasing_collect_all,
         )
-        self.purchasing_collect_button.pack(side=LEFT, padx=(0, 4))
+        self.purchasing_collect_button.pack(side=LEFT)
         ttk.Button(
             collect_toolbar,
             text="清空数据",
-            width=8,
+            width=10,
             command=self.clear_all_purchasing_records,
-        ).pack(side=LEFT, padx=(0, 4))
+        ).pack(side=RIGHT)
+
+        filter_panel = ttk.LabelFrame(frame, text="本地数据筛选", padding=8)
+        filter_panel.pack(fill=X, padx=8, pady=3)
+        primary_filter_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        primary_filter_bar.pack(fill=X)
+
+        ttk.Label(primary_filter_bar, text="月份").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_month_combo = ttk.Combobox(
+            primary_filter_bar,
+            textvariable=self.purchasing_month_var,
+            width=12,
+        )
+        self.purchasing_month_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Label(primary_filter_bar, text="省份").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_province_combo = ttk.Combobox(
+            primary_filter_bar,
+            textvariable=self.purchasing_province_var,
+            width=14,
+        )
+        self.purchasing_province_combo.pack(side=LEFT, padx=(0, 10))
+
+        secondary_filter_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        secondary_filter_bar.pack(fill=X, pady=(5, 0))
+        ttk.Label(secondary_filter_bar, text="类型").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_kind_combo = ttk.Combobox(
+            secondary_filter_bar,
+            textvariable=self.purchasing_kind_var,
+            width=18,
+        )
+        self.purchasing_kind_combo.pack(side=LEFT, padx=(0, 10))
+        ttk.Label(secondary_filter_bar, text="指标").pack(side=LEFT, padx=(0, 6))
+        self.purchasing_metric_combo = ttk.Combobox(
+            secondary_filter_bar,
+            textvariable=self.purchasing_metric_var,
+            width=24,
+        )
+        self.purchasing_metric_combo.pack(side=LEFT, padx=(0, 10))
+
+        filter_action_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        filter_action_bar.pack(fill=X, pady=(5, 0))
+        ttk.Button(filter_action_bar, text="搜索", command=self.refresh_purchasing).pack(side=LEFT)
+        ttk.Button(filter_action_bar, text="重置筛选", command=self.reset_purchasing).pack(
+            side=LEFT,
+            padx=(6, 0),
+        )
+        ttk.Button(
+            filter_action_bar,
+            text="导出 CSV",
+            command=lambda: self.export_rows("purchasing"),
+        ).pack(
+            side=LEFT,
+            padx=(6, 0),
+        )
 
         columns = ("month", "province", "kind", "metric", "value", "statistic", "related")
         tree, raw_text = self.build_result_panel(frame, columns, self.on_select_purchasing)
@@ -2609,42 +2661,55 @@ class ElecheckDataApp:
     def build_mechanism_tab(self, notebook: ttk.Notebook):
         frame = ttk.Frame(notebook)
         notebook.add(frame, text="增量机制数据")
-        toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
-        toolbar.pack(fill=X)
+        filter_panel = ttk.LabelFrame(frame, text="筛选与在线采集", padding=8)
+        filter_panel.pack(fill=X, padx=8, pady=(6, 3))
+        filter_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        filter_bar.pack(fill=X)
 
-        ttk.Label(toolbar, text="地区").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(filter_bar, text="地区").pack(side=LEFT, padx=(0, 6))
         self.mechanism_region_combo = ttk.Combobox(
-            toolbar,
+            filter_bar,
             textvariable=self.mechanism_region_var,
             width=16,
         )
         self.mechanism_region_combo.pack(side=LEFT, padx=(0, 10))
-        ttk.Label(toolbar, text="电源类型").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(filter_bar, text="电源类型").pack(side=LEFT, padx=(0, 6))
         self.mechanism_category_combo = ttk.Combobox(
-            toolbar,
+            filter_bar,
             textvariable=self.mechanism_category_var,
             width=16,
         )
         self.mechanism_category_combo.pack(side=LEFT, padx=(0, 10))
-        ttk.Button(toolbar, text="搜索", command=self.refresh_mechanism).pack(side=LEFT)
-        ttk.Button(toolbar, text="重置", command=self.reset_mechanism).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(toolbar, text="导出 CSV", command=lambda: self.export_rows("mechanism")).pack(
+
+        action_bar = ttk.Frame(filter_panel, style="ToolbarRow.TFrame")
+        action_bar.pack(fill=X, pady=(5, 0))
+        ttk.Button(action_bar, text="搜索", command=self.refresh_mechanism).pack(side=LEFT)
+        ttk.Button(action_bar, text="重置筛选", command=self.reset_mechanism).pack(
             side=LEFT,
-            padx=(8, 0),
+            padx=(6, 0),
+        )
+        ttk.Button(
+            action_bar,
+            text="导出 CSV",
+            command=lambda: self.export_rows("mechanism"),
+        ).pack(
+            side=LEFT,
+            padx=(6, 0),
         )
         self.mechanism_collect_button = ttk.Button(
-            toolbar,
+            action_bar,
             text="采集全部",
-            width=8,
+            width=10,
+            style="Primary.TButton",
             command=self.start_mechanism_collect_all,
         )
-        self.mechanism_collect_button.pack(side=LEFT, padx=(8, 0))
+        self.mechanism_collect_button.pack(side=LEFT, padx=(6, 0))
         ttk.Button(
-            toolbar,
+            action_bar,
             text="清空数据",
             width=8,
             command=self.clear_all_mechanism_records,
-        ).pack(side=LEFT, padx=(4, 0))
+        ).pack(side=RIGHT)
 
         columns = ("region_name", "region", "category", "price", "clear_price", "unit")
         tree, raw_text = self.build_result_panel(frame, columns, self.on_select_mechanism)
@@ -2669,10 +2734,14 @@ class ElecheckDataApp:
         main.add(detail_frame, weight=1)
 
         tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
         scroll = ttk.Scrollbar(table_frame, orient=VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scroll.set)
-        tree.pack(side=LEFT, fill=BOTH, expand=True)
-        scroll.pack(side=RIGHT, fill=Y)
+        scroll_x = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
         tree.bind("<<TreeviewSelect>>", select_callback)
 
         raw_text = __import__("tkinter").Text(detail_frame, wrap="word", height=6, padx=10, pady=8)
@@ -2738,9 +2807,7 @@ class ElecheckDataApp:
     def update_clear_full_crawl_button_text(self) -> None:
         if self.clear_full_crawl_button is None:
             return
-        latest_dates = self.repository.clear_price_latest_daily_dates_by_area()
-        button_text = "更新全部数据" if latest_dates else "爬取全部数据"
-        self.clear_full_crawl_button.configure(text=button_text)
+        self.clear_full_crawl_button.configure(text="全地区采集/更新")
 
     def update_clear_price_earliest_hint(self, adjust_start_date: bool = True) -> None:
         area_selection = self.clear_area_var.get().strip()
@@ -2952,8 +3019,8 @@ class ElecheckDataApp:
 
         dialog = Toplevel(self.root)
         dialog.title("正在采集现货价格")
-        dialog.geometry("520x230")
-        dialog.resizable(False, False)
+        dialog.minsize(520, 230)
+        dialog.resizable(True, True)
         dialog.protocol("WM_DELETE_WINDOW", self.abandon_clear_price_crawl)
 
         if len(targets) == 1:
@@ -3101,24 +3168,15 @@ class ElecheckDataApp:
                         request_start_date.isoformat(),
                         request_end_date.isoformat(),
                     )
-                    self.root.after(
-                        0,
-                        lambda area_label=area_label,
-                        area_index=area_index,
-                        date_label=date_label,
-                        completed_ranges=completed_ranges,
-                        record_count=record_count,
-                        written=written: self.update_clear_price_crawl_progress(
-                            message=f"正在采集 {area_label}",
-                            detail=(
-                                f"地区 {area_index}/{len(area_jobs)} | 日期 {date_label} | "
-                                f"进度 {completed_ranges}/{total_ranges} | "
-                                f"已抓取 {record_count} 条 | 已写入 {written} 条"
-                            ),
-                            percent=(completed_ranges / total_ranges * 100)
-                            if total_ranges
-                            else 0,
+                    self.ui.post(
+                        self.update_clear_price_crawl_progress,
+                        message=f"正在采集 {area_label}",
+                        detail=(
+                            f"地区 {area_index}/{len(area_jobs)} | 日期 {date_label} | "
+                            f"进度 {completed_ranges}/{total_ranges} | "
+                            f"已抓取 {record_count} 条 | 已写入 {written} 条"
                         ),
+                        percent=(completed_ranges / total_ranges * 100) if total_ranges else 0,
                     )
 
                     records = list(
@@ -3134,22 +3192,15 @@ class ElecheckDataApp:
 
                     written += upsert_elecheck_clear_price_records(records)
                     completed_ranges += 1
-                    self.root.after(
-                        0,
-                        lambda area_index=area_index,
-                        completed_ranges=completed_ranges,
-                        record_count=record_count,
-                        written=written: self.update_clear_price_crawl_progress(
-                            message="现货价格采集中...",
-                            detail=(
-                                f"地区 {area_index}/{len(area_jobs)} | "
-                                f"进度 {completed_ranges}/{total_ranges} | "
-                                f"已抓取 {record_count} 条 | 已写入 {written} 条"
-                            ),
-                            percent=(completed_ranges / total_ranges * 100)
-                            if total_ranges
-                            else 100,
+                    self.ui.post(
+                        self.update_clear_price_crawl_progress,
+                        message="现货价格采集中...",
+                        detail=(
+                            f"地区 {area_index}/{len(area_jobs)} | "
+                            f"进度 {completed_ranges}/{total_ranges} | "
+                            f"已抓取 {record_count} 条 | 已写入 {written} 条"
                         ),
+                        percent=(completed_ranges / total_ranges * 100) if total_ranges else 100,
                     )
 
                     if stop_event is not None and stop_event.is_set():
@@ -3163,36 +3214,21 @@ class ElecheckDataApp:
 
             client.close()
             if abandon_event is not None and abandon_event.is_set():
-                self.root.after(
-                    0,
-                    lambda record_count=record_count, written=written: (
-                        self.on_clear_price_crawl_abandoned(record_count, written)
-                    ),
-                )
+                self.ui.post(self.on_clear_price_crawl_abandoned, record_count, written)
                 return
 
         except ElecheckUnauthorizedError as exc:
             message = str(exc)
-            self.root.after(
-                0,
-                lambda: self.on_clear_price_unauthorized(record_count, written, message),
-            )
+            self.ui.post(self.on_clear_price_unauthorized, record_count, written, message)
         except Exception as exc:
             message = str(exc)
-            self.root.after(
-                0,
-                lambda: self.on_clear_price_crawl_error(message, record_count, written),
-            )
+            self.ui.post(self.on_clear_price_crawl_error, message, record_count, written)
         else:
-            self.root.after(
-                0,
-                lambda record_count=record_count, written=written, stopped_early=stopped_early: (
-                    self.on_clear_price_crawl_success(
-                    record_count,
-                    written,
-                    stopped_early,
-                    )
-                ),
+            self.ui.post(
+                self.on_clear_price_crawl_success,
+                record_count,
+                written,
+                stopped_early,
             )
 
     def on_clear_price_unauthorized(
@@ -3392,8 +3428,8 @@ class ElecheckDataApp:
 
         dialog = Toplevel(self.root)
         dialog.title("正在采集代理购电价格")
-        dialog.geometry("520x190")
-        dialog.resizable(False, False)
+        dialog.minsize(520, 190)
+        dialog.resizable(True, True)
         dialog.protocol("WM_DELETE_WINDOW", dialog.iconify)
         self.purchasing_collect_message_var.set("正在准备采集代理购电价格数据...")
         self.purchasing_collect_detail_var.set("范围：2024-02 至最新可用月份")
@@ -3446,17 +3482,14 @@ class ElecheckDataApp:
             months = list(spider.iter_months(spider.start_month, spider.end_month))
             total_months = len(months)
             for month_index, data_month in enumerate(months, start=1):
-                self.root.after(
-                    0,
-                    lambda month_index=month_index, data_month=data_month: (
-                        self.update_purchasing_collect_progress(
-                            message=f"正在采集代理购电价格 {data_month}",
-                            detail=f"月份 {month_index}/{total_months} | 已抓取 {record_count} 条 | 已写入/更新 {written} 条",
-                            percent=((month_index - 1) / total_months * 100)
-                            if total_months
-                            else 0,
-                        )
+                self.ui.post(
+                    self.update_purchasing_collect_progress,
+                    message=f"正在采集代理购电价格 {data_month}",
+                    detail=(
+                        f"月份 {month_index}/{total_months} | 已抓取 {record_count} 条 | "
+                        f"已写入/更新 {written} 条"
                     ),
+                    percent=((month_index - 1) / total_months * 100) if total_months else 0,
                 )
                 data = client.fetch_purchasing_list(
                     province="",
@@ -3471,36 +3504,23 @@ class ElecheckDataApp:
 
                 record_count += len(records)
                 written += upsert_elecheck_purchasing_records(records)
-                self.root.after(
-                    0,
-                    lambda month_index=month_index,
-                    data_month=data_month,
-                    record_count=record_count,
-                    written=written: self.update_purchasing_collect_progress(
-                        message=f"代理购电价格采集中：已完成 {data_month}",
-                        detail=f"月份 {month_index}/{total_months} | 已抓取 {record_count} 条 | 已写入/更新 {written} 条",
-                        percent=(month_index / total_months * 100) if total_months else 100,
+                self.ui.post(
+                    self.update_purchasing_collect_progress,
+                    message=f"代理购电价格采集中：已完成 {data_month}",
+                    detail=(
+                        f"月份 {month_index}/{total_months} | 已抓取 {record_count} 条 | "
+                        f"已写入/更新 {written} 条"
                     ),
+                    percent=(month_index / total_months * 100) if total_months else 100,
                 )
         except ElecheckUnauthorizedError as exc:
             message = str(exc)
-            self.root.after(
-                0,
-                lambda: self.on_purchasing_collect_error(message, record_count, written),
-            )
+            self.ui.post(self.on_purchasing_collect_error, message, record_count, written)
         except Exception as exc:
             message = str(exc)
-            self.root.after(
-                0,
-                lambda: self.on_purchasing_collect_error(message, record_count, written),
-            )
+            self.ui.post(self.on_purchasing_collect_error, message, record_count, written)
         else:
-            self.root.after(
-                0,
-                lambda record_count=record_count, written=written: (
-                    self.on_purchasing_collect_success(record_count, written)
-                ),
-            )
+            self.ui.post(self.on_purchasing_collect_success, record_count, written)
         finally:
             if client is not None:
                 client.close()
@@ -3598,8 +3618,8 @@ class ElecheckDataApp:
 
         dialog = Toplevel(self.root)
         dialog.title("正在采集增量机制电价")
-        dialog.geometry("520x190")
-        dialog.resizable(False, False)
+        dialog.minsize(520, 190)
+        dialog.resizable(True, True)
         dialog.protocol("WM_DELETE_WINDOW", dialog.iconify)
         self.mechanism_collect_message_var.set("正在准备采集增量机制电价数据...")
         self.mechanism_collect_detail_var.set("范围：全部地区、全部电源类型")
@@ -3645,37 +3665,28 @@ class ElecheckDataApp:
                 set_elecheck_authorization_for_current_process(resolved_authorization)
             client = ElecheckClient(authorization=resolved_authorization)
             spider = ElecheckMechanismElectricityPriceSpider(client=client)
-            self.root.after(
-                0,
-                lambda: self.update_mechanism_collect_progress(
-                    message="正在请求增量机制电价接口...",
-                    detail="正在从 Elecheck 获取全部列表",
-                    percent=20,
-                ),
+            self.ui.post(
+                self.update_mechanism_collect_progress,
+                message="正在请求增量机制电价接口...",
+                detail="正在从 Elecheck 获取全部列表",
+                percent=20,
             )
             records = list(spider.crawl())
-            self.root.after(
-                0,
-                lambda record_count=len(records): self.update_mechanism_collect_progress(
-                    message="正在写入增量机制电价数据...",
-                    detail=f"已抓取 {record_count} 条，正在写入/更新数据库",
-                    percent=70,
-                ),
+            self.ui.post(
+                self.update_mechanism_collect_progress,
+                message="正在写入增量机制电价数据...",
+                detail=f"已抓取 {len(records)} 条，正在写入/更新数据库",
+                percent=70,
             )
             written = upsert_elecheck_mechanism_electricity_price_records(records)
         except ElecheckUnauthorizedError as exc:
             message = str(exc)
-            self.root.after(0, lambda: self.on_mechanism_collect_error(message))
+            self.ui.post(self.on_mechanism_collect_error, message)
         except Exception as exc:
             message = str(exc)
-            self.root.after(0, lambda message=message: self.on_mechanism_collect_error(message))
+            self.ui.post(self.on_mechanism_collect_error, message)
         else:
-            self.root.after(
-                0,
-                lambda record_count=len(records), written=written: (
-                    self.on_mechanism_collect_success(record_count, written)
-                ),
-            )
+            self.ui.post(self.on_mechanism_collect_success, len(records), written)
         finally:
             if client is not None:
                 client.close()
@@ -3924,8 +3935,8 @@ class ElecheckDataApp:
     def show_elecheck_export_dialog(self, output_path: str) -> None:
         self.export_dialog = Toplevel(self.root)
         self.export_dialog.title("正在导出 CSV")
-        self.export_dialog.geometry("500x180")
-        self.export_dialog.resizable(False, False)
+        self.export_dialog.minsize(500, 180)
+        self.export_dialog.resizable(True, True)
         self.export_message_var = StringVar(value="正在导出全量 CSV...")
         self.export_detail_var = StringVar(value=f"保存到：{output_path}")
         ttk.Label(self.export_dialog, textvariable=self.export_message_var, wraplength=440).pack(
@@ -3954,26 +3965,24 @@ class ElecheckDataApp:
                 where=list(export_spec["where"]),
                 params=list(export_spec["params"]),
                 order_by=str(export_spec["order_by"]),
-                progress=lambda row_count: self.root.after(
-                    0,
-                    lambda row_count=row_count: self.update_elecheck_export_progress(row_count),
+                progress=lambda row_count: self.ui.post(
+                    self.update_elecheck_export_progress,
+                    row_count,
                 ),
             )
         except PermissionError:
-            self.root.after(
-                0,
-                lambda: self.on_elecheck_export_error(
-                    (
-                        "没有权限写入这个 CSV 文件。\n\n"
-                        "请确认目标文件没有被 Excel/WPS 打开，或换一个可写的保存位置后重试。\n\n"
-                        f"路径：{output_path}"
-                    )
+            self.ui.post(
+                self.on_elecheck_export_error,
+                (
+                    "没有权限写入这个 CSV 文件。\n\n"
+                    "请确认目标文件没有被 Excel/WPS 打开，或换一个可写的保存位置后重试。\n\n"
+                    f"路径：{output_path}"
                 ),
             )
         except OSError as exc:
-            self.root.after(0, lambda exc=exc: self.on_elecheck_export_error(f"写入 CSV 时出错：\n\n{exc}"))
+            self.ui.post(self.on_elecheck_export_error, f"写入 CSV 时出错：\n\n{exc}")
         else:
-            self.root.after(0, lambda: self.on_elecheck_export_success(written, output_path))
+            self.ui.post(self.on_elecheck_export_success, written, output_path)
 
     def update_elecheck_export_progress(self, row_count: int) -> None:
         if hasattr(self, "export_message_var"):
@@ -4051,6 +4060,7 @@ class EntsoeDataApp:
 
     def __init__(self, root, repository: EntsoeDataRepository) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.repository = repository
         self.configs = load_entsoe_request_configs()
         self.config_by_name = {config["name"]: config for config in self.configs}
@@ -4880,8 +4890,8 @@ class EntsoeDataApp:
             self.collect_dialog.destroy()
         dialog = Toplevel(self.root)
         dialog.title("正在采集 ENTSO-E")
-        dialog.geometry("520x190")
-        dialog.resizable(False, False)
+        dialog.minsize(520, 190)
+        dialog.resizable(True, True)
         self.collect_message_var.set(f"正在采集 {dataset} ...")
         self.collect_detail_var.set(f"待执行区域/方向组合：{job_count} 个")
         ttk.Label(dialog, textvariable=self.collect_message_var, wraplength=460).pack(
@@ -4904,13 +4914,11 @@ class EntsoeDataApp:
         written = 0
         try:
             for index, (label, kwargs) in enumerate(jobs, start=1):
-                self.root.after(
-                    0,
-                    lambda index=index, label=label: self.update_collect_progress(
-                        index=index,
-                        total=len(jobs),
-                        label=label,
-                    ),
+                self.ui.post(
+                    self.update_collect_progress,
+                    index=index,
+                    total=len(jobs),
+                    label=label,
                 )
                 spider = get_spider(dataset, **kwargs)
                 try:
@@ -4926,12 +4934,9 @@ class EntsoeDataApp:
                     raise ValueError("ENTSO-E spider returned unsupported record types.")
         except Exception as exc:
             message = str(exc)
-            self.root.after(
-                0,
-                lambda: self.on_collect_error(message, record_count, written),
-            )
+            self.ui.post(self.on_collect_error, message, record_count, written)
         else:
-            self.root.after(0, lambda: self.on_collect_success(record_count, written))
+            self.ui.post(self.on_collect_success, record_count, written)
 
     def update_collect_progress(self, *, index: int, total: int, label: str) -> None:
         self.collect_message_var.set(f"正在采集 ENTSO-E：{index}/{total}")
@@ -5372,6 +5377,7 @@ class ElexonDataApp:
 
     def __init__(self, root, repository: ElexonDataRepository) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.repository = repository
         self.configs = load_elexon_request_configs()
         self.config_by_name = {config["name"]: config for config in self.configs}
@@ -5833,8 +5839,8 @@ class ElexonDataApp:
             self.collect_dialog.destroy()
         dialog = Toplevel(self.root)
         dialog.title("正在采集 Elexon")
-        dialog.geometry("520x190")
-        dialog.resizable(False, False)
+        dialog.minsize(520, 190)
+        dialog.resizable(True, True)
         self.collect_message_var.set(f"正在采集 {dataset} ...")
         self.collect_detail_var.set(f"待执行请求：{request_count} 个")
         ttk.Label(dialog, textvariable=self.collect_message_var, wraplength=460).pack(
@@ -5864,9 +5870,9 @@ class ElexonDataApp:
             written = upsert_elexon_records(records)
         except Exception as exc:
             message = str(exc)
-            self.root.after(0, lambda message=message: self.on_collect_error(message))
+            self.ui.post(self.on_collect_error, message)
         else:
-            self.root.after(0, lambda: self.on_collect_success(len(records), written))
+            self.ui.post(self.on_collect_success, len(records), written)
 
     def on_collect_success(self, record_count: int, written: int) -> None:
         self.finish_collect()
@@ -6066,6 +6072,7 @@ def build_gui(root: Tk, db_path: Path) -> "PowertradeAppShell":
     )
 
     configure_app_theme(root)
+    install_ui_dispatcher(root)
     shell = PowertradeAppShell(root, db_path)
 
     overview_app = OverviewApp(

@@ -794,6 +794,14 @@ def get_engine():
 def init_db() -> None:
     engine = get_engine()
     Base.metadata.create_all(engine)
+    if engine.dialect.name == "sqlite":
+        from powertrade_crawler.market_agent.rag import ensure_rag_schema
+
+        raw_connection = engine.raw_connection()
+        try:
+            ensure_rag_schema(raw_connection)
+        finally:
+            raw_connection.close()
     drop_redundant_gzpec_tables_if_exists(engine)
     drop_gzpec_info_source_column_if_exists(engine)
     add_gridstatus_description_chinese_column_if_missing(engine)
@@ -802,7 +810,7 @@ def init_db() -> None:
     add_delivery_query_indexes_if_missing(engine)
     add_null_safe_unique_indexes_if_missing(engine)
     add_agent_router_metadata_columns_if_missing(engine)
-    upsert_elecheck_area_records(DEFAULT_ELECHECK_AREA_RECORDS)
+    seed_default_elecheck_area_records()
 
 
 def add_agent_router_metadata_columns_if_missing(engine) -> None:
@@ -1530,6 +1538,23 @@ def upsert_elecheck_area_records(records: list[ElecheckAreaRecord]) -> int:
             written += 1
         session.commit()
     return written
+
+
+def seed_default_elecheck_area_records() -> int:
+    """Insert missing built-in areas without rewriting user-managed rows at startup."""
+
+    default_codes = [record.area_code for record in DEFAULT_ELECHECK_AREA_RECORDS]
+    with get_session() as session:
+        existing_codes = {
+            str(value)
+            for (value,) in session.query(ElecheckAreaRecordRow.area_code)
+            .filter(ElecheckAreaRecordRow.area_code.in_(default_codes))
+            .all()
+        }
+    missing = [
+        record for record in DEFAULT_ELECHECK_AREA_RECORDS if record.area_code not in existing_codes
+    ]
+    return upsert_elecheck_area_records(missing)
 
 
 def update_elecheck_area_earliest_clear_price_date(area_code: str, earliest_date: date) -> None:

@@ -509,29 +509,31 @@ class ElecheckPurchasingDashboardApp(_ElecheckChartAppBase):
         self.refresh_after_crawl(select_latest=True)
 
     def build_ui(self) -> None:
-        toolbar = ttk.Frame(self.root, padding=8)
+        toolbar = ttk.Frame(self.root, padding=(8, 8, 8, 4))
         toolbar.pack(fill=X)
-        ttk.Label(toolbar, text="省份").pack(side=LEFT, padx=(0, 4))
+        selection_row = ttk.Frame(toolbar)
+        selection_row.pack(fill=X)
+        ttk.Label(selection_row, text="省份").pack(side=LEFT, padx=(0, 4))
         self.province_combo = ttk.Combobox(
-            toolbar,
+            selection_row,
             textvariable=self.province_var,
             state="readonly",
             width=16,
         )
         self.province_combo.pack(side=LEFT, padx=(0, 10))
         self.province_combo.bind("<<ComboboxSelected>>", self.on_province_changed)
-        ttk.Label(toolbar, text="截止月份").pack(side=LEFT, padx=(0, 4))
+        ttk.Label(selection_row, text="截止月份").pack(side=LEFT, padx=(0, 4))
         self.month_combo = ttk.Combobox(
-            toolbar,
+            selection_row,
             textvariable=self.month_var,
             state="readonly",
             width=10,
         )
         self.month_combo.pack(side=LEFT, padx=(0, 10))
         self.month_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_chart())
-        ttk.Label(toolbar, text="趋势窗口").pack(side=LEFT, padx=(0, 4))
+        ttk.Label(selection_row, text="趋势窗口").pack(side=LEFT, padx=(0, 4))
         self.window_combo = ttk.Combobox(
-            toolbar,
+            selection_row,
             textvariable=self.window_var,
             values=list(WINDOW_OPTIONS),
             state="readonly",
@@ -539,9 +541,18 @@ class ElecheckPurchasingDashboardApp(_ElecheckChartAppBase):
         )
         self.window_combo.pack(side=LEFT, padx=(0, 10))
         self.window_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_chart())
-        ttk.Button(toolbar, text="刷新", command=self.refresh_chart).pack(side=LEFT, padx=(0, 4))
-        ttk.Button(toolbar, text="导出 CSV", command=self.export_csv).pack(side=LEFT, padx=(0, 4))
-        ttk.Button(toolbar, text="导出 PNG", command=self.export_png).pack(side=LEFT)
+
+        action_row = ttk.Frame(toolbar)
+        action_row.pack(fill=X, pady=(6, 0))
+        ttk.Button(action_row, text="刷新", command=self.refresh_chart).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(action_row, text="导出 CSV", command=self.export_csv).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(action_row, text="导出 PNG", command=self.export_png).pack(side=LEFT)
 
         summary = ttk.Frame(self.root, padding=(8, 0, 8, 6))
         summary.pack(fill=X)
@@ -553,18 +564,23 @@ class ElecheckPurchasingDashboardApp(_ElecheckChartAppBase):
                 self.coverage_summary_var,
             )
         ):
-            if index:
-                ttk.Separator(summary, orient="vertical").pack(side=LEFT, fill="y", padx=10)
-            ttk.Label(summary, textvariable=variable).pack(side=LEFT)
+            summary.columnconfigure(index, weight=1, uniform="purchasing-summary")
+            ttk.Label(summary, textvariable=variable, anchor="center").grid(
+                row=0,
+                column=index,
+                sticky="ew",
+                padx=(0 if index == 0 else 5, 0 if index == 3 else 5),
+            )
 
-        chart_frame = ttk.Frame(self.root)
-        chart_frame.pack(fill=BOTH, expand=True, padx=8)
-        self.build_chart_canvas(chart_frame)
         ttk.Label(self.root, textvariable=self.status_var, anchor=W).pack(
             fill=X,
             padx=8,
-            pady=(3, 6),
+            pady=(0, 5),
         )
+
+        chart_frame = ttk.Frame(self.root)
+        chart_frame.pack(fill=BOTH, expand=True, padx=8, pady=(0, 6))
+        self.build_chart_canvas(chart_frame)
 
     def refresh_after_crawl(self, *, select_latest: bool = True) -> None:
         provinces = self.repository.list_provinces()
@@ -692,29 +708,40 @@ class ElecheckMechanismDashboardApp(_ElecheckChartAppBase):
         self.refresh_after_crawl()
 
     def build_ui(self) -> None:
-        toolbar = ttk.Frame(self.root, padding=8)
+        toolbar = ttk.Frame(self.root, padding=(8, 8, 8, 4))
         toolbar.pack(fill=X)
-        ttk.Label(toolbar, text="电源类型").pack(side=LEFT, padx=(0, 4))
+        selection_row = ttk.Frame(toolbar)
+        selection_row.pack(fill=X)
+        ttk.Label(selection_row, text="电源类型").pack(side=LEFT, padx=(0, 4))
         self.category_combo = ttk.Combobox(
-            toolbar,
+            selection_row,
             textvariable=self.category_var,
             state="readonly",
             width=16,
         )
         self.category_combo.pack(side=LEFT, padx=(0, 10))
         self.category_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_chart())
-        ttk.Label(toolbar, text="地区").pack(side=LEFT, padx=(0, 4))
+        ttk.Label(selection_row, text="地区").pack(side=LEFT, padx=(0, 4))
         self.region_combo = ttk.Combobox(
-            toolbar,
+            selection_row,
             textvariable=self.region_var,
             state="readonly",
             width=16,
         )
         self.region_combo.pack(side=LEFT, padx=(0, 10))
         self.region_combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_chart())
-        ttk.Button(toolbar, text="刷新", command=self.refresh_chart).pack(side=LEFT, padx=(0, 4))
-        ttk.Button(toolbar, text="导出 CSV", command=self.export_csv).pack(side=LEFT, padx=(0, 4))
-        ttk.Button(toolbar, text="导出 PNG", command=self.export_png).pack(side=LEFT)
+
+        action_row = ttk.Frame(toolbar)
+        action_row.pack(fill=X, pady=(6, 0))
+        ttk.Button(action_row, text="刷新", command=self.refresh_chart).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(action_row, text="导出 CSV", command=self.export_csv).pack(
+            side=LEFT,
+            padx=(0, 4),
+        )
+        ttk.Button(action_row, text="导出 PNG", command=self.export_png).pack(side=LEFT)
 
         summary = ttk.Frame(self.root, padding=(8, 0, 8, 6))
         summary.pack(fill=X)
@@ -726,18 +753,23 @@ class ElecheckMechanismDashboardApp(_ElecheckChartAppBase):
                 self.relative_summary_var,
             )
         ):
-            if index:
-                ttk.Separator(summary, orient="vertical").pack(side=LEFT, fill="y", padx=10)
-            ttk.Label(summary, textvariable=variable).pack(side=LEFT)
+            summary.columnconfigure(index, weight=1, uniform="mechanism-summary")
+            ttk.Label(summary, textvariable=variable, anchor="center").grid(
+                row=0,
+                column=index,
+                sticky="ew",
+                padx=(0 if index == 0 else 5, 0 if index == 3 else 5),
+            )
 
-        chart_frame = ttk.Frame(self.root)
-        chart_frame.pack(fill=BOTH, expand=True, padx=8)
-        self.build_chart_canvas(chart_frame)
         ttk.Label(self.root, textvariable=self.status_var, anchor=W).pack(
             fill=X,
             padx=8,
-            pady=(3, 6),
+            pady=(0, 5),
         )
+
+        chart_frame = ttk.Frame(self.root)
+        chart_frame.pack(fill=BOTH, expand=True, padx=8, pady=(0, 6))
+        self.build_chart_canvas(chart_frame)
 
     def refresh_after_crawl(self) -> None:
         regions = self.repository.list_regions()
@@ -935,7 +967,11 @@ def draw_purchasing_figure(figure, data: PurchasingDashboardData) -> list[HoverA
     )
     trend_axis.legend(loc="best", ncols=4)
 
-    ranking = data.displayed_ranking
+    ranking = select_purchasing_ranking_rows(
+        data.ranking,
+        data.province_name,
+        limit=4,
+    )
     if ranking:
         y_values = list(range(len(ranking)))
         colors = [
@@ -970,9 +1006,10 @@ def draw_purchasing_figure(figure, data: PurchasingDashboardData) -> list[HoverA
                 )
             )
         rank_axis.set_title(
-            f"{data.end_month} 全国合计价：最低 10、最高 10 与当前省份"
+            f"{data.end_month} 全国合计价：最低 4、最高 4 与当前省份"
         )
         rank_axis.set_xlabel(PRICE_UNIT_ZH)
+        rank_axis.tick_params(axis="y", labelsize=8)
         rank_axis.grid(True, axis="x", alpha=0.2)
     else:
         rank_axis.text(
@@ -995,7 +1032,11 @@ def draw_mechanism_figure(figure, data: MechanismDashboardData) -> list[HoverArt
     region_axis = figure.add_subplot(grid[1])
     hover_artists: list[HoverArtist] = []
 
-    ranking = data.displayed_ranking
+    ranking = select_mechanism_ranking_rows(
+        data.category_rows,
+        data.region_name,
+        limit=6,
+    )
     if ranking:
         y_values = list(range(len(ranking)))
         base_values = [float(row.price) for row in ranking if row.price is not None]
@@ -1060,9 +1101,10 @@ def draw_mechanism_figure(figure, data: MechanismDashboardData) -> list[HoverArt
         rank_axis.set_yticklabels(labels)
         rank_axis.invert_yaxis()
         rank_axis.set_title(
-            f"{data.category}：机制电价与燃煤基准价（差额最低 10、最高 10）"
+            f"{data.category}：机制电价与燃煤基准价（差额最低 6、最高 6）"
         )
         rank_axis.set_xlabel(PRICE_UNIT_ZH)
+        rank_axis.tick_params(axis="y", labelsize=8)
         rank_axis.grid(True, axis="x", alpha=0.2)
         rank_axis.legend(loc="best")
     else:

@@ -24,6 +24,7 @@ def test_initial_database_is_valid_and_matches_manifest() -> None:
     assert manifest["database_bytes"] == INITIAL_DATABASE.stat().st_size
 
     with sqlite3.connect(INITIAL_DATABASE) as connection:
+        assert scalar(connection, "PRAGMA journal_mode") == "delete"
         assert scalar(connection, "PRAGMA integrity_check") == "ok"
         for table_name, expected_count in manifest["table_counts"].items():
             assert scalar(connection, f"SELECT COUNT(*) FROM {table_name}") == expected_count

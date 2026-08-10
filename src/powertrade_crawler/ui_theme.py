@@ -52,6 +52,7 @@ PRIMARY_BUTTON_TEXTS = {
     "刷新总览",
     "开始采集",
     "采集全部",
+    "全地区采集/更新",
     "爬取全部数据",
     "创建每日自动更新",
     "安全保存",
@@ -102,6 +103,7 @@ def configure_app_theme(root: Tk) -> ttk.Style:
     style.configure("AppShell.TFrame", background=colors["shell"])
     style.configure("AppSurface.TFrame", background=colors["shell"])
     style.configure("Toolbar.TFrame", background=colors["surface_alt"], padding=(10, 8))
+    style.configure("ToolbarRow.TFrame", background=colors["surface_alt"])
     style.configure(
         "Card.TFrame",
         background=colors["surface"],
@@ -214,8 +216,13 @@ def configure_app_theme(root: Tk) -> ttk.Style:
     )
     style.map(
         "Primary.TButton",
-        background=[("pressed", "#1E40AF"), ("active", colors["primary_hover"])],
-        foreground=[("disabled", "#D5DEEA"), ("!disabled", "#FFFFFF")],
+        background=[
+            ("disabled", "#E4EAF1"),
+            ("pressed", "#1E40AF"),
+            ("active", colors["primary_hover"]),
+        ],
+        foreground=[("disabled", colors["muted"]), ("!disabled", "#FFFFFF")],
+        bordercolor=[("disabled", colors["border_strong"])],
     )
     style.configure(
         "Danger.TButton",

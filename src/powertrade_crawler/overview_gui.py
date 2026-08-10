@@ -4,13 +4,13 @@ import threading
 from collections import Counter
 from datetime import date, timedelta
 from tkinter import END, StringVar, messagebox, ttk
-from queue import Empty, Queue
 from typing import Any, Callable
 
 from powertrade_crawler.market_agent.data_tools import connect_database
 from powertrade_crawler.metrics import list_dashboard_series
 from powertrade_crawler.scheduler import list_recent_job_runs, list_scheduled_jobs
 from powertrade_crawler.ui_theme import COLORS, FONT_FAMILY
+from powertrade_crawler.ui_dispatch import UiLifecycle
 
 
 SOURCE_LABELS = {
@@ -48,6 +48,45 @@ SOURCE_DISPLAY_LABELS = {
 
 def format_record_count(value: int) -> str:
     return f"{value:,}"
+
+
+def compact_dashboard_label(label: str, *, max_length: int = 30) -> str:
+    """Keep chart legends readable without losing the series identity."""
+
+    parts = [part.strip().replace("_", " ") for part in label.split("|") if part.strip()]
+    if len(parts) >= 4:
+        dataset_aliases = {
+            "elecheck clear price": "Elecheck 现货",
+            "entsoe day ahead prices": "ENTSO-E 日前",
+            "elexon system prices": "Elexon 系统价",
+        }
+        dimension_aliases = {
+            "day ahead avg price": "日前均价",
+            "statistics": "统计价",
+            "net imbalance volume": "净不平衡量",
+            "real time avg price": "实时均价",
+            "replacement price": "替代价格",
+            "reserve scarcity price": "备用稀缺价",
+            "system buy price": "系统买价",
+            "system sell price": "系统卖价",
+        }
+        dataset = dataset_aliases.get(parts[1].lower(), parts[1])
+        dimension_key = parts[-1].lower()
+        if dimension_key.startswith("price position "):
+            dimension = f"价格时点 {dimension_key.rsplit(' ', 1)[-1]}"
+        else:
+            dimension = dimension_aliases.get(dimension_key, parts[-1])
+        region = parts[2]
+        compact_parts = [dataset]
+        if region and not region.isdigit() and region.lower() != "unknown":
+            compact_parts.append(region)
+        compact_parts.append(dimension)
+        compact = " · ".join(compact_parts)
+    else:
+        compact = " · ".join(parts)
+    if len(compact) <= max_length:
+        return compact
+    return f"{compact[: max_length - 1].rstrip()}…"
 
 
 def load_fast_source_overview() -> list[dict[str, Any]]:
@@ -135,11 +174,10 @@ class OverviewApp:
         on_agent_question: Callable[[str], None],
     ) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.on_navigate = on_navigate
         self.on_agent_question = on_agent_question
         self.refreshing = False
-        self._refresh_worker_active = False
-        self._refresh_results: Queue[tuple[str, Any]] = Queue()
         self.source_vars: dict[str, dict[str, StringVar]] = {}
         self.total_records_var = StringVar(value="—")
         self.latest_update_var = StringVar(value="—")
@@ -281,7 +319,14 @@ class OverviewApp:
         ):
             self.runs_tree.heading(column, text=label)
             self.runs_tree.column(column, width=width, minwidth=max(70, width // 2))
+        runs_scroll = ttk.Scrollbar(
+            runs_card,
+            orient="horizontal",
+            command=self.runs_tree.xview,
+        )
+        self.runs_tree.configure(xscrollcommand=runs_scroll.set)
         self.runs_tree.grid(row=1, column=0, sticky="nsew")
+        runs_scroll.grid(row=2, column=0, sticky="ew")
 
         self.right_panel = ttk.Frame(body, style="AppSurface.TFrame")
         self.right_panel.grid(row=0, column=1, sticky="nsew", padx=(7, 0))
@@ -386,7 +431,6 @@ class OverviewApp:
         if self.refreshing:
             return
         self.refreshing = True
-        self._refresh_worker_active = True
         self.refresh_button.configure(state="disabled")
         self.status_var.set("正在刷新本地数据概况…")
 
@@ -396,19 +440,14 @@ class OverviewApp:
                 runs = list_recent_job_runs(limit=8)
                 jobs = list_scheduled_jobs()
             except Exception as exc:
-                self._refresh_results.put(("error", str(exc)))
-                self._refresh_results.put(("done", None))
+                self.ui.post(self._on_refresh_error, str(exc))
                 return
-            self._refresh_results.put(
-                (
-                    "snapshot",
-                    {
-                        "sources": sources,
-                        "runs": runs,
-                        "jobs": jobs,
-                        "series": [],
-                    },
-                )
+            self.ui.post(
+                self._apply_snapshot,
+                sources=sources,
+                runs=runs,
+                jobs=jobs,
+                series=[],
             )
             try:
                 series = list_dashboard_series(
@@ -417,34 +456,10 @@ class OverviewApp:
                     end_date=date.today(),
                 )
             except Exception:
-                self._refresh_results.put(("done", None))
                 return
-            self._refresh_results.put(("chart", series))
-            self._refresh_results.put(("done", None))
+            self.ui.post(self._render_chart, series)
 
         threading.Thread(target=worker, daemon=True).start()
-        self.root.after(50, self._poll_refresh_results)
-
-    def _poll_refresh_results(self) -> None:
-        while True:
-            try:
-                result_type, payload = self._refresh_results.get_nowait()
-            except Empty:
-                break
-            if result_type == "error":
-                self._on_refresh_error(str(payload))
-            elif result_type == "snapshot":
-                self._apply_snapshot(**payload)
-            elif result_type == "chart":
-                self._render_chart(payload)
-            elif result_type == "done":
-                self._refresh_worker_active = False
-        if self._refresh_worker_active:
-            try:
-                self.root.after(50, self._poll_refresh_results)
-            except RuntimeError:
-                self.refreshing = False
-                self._refresh_worker_active = False
 
     def _apply_snapshot(
         self,
@@ -531,19 +546,35 @@ class OverviewApp:
             selected = [row for row in rows if str(row["label"]) == label]
             selected.sort(key=lambda row: str(row["metric_date"]))
             axis.plot(
-                [str(row["metric_date"])[5:] for row in selected],
+                [date.fromisoformat(str(row["metric_date"])[:10]) for row in selected],
                 [row["avg_value"] for row in selected],
                 linewidth=2.0,
                 marker="o",
                 markersize=3,
-                label=label,
+                label=compact_dashboard_label(label),
                 color=color,
             )
+        from matplotlib.dates import DateFormatter, DayLocator
+
+        chart_dates = [
+            date.fromisoformat(str(row["metric_date"])[:10])
+            for row in rows
+            if str(row["label"]) in labels
+        ]
+        day_span = (max(chart_dates) - min(chart_dates)).days if chart_dates else 0
+        axis.xaxis.set_major_locator(DayLocator(interval=max(1, (day_span + 4) // 5)))
+        axis.xaxis.set_major_formatter(DateFormatter("%m-%d"))
         axis.grid(True, color="#E7ECF2", linewidth=0.8)
         axis.tick_params(axis="both", colors=COLORS["muted"], labelsize=8)
         axis.spines[["top", "right"]].set_visible(False)
         axis.spines[["left", "bottom"]].set_color(COLORS["border"])
-        axis.legend(loc="best", fontsize=7, frameon=False)
+        axis.legend(
+            loc="best",
+            fontsize=7,
+            frameon=False,
+            handlelength=1.8,
+            labelspacing=0.5,
+        )
         self.figure.tight_layout(pad=1.0)
         self.canvas.draw_idle()
 

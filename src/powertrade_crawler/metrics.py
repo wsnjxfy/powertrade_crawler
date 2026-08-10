@@ -408,6 +408,7 @@ def list_dashboard_metric_rows(
             "(category IN ('price', 'market') OR metric_name LIKE '%price%' "
             "OR unit LIKE '%EUR%' OR unit LIKE '%GBP%' OR unit LIKE '%CNY%')"
         )
+        filters.append("metric_name NOT LIKE '%count%'")
     elif topic == "load":
         filters.append(
             "(category = 'load' OR dataset LIKE '%load%' OR metric_name LIKE '%demand%')"
@@ -470,11 +471,18 @@ def export_dashboard_metric_rows(
 
 
 def dashboard_label(row: dict[str, Any]) -> str:
+    dimension = str(row.get("dimension") or "")
+    metric_name = str(row.get("metric_name") or "")
+    detail = (
+        metric_name
+        if metric_name and dimension.lower() in {"", "metric", "statistics", "summary"}
+        else dimension or metric_name
+    )
     parts = [
         str(row.get("source") or ""),
         str(row.get("dataset") or ""),
         str(row.get("region") or ""),
-        str(row.get("dimension") or row.get("metric_name") or ""),
+        detail,
     ]
     return " | ".join(part for part in parts if part)
 

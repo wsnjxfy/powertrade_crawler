@@ -3,8 +3,7 @@ from __future__ import annotations
 import os
 import threading
 import webbrowser
-from queue import Empty, Queue
-from tkinter import BooleanVar, Canvas, StringVar, TclError, ttk
+from tkinter import BooleanVar, Canvas, StringVar, ttk
 from tkinter import messagebox
 
 from powertrade_crawler.credential_setup import (
@@ -20,6 +19,7 @@ from powertrade_crawler.credential_setup import (
 from powertrade_crawler.credentials import save_credential
 from powertrade_crawler.llm_router import default_client_env_path
 from powertrade_crawler.ui_theme import COLORS
+from powertrade_crawler.ui_dispatch import UiLifecycle
 
 
 LOCAL_ROUTER_URL = "http://127.0.0.1:8317/"
@@ -30,6 +30,7 @@ class CredentialSetupApp:
 
     def __init__(self, root: ttk.Frame) -> None:
         self.root = root
+        self.ui = UiLifecycle(root)
         self.power_guide_by_key = {guide.key: guide for guide in POWER_CREDENTIAL_GUIDES}
         self.llm_guide_by_key = {guide.key: guide for guide in LLM_PLATFORM_GUIDES}
         self.selected_power_key = "gridstatus"
@@ -41,7 +42,6 @@ class CredentialSetupApp:
             message="正在检测本地免费模型网关…",
         )
         self._router_busy = False
-        self._router_results: Queue[RouterSnapshot] = Queue()
         self._compact_layout: bool | None = None
 
         collection_required = sum(
@@ -660,23 +660,21 @@ class CredentialSetupApp:
         self._render_router_status()
 
         def worker() -> None:
-            snapshot = inspect_router(start_if_needed=start_if_needed)
-            self._router_results.put(snapshot)
+            try:
+                snapshot = inspect_router(start_if_needed=start_if_needed)
+            except Exception as exc:
+                self.ui.post(self._apply_router_error, str(exc))
+            else:
+                self.ui.post(self._apply_router_snapshot, snapshot)
 
         threading.Thread(target=worker, daemon=True).start()
-        self.root.after(50, self._poll_router_result)
 
-    def _poll_router_result(self) -> None:
-        try:
-            snapshot = self._router_results.get_nowait()
-        except Empty:
-            if self._router_busy:
-                try:
-                    self.root.after(50, self._poll_router_result)
-                except TclError:
-                    pass
-            return
-        self._apply_router_snapshot(snapshot)
+    def _apply_router_error(self, message: str) -> None:
+        self._router_busy = False
+        self.router_start_button.configure(state="normal")
+        self._router_status_detail = f"Agent 功能必需 · 网关检测失败：{message}"
+        self._router_status_compact = "Agent 必需 · 检测失败"
+        self._render_router_status()
 
     def _apply_router_snapshot(self, snapshot: RouterSnapshot) -> None:
         self._router_busy = False

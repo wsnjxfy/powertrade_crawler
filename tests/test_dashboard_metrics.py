@@ -3,6 +3,7 @@ from pathlib import Path
 
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.metrics import (
+    dashboard_label,
     list_dashboard_metric_rows,
     list_dashboard_overview,
     rebuild_dashboard_daily_metrics,
@@ -14,6 +15,18 @@ from powertrade_crawler.storage import (
     upsert_entsoe_records,
     upsert_gridstatus_records,
 )
+
+
+def test_dashboard_label_keeps_summary_metrics_as_separate_series():
+    row = {
+        "source": "Elecheck",
+        "dataset": "elecheck_clear_price",
+        "region": "320000000000",
+        "dimension": "statistics",
+        "metric_name": "day_ahead_avg_price",
+    }
+
+    assert dashboard_label(row).endswith("| day_ahead_avg_price")
 
 
 def prepare_db(tmp_path: Path, monkeypatch):

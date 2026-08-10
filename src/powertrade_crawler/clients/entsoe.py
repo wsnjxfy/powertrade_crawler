@@ -53,13 +53,23 @@ class EntsoeClient:
             "securityToken": self.security_token,
             "documentType": "A44",
             "contract_MarketAgreement.type": "A01",
+            # Some bidding zones publish more than one auction sequence for the
+            # same day-ahead contract.  Sequence 1 is the standard end-customer
+            # price series; requesting it explicitly prevents distinct auctions
+            # from collapsing onto the compatibility table's natural key.
+            "classificationSequence_AttributeInstanceComponent.position": 1,
             "in_Domain": bidding_zone_eic,
             "out_Domain": bidding_zone_eic,
             "periodStart": self.format_period(period_start),
             "periodEnd": self.format_period(period_end),
         }
         response = self.get(params=params)
-        return self.parse_day_ahead_prices(response.text, bidding_zone_eic)
+        rows = self.parse_day_ahead_prices(response.text, bidding_zone_eic)
+        return [
+            row
+            for row in rows
+            if row["classification_sequence"] in (None, 1)
+        ]
 
     def query_document(self, params: dict[str, Any]) -> list[dict[str, Any]]:
         response = self.get(params={"securityToken": self.security_token, **params})
@@ -148,6 +158,22 @@ class EntsoeClient:
         records: list[dict[str, Any]] = []
 
         for time_series in self.findall_by_local_name(root, "TimeSeries"):
+            classification_sequence = self.parse_optional_int(
+                self.find_text_by_local_name(
+                    time_series,
+                    "classificationSequence_AttributeInstanceComponent.position",
+                )
+            )
+            series_metadata = {
+                "series_mrid": self.find_text_by_local_name(time_series, "mRID"),
+                "auction_type": self.find_text_by_local_name(time_series, "auction.type"),
+                "business_type": self.find_text_by_local_name(time_series, "businessType"),
+                "contract_type": self.find_text_by_local_name(
+                    time_series, "contract_MarketAgreement.type"
+                ),
+                "classification_sequence": classification_sequence,
+                "curve_type": self.find_text_by_local_name(time_series, "curveType"),
+            }
             currency = self.find_text_by_local_name(time_series, "currency_Unit.name") or "EUR"
             unit = self.find_text_by_local_name(time_series, "price_Measure_Unit.name") or "MWh"
             for period in self.findall_by_local_name(time_series, "Period"):
@@ -171,6 +197,7 @@ class EntsoeClient:
                     records.append(
                         {
                             "bidding_zone_eic": bidding_zone_eic,
+                            **series_metadata,
                             "position": position,
                             "interval_start_utc": self.format_response_time(point_start),
                             "interval_end_utc": self.format_response_time(point_end),

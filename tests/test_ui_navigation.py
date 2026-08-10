@@ -1,6 +1,6 @@
 from powertrade_crawler.app_shell import PAGE_SPECS, resolve_quick_navigation
 from powertrade_crawler.dashboard_gui import ScheduleDataApp
-from powertrade_crawler.overview_gui import format_record_count
+from powertrade_crawler.overview_gui import compact_dashboard_label, format_record_count
 
 
 def test_ui_page_keys_are_unique_and_cover_existing_top_level_features():
@@ -38,6 +38,18 @@ def test_quick_navigation_rejects_blank_or_unknown_queries():
 def test_overview_record_count_uses_readable_thousands_separators():
     assert format_record_count(0) == "0"
     assert format_record_count(1_284_620) == "1,284,620"
+
+
+def test_overview_chart_legend_uses_compact_business_labels():
+    assert compact_dashboard_label(
+        "Elexon | elexon_system_prices | GB | system_buy_price"
+    ) == "Elexon 系统价 · GB · 系统买价"
+    label = compact_dashboard_label(
+        "ENTSO-E Transparency Platform | entsoe_day_ahead_prices | "
+        "DE-LU | price_position_001"
+    )
+    assert label == "ENTSO-E 日前 · DE-LU · 价格时点 001"
+    assert len(label) <= 30
 
 
 def test_schedule_quick_update_covers_every_supported_source():

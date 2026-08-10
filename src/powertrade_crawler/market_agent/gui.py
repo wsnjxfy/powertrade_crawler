@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import threading
-from queue import Empty, Queue
 from datetime import datetime
 from tkinter import (
     BOTH,
@@ -31,6 +30,7 @@ from powertrade_crawler.market_agent.loop import (
     build_configured_provider,
 )
 from powertrade_crawler.market_agent.provider import FakeProvider
+from powertrade_crawler.market_agent.rag import RagIndexService
 from powertrade_crawler.market_agent.repository import MarketAgentRepository
 from powertrade_crawler.market_agent.schemas import AgentRunResult, RunStatus
 from powertrade_crawler.market_agent.tools import ToolContext
@@ -38,6 +38,7 @@ from powertrade_crawler.llm_router import (
     DEFAULT_MODEL_STRATEGY,
     FreeRouterManagementClient,
 )
+from powertrade_crawler.ui_dispatch import UiLifecycle
 
 
 GREEN = "#102A43"
@@ -78,6 +79,7 @@ class MarketAgentApp:
         on_navigate: Callable[[str], None] | None = None,
     ) -> None:
         self.parent = parent
+        self.ui = UiLifecycle(parent)
         self.repository = repository or MarketAgentRepository()
         self.on_navigate = on_navigate
         self.session_id: str | None = None
@@ -86,13 +88,29 @@ class MarketAgentApp:
         self.session_rows: list[dict[str, Any]] = []
         self.busy = False
         self._source_status_busy = False
-        self._source_status_results: Queue[str] = Queue()
+        self.rag_service = RagIndexService()
+        self._rag_busy = False
+        self._rag_worker_thread: threading.Thread | None = None
+        self._rag_window: Toplevel | None = None
+        self._rag_status_var = StringVar(value="正在读取知识库状态…")
+        self._rag_detail_var = StringVar(value="")
         self.status_var = StringVar(value="就绪")
         self.source_status_var = StringVar(value="正在读取五类来源状态…")
         self._build_styles()
         self._build_ui()
         self.refresh_sessions(select_first=True)
         self.refresh_source_status()
+        self.parent.bind("<Destroy>", self._on_parent_destroy, add="+")
+        self.parent.after_idle(self._maybe_start_rag_update)
+
+    def _on_parent_destroy(self, event) -> None:
+        if event.widget is not self.parent:
+            return
+        self.ui.close()
+        self.rag_service.signal_cancel()
+        worker = self._rag_worker_thread
+        if worker is not None and worker.is_alive():
+            worker.join(timeout=2.0)
 
     def _build_styles(self) -> None:
         style = ttk.Style(self.parent)
@@ -173,12 +191,24 @@ class MarketAgentApp:
 
         status = ttk.Frame(self.parent, padding=(10, 6))
         status.grid(row=1, column=0, sticky="ew")
-        ttk.Label(status, textvariable=self.source_status_var, foreground=MUTED).pack(
-            side=LEFT
+        status.columnconfigure(0, weight=1)
+        ttk.Label(status, textvariable=self.source_status_var, foreground=MUTED).grid(
+            row=0,
+            column=0,
+            sticky="ew",
         )
-        ttk.Label(status, textvariable=self.status_var, foreground=GREEN_DARK).pack(
-            side=RIGHT
+        state_row = ttk.Frame(status)
+        state_row.grid(row=1, column=0, sticky="ew", pady=(2, 0))
+        ttk.Label(state_row, text="运行状态", foreground=MUTED).pack(side=LEFT)
+        ttk.Label(state_row, textvariable=self.status_var, foreground=GREEN_DARK).pack(
+            side=LEFT,
+            padx=(8, 0),
         )
+        ttk.Button(
+            state_row,
+            text="知识库",
+            command=self.open_knowledge_base,
+        ).pack(side=RIGHT)
 
         body = ttk.Panedwindow(self.parent, orient="horizontal")
         body.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 8))
@@ -257,6 +287,8 @@ class MarketAgentApp:
         )
         self.result_text.pack(fill=BOTH, expand=True)
 
+        timeline_card.columnconfigure(0, weight=1)
+        timeline_card.rowconfigure(0, weight=1)
         self.timeline = ttk.Treeview(
             timeline_card,
             columns=("time", "stage", "detail"),
@@ -269,7 +301,14 @@ class MarketAgentApp:
         self.timeline.column("time", width=90, stretch=False)
         self.timeline.column("stage", width=110, stretch=False)
         self.timeline.column("detail", width=540)
-        self.timeline.pack(fill=BOTH, expand=True)
+        timeline_scroll = ttk.Scrollbar(
+            timeline_card,
+            orient="horizontal",
+            command=self.timeline.xview,
+        )
+        self.timeline.configure(xscrollcommand=timeline_scroll.set)
+        self.timeline.grid(row=0, column=0, sticky="nsew")
+        timeline_scroll.grid(row=1, column=0, sticky="ew")
 
         input_frame = ttk.LabelFrame(
             self.parent,
@@ -358,6 +397,228 @@ class MarketAgentApp:
         self.input_text.insert("1.0", prompt)
         self.input_text.focus_set()
 
+    def _maybe_start_rag_update(self) -> None:
+        def worker() -> None:
+            try:
+                status = self.rag_service.status()
+            except Exception as exc:
+                self.ui.post(self._handle_rag_result, "startup_error", str(exc))
+            else:
+                self.ui.post(self._handle_rag_result, "startup_status", status)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def open_knowledge_base(self) -> None:
+        if self._rag_window is not None and self._rag_window.winfo_exists():
+            self._rag_window.lift()
+            self._rag_window.focus_force()
+            return
+        window = Toplevel(self.parent)
+        self._rag_window = window
+        window.title("本地知识库")
+        window.geometry("760x560")
+        window.minsize(620, 430)
+        window.resizable(True, True)
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(2, weight=1)
+
+        summary = ttk.LabelFrame(window, text="索引状态", padding=12)
+        summary.grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 8))
+        summary.columnconfigure(0, weight=1)
+        ttk.Label(
+            summary,
+            textvariable=self._rag_status_var,
+            font=("Microsoft YaHei UI", 11, "bold"),
+            foreground=GREEN_DARK,
+        ).grid(row=0, column=0, sticky="w")
+        ttk.Label(
+            summary,
+            textvariable=self._rag_detail_var,
+            foreground=MUTED,
+            wraplength=700,
+            justify=LEFT,
+        ).grid(row=1, column=0, sticky="ew", pady=(4, 0))
+
+        progress_frame = ttk.Frame(window, padding=(12, 0))
+        progress_frame.grid(row=1, column=0, sticky="ew")
+        progress_frame.columnconfigure(0, weight=1)
+        self._rag_progress = ttk.Progressbar(progress_frame, mode="determinate")
+        self._rag_progress.grid(row=0, column=0, sticky="ew")
+        self._rag_progress_label = ttk.Label(progress_frame, text="", foreground=MUTED)
+        self._rag_progress_label.grid(row=1, column=0, sticky="w", pady=(3, 0))
+
+        sources = ttk.LabelFrame(window, text="来源统计", padding=8)
+        sources.grid(row=2, column=0, sticky="nsew", padx=12, pady=8)
+        sources.columnconfigure(0, weight=1)
+        sources.rowconfigure(0, weight=1)
+        self._rag_tree = ttk.Treeview(
+            sources,
+            columns=("source", "documents", "chunks"),
+            show="headings",
+            height=7,
+        )
+        self._rag_tree.heading("source", text="知识来源")
+        self._rag_tree.heading("documents", text="文档数")
+        self._rag_tree.heading("chunks", text="分块数")
+        self._rag_tree.column("source", width=360)
+        self._rag_tree.column("documents", width=100, anchor="center")
+        self._rag_tree.column("chunks", width=100, anchor="center")
+        self._rag_tree.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(
+            sources, orient=VERTICAL, command=self._rag_tree.yview
+        )
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self._rag_tree.configure(yscrollcommand=scrollbar.set)
+
+        controls = ttk.Frame(window, padding=(12, 4, 12, 12))
+        controls.grid(row=3, column=0, sticky="ew")
+        ttk.Button(
+            controls,
+            text="增量更新",
+            command=lambda: self._start_rag_operation("update"),
+        ).pack(side=LEFT)
+        ttk.Button(
+            controls,
+            text="完整重建",
+            command=lambda: self._start_rag_operation("rebuild"),
+        ).pack(side=LEFT, padx=6)
+        ttk.Button(
+            controls,
+            text="停止更新",
+            command=self._stop_rag_operation,
+        ).pack(side=LEFT)
+        ttk.Button(
+            controls,
+            text="刷新状态",
+            command=self._refresh_rag_status_async,
+        ).pack(side=RIGHT)
+
+        def close_window() -> None:
+            self._rag_window = None
+            window.destroy()
+
+        window.protocol("WM_DELETE_WINDOW", close_window)
+        self._refresh_rag_status_async()
+
+    def _refresh_rag_status_async(self) -> None:
+        def worker() -> None:
+            try:
+                status = self.rag_service.status()
+            except Exception as exc:
+                self.ui.post(self._handle_rag_result, "error", str(exc))
+            else:
+                self.ui.post(self._handle_rag_result, "status", status)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _start_rag_operation(self, operation: str, *, silent: bool = False) -> None:
+        if self._rag_busy:
+            if not silent:
+                messagebox.showinfo("知识库", "知识库更新已经在运行。")
+            return
+        self._rag_busy = True
+        self._rag_status_var.set("正在构建知识库…")
+
+        def worker() -> None:
+            try:
+                def callback(item: dict[str, Any]) -> None:
+                    self.ui.post(self._handle_rag_result, "progress", item)
+
+                result = (
+                    self.rag_service.rebuild(progress_callback=callback)
+                    if operation == "rebuild"
+                    else self.rag_service.update(progress_callback=callback)
+                )
+                self.ui.post(self._handle_rag_result, "done", result)
+            except Exception as exc:
+                self.ui.post(self._handle_rag_result, "operation_error", str(exc))
+
+        self._rag_worker_thread = threading.Thread(target=worker, daemon=True)
+        self._rag_worker_thread.start()
+
+    def _stop_rag_operation(self) -> None:
+        if not self._rag_busy:
+            self._rag_status_var.set("当前没有正在运行的知识库更新。")
+            return
+        self._rag_status_var.set("正在停止知识库更新…")
+        threading.Thread(target=self.rag_service.request_cancel, daemon=True).start()
+
+    def _apply_rag_status(self, status: dict[str, Any]) -> None:
+        status_labels = {
+            "not_built": "尚未建立",
+            "building": "构建中",
+            "ready": "就绪",
+            "degraded": "全文降级",
+            "failed": "失败",
+        }
+        label = status_labels.get(str(status.get("status")), str(status.get("status")))
+        self._rag_status_var.set(
+            f"{label} · {status.get('document_count', 0)} 个文档 · "
+            f"{status.get('chunk_count', 0)} 个分块"
+        )
+        details = [
+            f"模型：{status.get('model_id')}",
+            f"索引版本：{status.get('index_version')}",
+            f"最后完成：{status.get('last_completed_at') or '尚未完成'}",
+        ]
+        if status.get("last_error"):
+            details.append(f"说明：{status['last_error']}")
+        self._rag_detail_var.set("\n".join(details))
+        tree = getattr(self, "_rag_tree", None)
+        if tree is not None and tree.winfo_exists():
+            for item in tree.get_children():
+                tree.delete(item)
+            for source, counts in sorted((status.get("source_counts") or {}).items()):
+                label = {
+                    "gzpec": "广州电力交易中心",
+                    "gridstatus": "GridStatus",
+                    "entsoe": "ENTSO-E",
+                    "elexon": "Elexon",
+                    "elecheck": "Elecheck",
+                }.get(source, source)
+                tree.insert(
+                    "",
+                    END,
+                    values=(label, counts.get("documents", 0), counts.get("chunks", 0)),
+                )
+        progress = getattr(self, "_rag_progress", None)
+        if progress is not None and progress.winfo_exists():
+            total = max(int(status.get("progress_total") or 0), 1)
+            progress.configure(maximum=total)
+            progress["value"] = int(status.get("progress_current") or 0)
+
+    def _handle_rag_result(self, kind: str, payload: Any) -> None:
+        if kind == "progress":
+            progress = getattr(self, "_rag_progress", None)
+            label = getattr(self, "_rag_progress_label", None)
+            total = max(int(payload.get("total") or 0), 1)
+            current = int(payload.get("current") or 0)
+            if progress is not None and progress.winfo_exists():
+                progress.configure(maximum=total)
+                progress["value"] = current
+            if label is not None and label.winfo_exists():
+                label.configure(
+                    text=f"{payload.get('stage', '处理中')} · {current}/{payload.get('total', 0)}"
+                )
+        elif kind in {"done", "status", "startup_status"}:
+            if kind == "done":
+                self._rag_busy = False
+            self._apply_rag_status(payload)
+            if kind == "startup_status":
+                should_update = not payload["ready"] or (
+                    payload["status"] == "degraded" and payload["model_available"]
+                )
+                if should_update:
+                    self._start_rag_operation("update", silent=True)
+        elif kind in {"error", "operation_error"}:
+            if kind == "operation_error":
+                self._rag_busy = False
+            self._rag_status_var.set("知识库操作失败")
+            self._rag_detail_var.set(str(payload))
+        elif kind == "startup_error":
+            self._rag_status_var.set("知识库状态暂时不可用")
+            self._rag_detail_var.set(str(payload))
+
     def refresh_source_status(self) -> None:
         if self._source_status_busy:
             return
@@ -380,21 +641,11 @@ class MarketAgentApp:
                 text = "  |  ".join(parts)
             except Exception as exc:
                 text = f"读取来源状态失败：{exc}"
-            self._source_status_results.put(text)
+            self.ui.post(self._apply_source_status, text)
 
         threading.Thread(target=worker, daemon=True).start()
-        self.parent.after(50, self._poll_source_status)
 
-    def _poll_source_status(self) -> None:
-        try:
-            text = self._source_status_results.get_nowait()
-        except Empty:
-            if self._source_status_busy:
-                try:
-                    self.parent.after(50, self._poll_source_status)
-                except RuntimeError:
-                    self._source_status_busy = False
-            return
+    def _apply_source_status(self, text: str) -> None:
         self._source_status_busy = False
         self.source_status_var.set(text)
 
@@ -484,19 +735,18 @@ class MarketAgentApp:
         self.input_text.focus_set()
         self._append_chat("你", message, "user")
         self._set_busy(True, "正在分析…")
+        session_id = self.session_id
 
         def worker() -> None:
             try:
                 loop = MarketAgentLoop.from_config(
                     repository=self.repository,
-                    event_callback=lambda event: self.parent.after(
-                        0, lambda item=event: self._on_live_event(item)
-                    ),
+                    event_callback=lambda event: self.ui.post(self._on_live_event, event),
                 )
-                result = loop.chat(message, session_id=self.session_id)
-                self.parent.after(0, lambda: self._finish_result(result))
+                result = loop.chat(message, session_id=session_id)
+                self.ui.post(self._finish_result, result)
             except Exception as exc:
-                self.parent.after(0, lambda error=exc: self._finish_exception(error))
+                self.ui.post(self._finish_exception, exc)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -521,10 +771,7 @@ class MarketAgentApp:
         def worker() -> None:
             try:
                 def event_callback(event: dict[str, Any]) -> None:
-                    self.parent.after(
-                        0,
-                        lambda item=event: self._on_live_event(item),
-                    )
+                    self.ui.post(self._on_live_event, event)
 
                 loop = (
                     MarketAgentLoop.from_config(
@@ -543,9 +790,9 @@ class MarketAgentApp:
                     approved=approved,
                     expected_arguments_hash=call["arguments_hash"],
                 )
-                self.parent.after(0, lambda: self._finish_result(result))
+                self.ui.post(self._finish_result, result)
             except Exception as exc:
-                self.parent.after(0, lambda error=exc: self._finish_exception(error))
+                self.ui.post(self._finish_exception, exc)
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -637,8 +884,10 @@ class MarketAgentApp:
     def open_settings(self) -> None:
         config = self.repository.get_config()
         window = Toplevel(self.parent)
+        window_ui = UiLifecycle(window)
         window.title("多数据源 Agent 模型设置")
-        window.geometry("640x310")
+        window.minsize(640, 310)
+        window.resizable(True, True)
         window.transient(self.parent.winfo_toplevel())
         fields = {
             "endpoint": StringVar(value=config["endpoint"]),
@@ -717,7 +966,7 @@ class MarketAgentApp:
                     )
                 except Exception as exc:
                     text = f"连接失败：{exc}"
-                window.after(0, lambda: status.set(text))
+                window_ui.post(status.set, text)
 
             threading.Thread(target=worker, daemon=True).start()
 
@@ -765,12 +1014,13 @@ class MarketAgentApp:
                     )
                 except Exception as exc:
                     text = f"协议探测失败：{exc}"
-                window.after(0, lambda: status.set(text))
+                window_ui.post(status.set, text)
 
             threading.Thread(target=worker, daemon=True).start()
 
         def refresh_channels() -> None:
             status.set("正在读取免费渠道和告警…")
+            current_model_id = fields["model_id"].get()
 
             def worker() -> None:
                 try:
@@ -792,7 +1042,7 @@ class MarketAgentApp:
                         f"当前告警 {len(alerts)} 条。"
                     )
                 except Exception as exc:
-                    values = (DEFAULT_MODEL_STRATEGY, fields["model_id"].get())
+                    values = (DEFAULT_MODEL_STRATEGY, current_model_id)
                     text = f"免费池状态读取失败：{exc}"
 
                 def apply_result() -> None:
@@ -800,7 +1050,7 @@ class MarketAgentApp:
                         strategy_combo.configure(values=values)
                         status.set(text)
 
-                window.after(0, apply_result)
+                window_ui.post(apply_result)
 
             threading.Thread(target=worker, daemon=True).start()
 
@@ -911,6 +1161,27 @@ class MarketAgentApp:
                 reference_lines.append(f"  链接：{item['url']}")
         if reference_lines:
             sections.append("公开信息 / 参考内容\n" + "\n".join(reference_lines))
+        citation_lines = []
+        for item in payload.get("knowledge_citations") or []:
+            metadata = [
+                str(value)
+                for value in (item.get("source"), item.get("publish_date"))
+                if value
+            ]
+            citation_lines.append(
+                f"• [{item.get('citation_id')}] {item.get('title') or '未命名资料'}"
+                + (f"（{' · '.join(metadata)}）" if metadata else "")
+            )
+            if item.get("excerpt"):
+                citation_lines.append(f"  摘要：{item['excerpt']}")
+            if item.get("url"):
+                citation_lines.append(f"  可复制链接：{item['url']}")
+        if citation_lines:
+            mode = payload.get("retrieval_mode") or "hybrid"
+            mode_label = "混合检索" if mode == "hybrid" else "全文降级检索"
+            sections.append(
+                f"知识引用 · {mode_label}\n" + "\n".join(citation_lines)
+            )
         if payload.get("data_sources"):
             sections.append("数据来源\n" + "\n".join(
                 f"• {item}" for item in payload["data_sources"]

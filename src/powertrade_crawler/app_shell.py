@@ -70,6 +70,7 @@ class PowertradeAppShell:
         self.current_page = "overview"
         self.sidebar_collapsed = False
         self._manual_sidebar_state: bool | None = None
+        self._auto_sidebar_compact = False
         self._last_compact_state: bool | None = None
         self.page_title_var = StringVar(value=PAGE_SPEC_BY_KEY["overview"].title)
         self.page_subtitle_var = StringVar(value=PAGE_SPEC_BY_KEY["overview"].subtitle)
@@ -265,14 +266,20 @@ class PowertradeAppShell:
             self.activity_var.set("问题已填入多数据源 Agent，确认后即可发送。")
 
     def toggle_sidebar(self) -> None:
+        if self._auto_sidebar_compact:
+            return
         self._manual_sidebar_state = not self.sidebar_collapsed
         self._set_sidebar_collapsed(self._manual_sidebar_state)
 
     def _on_root_configure(self, event) -> None:
         if event.widget is not self.root:
             return
-        should_collapse = event.width < 1180
-        if not should_collapse and self._manual_sidebar_state is not None:
+        self._auto_sidebar_compact = event.width < 1180
+        self.collapse_button.configure(
+            state="disabled" if self._auto_sidebar_compact else "normal"
+        )
+        should_collapse = self._auto_sidebar_compact
+        if not self._auto_sidebar_compact and self._manual_sidebar_state is not None:
             should_collapse = self._manual_sidebar_state
         if should_collapse != self._last_compact_state:
             self._last_compact_state = should_collapse
