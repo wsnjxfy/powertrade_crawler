@@ -1,0 +1,48 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "colloquial_spread",
+      "turns": [
+        "江苏最近七天实时比日前贵了还是便宜了？按每天看，别给我补缺失值"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_spot"
+      ],
+      "tool_arguments": [
+        {
+          "area": "江苏",
+          "start_date": "2026-08-04",
+          "end_date": "2026-08-10",
+          "metric": "spread",
+          "aggregation": "daily"
+        }
+      ],
+      "window_match": true,
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "查询完成，但在所选地区和日期范围内没有找到本地数据；未补零，也未编造数值。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 1.272
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 1.272
+  }
+}

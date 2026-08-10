@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 1,
+    "action_cases_executed": 0,
+    "elapsed_seconds": 0.966
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "请查询当前 Elecheck 三类数据的更新时间和记录量。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [
+        "elecheck_data_freshness"
+      ],
+      "expected_tool": "elecheck_data_freshness",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "conclusion": "现货价格 2404115 条，最新业务期 2026-07-31；代理购电 4148 条，最新业务期 2026-07；增量机制电价 80 条，最新业务期 无业务日期。",
+      "latency_seconds": 0.966,
+      "usage": {},
+      "error_code": null
+    }
+  ]
+}

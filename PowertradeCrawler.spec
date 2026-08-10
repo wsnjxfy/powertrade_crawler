@@ -8,6 +8,8 @@ a = Analysis(
     datas=[
         ('configs', 'configs'),
         ('src/powertrade_crawler/agent/data', 'powertrade_crawler/agent/data'),
+        ('src/powertrade_crawler/market_agent/data', 'powertrade_crawler/market_agent/data'),
+        ('resources/initial', 'initial_data'),
         ('.env.example', '.'),
         ('EXE_README.txt', '.'),
     ],

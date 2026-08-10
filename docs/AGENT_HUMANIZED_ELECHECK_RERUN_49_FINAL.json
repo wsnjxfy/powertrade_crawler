@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 1,
+    "action_cases_executed": 0,
+    "elapsed_seconds": 1.097
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "把江苏 2099-01-01 的日前现货导出 CSV；没数据就解释，别生成空文件。",
+      "turns": [
+        "把江苏 2099-01-01 的日前现货导出 CSV；没数据就解释，别生成空文件。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [
+        "elecheck_export_spot"
+      ],
+      "expected_tool": "elecheck_export_spot",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "conclusion": "无法导出：江苏 在 2099-01-01 没有可导出的现货明细数据；未生成空文件。",
+      "latency_seconds": 1.097,
+      "usage": {},
+      "error_code": null
+    }
+  ]
+}

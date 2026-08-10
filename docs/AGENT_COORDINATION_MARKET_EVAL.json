@@ -1,0 +1,131 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "new_user_api_setup_guide",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_credential_setup_guide"
+      ],
+      "tool_arguments": [
+        {}
+      ],
+      "data_sources": [
+        "本机 API 配置向导",
+        "本机免费模型网关"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "在线采集凭据已配置 3/3：GridStatus、ENTSO-E 和 Elecheck 在实时采集时需要配置；Elexon 与广州电力交易中心无需 API Key。Agent 的本机免费模型网关状态：已连接，可用免费渠道 9 个。各 LLM 平台均为可选项，只需至少一个免费渠道可用。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.259
+    },
+    {
+      "id": "credential_401_troubleshooting",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_credential_setup_guide"
+      ],
+      "tool_arguments": [
+        {}
+      ],
+      "data_sources": [
+        "本机 API 配置向导",
+        "本机免费模型网关"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "在线采集凭据已配置 3/3：GridStatus、ENTSO-E 和 Elecheck 在实时采集时需要配置；Elexon 与广州电力交易中心无需 API Key。Agent 的本机免费模型网关状态：已连接，可用免费渠道 9 个。各 LLM 平台均为可选项，只需至少一个免费渠道可用。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.221
+    },
+    {
+      "id": "create_entsoe_daily_schedule",
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_create_schedule"
+      ],
+      "tool_arguments": [
+        {
+          "name": "德国价格日更",
+          "dataset": "entsoe_day_ahead_prices",
+          "schedule_kind": "daily",
+          "schedule_time": "02:00",
+          "enabled": true,
+          "area": "DE-LU"
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 0.207
+    },
+    {
+      "id": "schedule_how_to",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "设置定时采集时，请先说明数据源、数据集、运行频率和时间；Agent 会生成受控任务参数并等待审批。审批后只保存本地任务定义，不会立即采集。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.143
+    },
+    {
+      "id": "list_cross_source_schedules",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_list_schedules"
+      ],
+      "tool_arguments": [
+        {}
+      ],
+      "data_sources": [
+        "本地定时任务"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "当前没有本地定时任务。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.176
+    }
+  ],
+  "summary": {
+    "total": 5,
+    "passed": 5,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 1.007
+  }
+}

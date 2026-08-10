@@ -1,0 +1,45 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "elexon_wind",
+      "turns": [
+        "英国风电预测本地有多少，按天给我看；要是没数据就明确告诉我"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon",
+          "dataset": "elexon_wind_generation_forecast",
+          "metric": "wind_generation_forecast",
+          "aggregation": "daily",
+          "statistic": "average"
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.185
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.185
+  }
+}

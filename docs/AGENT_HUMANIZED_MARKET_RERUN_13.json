@@ -1,0 +1,48 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "elexon_load",
+      "turns": [
+        "查询 Elexon 英国初始全国负荷实绩"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon",
+          "dataset": "elexon_initial_demand_outturn",
+          "metric": "initial_demand_outturn",
+          "aggregation": "daily",
+          "statistic": "average"
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [
+        "MW",
+        "个"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 1 个；结果均值为 21334.50 MW；结果最小值为 21334.50 MW。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.182
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.182
+  }
+}

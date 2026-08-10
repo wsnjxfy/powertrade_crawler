@@ -1,4 +1,5 @@
 from time import sleep
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -6,10 +7,25 @@ from loguru import logger
 
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.elecheck_auth import resolve_elecheck_authorization
+from powertrade_crawler.network_errors import (
+    NetworkFailure,
+    NetworkFailureKind,
+    failure_from_exception,
+    failure_from_response,
+    failure_from_status,
+    retry_after_seconds,
+)
 
 
-class ElecheckUnauthorizedError(RuntimeError):
-    pass
+class ElecheckUnauthorizedError(NetworkFailure):
+    def __init__(self, *, attempts: int = 1) -> None:
+        super().__init__(
+            service="Elecheck",
+            kind=NetworkFailureKind.UNAUTHORIZED,
+            status_code=401,
+            retryable=False,
+            attempts=attempts,
+        )
 
 
 class ElecheckClient:
@@ -152,51 +168,19 @@ class ElecheckClient:
 
     def post_clear_price(self, endpoint: str, payload: dict[str, str]) -> dict[str, Any]:
         path = f"{self.clear_price_path}/{endpoint}"
-        last_error: Exception | None = None
-        for attempt in range(self.retry_times + 1):
-            try:
-                response = self.client.post(path, json=payload)
-                if response.status_code == 401:
-                    raise ElecheckUnauthorizedError(
-                        "Elecheck returned HTTP 401. A valid authorization token is required."
-                    )
-                response.raise_for_status()
-                data = response.json()
-                if data.get("code") != 200:
-                    raise RuntimeError(f"Elecheck API returned non-200 payload: {data}")
-                return data
-            except ElecheckUnauthorizedError:
-                raise
-            except Exception as exc:
-                last_error = exc
-                logger.warning("Elecheck POST {} failed on attempt {}: {}", path, attempt + 1, exc)
-                if attempt < self.retry_times:
-                    sleep(1 + attempt)
-        raise RuntimeError(f"Elecheck POST {path} failed after retries") from last_error
+        return self._request_json(
+            method="POST",
+            path=path,
+            request=lambda: self.client.post(path, json=payload),
+        )
 
     def get_purchasing(self, endpoint: str, params: dict[str, str]) -> dict[str, Any]:
         path = f"{self.purchasing_path}/{endpoint}"
-        last_error: Exception | None = None
-        for attempt in range(self.retry_times + 1):
-            try:
-                response = self.client.get(path, params=params)
-                if response.status_code == 401:
-                    raise ElecheckUnauthorizedError(
-                        "Elecheck returned HTTP 401. A valid authorization token is required."
-                    )
-                response.raise_for_status()
-                data = response.json()
-                if data.get("code") != 200:
-                    raise RuntimeError(f"Elecheck API returned non-200 payload: {data}")
-                return data
-            except ElecheckUnauthorizedError:
-                raise
-            except Exception as exc:
-                last_error = exc
-                logger.warning("Elecheck GET {} failed on attempt {}: {}", path, attempt + 1, exc)
-                if attempt < self.retry_times:
-                    sleep(1 + attempt)
-        raise RuntimeError(f"Elecheck GET {path} failed after retries") from last_error
+        return self._request_json(
+            method="GET",
+            path=path,
+            request=lambda: self.client.get(path, params=params),
+        )
 
     def get_mechanism_electricity_price(
         self,
@@ -204,27 +188,87 @@ class ElecheckClient:
         params: dict[str, str],
     ) -> dict[str, Any]:
         path = f"{self.mechanism_electricity_price_path}/{endpoint}"
-        last_error: Exception | None = None
+        return self._request_json(
+            method="GET",
+            path=path,
+            request=lambda: self.client.get(path, params=params),
+        )
+
+    def _request_json(
+        self,
+        *,
+        method: str,
+        path: str,
+        request: Callable[[], httpx.Response],
+    ) -> dict[str, Any]:
         for attempt in range(self.retry_times + 1):
             try:
-                response = self.client.get(path, params=params)
+                response = request()
                 if response.status_code == 401:
-                    raise ElecheckUnauthorizedError(
-                        "Elecheck returned HTTP 401. A valid authorization token is required."
+                    raise ElecheckUnauthorizedError(attempts=attempt + 1)
+                if response.status_code >= 400:
+                    failure = failure_from_response(
+                        "Elecheck",
+                        response,
+                        attempts=attempt + 1,
                     )
-                response.raise_for_status()
+                    if failure.retryable and attempt < self.retry_times:
+                        delay = retry_after_seconds(response, default=1 + attempt)
+                        logger.warning(
+                            "Elecheck {} {} failed on attempt {}: {}",
+                            method,
+                            path,
+                            attempt + 1,
+                            failure.kind.value,
+                        )
+                        sleep(delay)
+                        continue
+                    raise failure
                 data = response.json()
-                if data.get("code") != 200:
-                    raise RuntimeError(f"Elecheck API returned non-200 payload: {data}")
+                if not isinstance(data, dict):
+                    raise ValueError("response root is not an object")
+                payload_code = data.get("code")
+                if payload_code != 200:
+                    try:
+                        status_code = int(payload_code)
+                    except (TypeError, ValueError):
+                        status_code = 502
+                    if status_code == 401:
+                        raise ElecheckUnauthorizedError(attempts=attempt + 1)
+                    failure = failure_from_status(
+                        "Elecheck",
+                        status_code,
+                        detail=str(data.get("message") or data.get("msg") or ""),
+                        attempts=attempt + 1,
+                    )
+                    if failure.retryable and attempt < self.retry_times:
+                        logger.warning(
+                            "Elecheck {} {} failed on attempt {}: {}",
+                            method,
+                            path,
+                            attempt + 1,
+                            failure.kind.value,
+                        )
+                        sleep(1 + attempt)
+                        continue
+                    raise failure
                 return data
-            except ElecheckUnauthorizedError:
+            except NetworkFailure:
                 raise
-            except Exception as exc:
-                last_error = exc
-                logger.warning("Elecheck GET {} failed on attempt {}: {}", path, attempt + 1, exc)
-                if attempt < self.retry_times:
+            except (httpx.TimeoutException, httpx.RequestError, ValueError) as exc:
+                failure = failure_from_exception("Elecheck", exc, attempts=attempt + 1)
+                logger.warning(
+                    "Elecheck {} {} failed on attempt {}: {}",
+                    method,
+                    path,
+                    attempt + 1,
+                    failure.kind.value,
+                )
+                if failure.retryable and attempt < self.retry_times:
                     sleep(1 + attempt)
-        raise RuntimeError(f"Elecheck GET {path} failed after retries") from last_error
+                    continue
+                raise failure from exc
+        raise AssertionError("unreachable")
 
     def close(self) -> None:
         self.client.close()

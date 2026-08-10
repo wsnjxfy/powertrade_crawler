@@ -1,5 +1,5 @@
 import csv
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 
@@ -30,7 +30,7 @@ def test_export_gridstatus_translation_tasks_writes_expected_csv(tmp_path, monke
                 primary_key_columns_json="[]",
                 all_columns_json="[]",
                 raw_json="{}",
-                collected_at=datetime.utcnow(),
+                collected_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
         session.commit()
@@ -67,7 +67,7 @@ def test_import_gridstatus_translations_updates_database(tmp_path, monkeypatch):
                 primary_key_columns_json="[]",
                 all_columns_json="[]",
                 raw_json="{}",
-                collected_at=datetime.utcnow(),
+                collected_at=datetime.now(UTC).replace(tzinfo=None),
             )
         )
         session.commit()

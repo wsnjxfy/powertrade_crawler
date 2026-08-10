@@ -1,0 +1,85 @@
+{
+  "mode": "offline",
+  "cases": [
+    {
+      "id": "read_tools_present",
+      "passed": true,
+      "detail": "只读工具齐全"
+    },
+    {
+      "id": "write_tools_present",
+      "passed": true,
+      "detail": "采集工具齐全"
+    },
+    {
+      "id": "all_writes_require_approval",
+      "passed": true,
+      "detail": "五类采集和定时任务创建均需要普通审批"
+    },
+    {
+      "id": "reads_are_automatic",
+      "passed": true,
+      "detail": "查询、分析和预设目录导出自动执行"
+    },
+    {
+      "id": "forbidden_capabilities_absent",
+      "passed": true,
+      "detail": "未注册高风险通用能力"
+    },
+    {
+      "id": "overview_route",
+      "passed": true,
+      "detail": "更新时间问题确定性路由"
+    },
+    {
+      "id": "catalog_route",
+      "passed": true,
+      "detail": "数据目录问题确定性路由"
+    },
+    {
+      "id": "dataset_source_binding",
+      "passed": true,
+      "detail": "拒绝跨来源伪造数据集"
+    },
+    {
+      "id": "read_window_bounded",
+      "passed": true,
+      "detail": "只读日期范围最长366天"
+    },
+    {
+      "id": "elecheck_spot_bounded",
+      "passed": true,
+      "detail": "Elecheck 现货采集最长31天"
+    },
+    {
+      "id": "entsoe_border_required",
+      "passed": true,
+      "detail": "跨境潮流要求双边区域"
+    },
+    {
+      "id": "gridstatus_window_bounded",
+      "passed": true,
+      "detail": "GridStatus 最长七天"
+    },
+    {
+      "id": "live_cases_present",
+      "passed": true,
+      "detail": "在线案例不少于30项，采集案例必须停在审批边界"
+    },
+    {
+      "id": "independent_namespace",
+      "passed": true,
+      "detail": "工具使用独立 market_ 命名空间"
+    },
+    {
+      "id": "no_strong_approval",
+      "passed": true,
+      "detail": "首版未开放强化审批操作"
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "passed": 15,
+    "failed": 0
+  }
+}

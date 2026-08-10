@@ -1,0 +1,41 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "credential_401_troubleshooting",
+      "turns": [
+        "ENTSO-E 刚才报 401，我不想把 token 发给你，告诉我在哪检查和怎么重新申请。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_credential_setup_guide"
+      ],
+      "tool_arguments": [
+        {}
+      ],
+      "window_match": true,
+      "data_sources": [
+        "本机 API 配置向导",
+        "本机免费模型网关"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "在线采集凭据已配置 3/3：GridStatus、ENTSO-E 和 Elecheck 在实时采集时需要配置；Elexon 与广州电力交易中心无需 API Key。Agent 的本机免费模型网关状态：已连接，可用免费渠道 8 个。各 LLM 平台均为可选项，只需至少一个免费渠道可用。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.263
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.263
+  }
+}

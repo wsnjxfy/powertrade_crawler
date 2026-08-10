@@ -1,0 +1,44 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "colloquial_spread",
+      "turns": [
+        "江苏最近七天实时比日前贵了还是便宜了？按每天看，别给我补缺失值"
+      ],
+      "passed": false,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_create_schedule"
+      ],
+      "tool_arguments": [
+        {
+          "name": "test_jiangsu_check",
+          "dataset": "gzpec_all",
+          "schedule_kind": "daily",
+          "schedule_time": "02:00",
+          "enabled": true,
+          "area": null
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 34.292
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 34.292
+  }
+}

@@ -10,6 +10,13 @@ from loguru import logger
 
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.credentials import get_credential
+from powertrade_crawler.datetime_utils import as_utc_naive, format_utc_z, parse_utc_naive
+from powertrade_crawler.network_errors import (
+    NetworkFailure,
+    failure_from_exception,
+    failure_from_response,
+    retry_after_seconds,
+)
 
 
 class EntsoeClient:
@@ -76,35 +83,43 @@ class EntsoeClient:
         return rows
 
     def get(self, params: dict[str, Any]) -> httpx.Response:
-        last_error: Exception | None = None
         for attempt in range(self.retry_times + 1):
             self.wait_for_rate_limit()
             try:
                 response = self.client.get(self.base_url, params=params)
-                if response.status_code == 429:
-                    retry_after = float(response.headers.get("Retry-After", "60"))
-                    logger.warning("ENTSO-E rate limited; sleeping {} seconds", retry_after)
-                    sleep(retry_after)
-                    continue
-                if 400 <= response.status_code < 500:
+                if response.is_error:
                     details = self.extract_error_details(response.text)
-                    raise RuntimeError(
-                        f"ENTSO-E rejected request with HTTP {response.status_code}: {details}"
+                    failure = failure_from_response(
+                        "ENTSO-E",
+                        response,
+                        detail=details,
+                        attempts=attempt + 1,
                     )
-                response.raise_for_status()
+                    if failure.retryable and attempt < self.retry_times:
+                        delay = retry_after_seconds(response, default=1 + attempt)
+                        logger.warning(
+                            "ENTSO-E GET failed on attempt {} with {}",
+                            attempt + 1,
+                            failure.kind.value,
+                        )
+                        sleep(delay)
+                        continue
+                    raise failure
                 return response
-            except RuntimeError:
+            except NetworkFailure:
                 raise
-            except Exception as exc:
-                last_error = exc
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                failure = failure_from_exception("ENTSO-E", exc, attempts=attempt + 1)
                 logger.warning(
                     "ENTSO-E GET failed on attempt {} with {}",
                     attempt + 1,
-                    type(exc).__name__,
+                    failure.kind.value,
                 )
-                if attempt < self.retry_times:
+                if failure.retryable and attempt < self.retry_times:
                     sleep(1 + attempt)
-        raise RuntimeError("ENTSO-E GET failed after retries") from last_error
+                    continue
+                raise failure from exc
+        raise AssertionError("unreachable")
 
     def extract_error_details(self, response_text: str) -> str:
         try:
@@ -388,14 +403,13 @@ class EntsoeClient:
         return tag.rsplit("}", 1)[-1]
 
     def format_period(self, value: datetime) -> str:
-        return value.strftime("%Y%m%d%H%M")
+        return as_utc_naive(value).strftime("%Y%m%d%H%M")
 
     def parse_entsoe_datetime(self, value: str) -> datetime:
-        normalized = value.replace("Z", "+00:00")
-        return datetime.fromisoformat(normalized).replace(tzinfo=None)
+        return parse_utc_naive(value)
 
     def format_response_time(self, value: datetime) -> str:
-        return value.strftime("%Y-%m-%dT%H:%MZ")
+        return format_utc_z(value)
 
     def parse_duration(self, value: str) -> timedelta:
         if not value.startswith("PT"):

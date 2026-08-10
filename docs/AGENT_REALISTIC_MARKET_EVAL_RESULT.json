@@ -1,0 +1,1486 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "overview_all",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_data_overview"
+      ],
+      "tool_arguments": [
+        {
+          "source": null
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform",
+        "Elecheck 易能电易查",
+        "Elexon Insights API",
+        "GridStatus",
+        "广州电力交易中心"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "Elecheck 易能电易查本地记录数为 2408143 条；ENTSO-E Transparency Platform本地记录数为 334 条；Elexon Insights API本地记录数为 103 条。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.664
+    },
+    {
+      "id": "overview_elecheck",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_data_overview"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elecheck"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "Elecheck 易能电易查本地记录数为 2408143 条。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.618
+    },
+    {
+      "id": "overview_entsoe",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_data_overview"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe"
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "ENTSO-E Transparency Platform本地记录数为 334 条。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.209
+    },
+    {
+      "id": "overview_elexon",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_data_overview"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon"
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "Elexon Insights API本地记录数为 103 条。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.154
+    },
+    {
+      "id": "overview_gridstatus",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_data_overview"
+      ],
+      "tool_arguments": [
+        {
+          "source": "gridstatus"
+        }
+      ],
+      "data_sources": [
+        "GridStatus"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "GridStatus本地记录数为 2004 条。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.171
+    },
+    {
+      "id": "overview_gzpec",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_data_overview"
+      ],
+      "tool_arguments": [
+        {
+          "source": "gzpec"
+        }
+      ],
+      "data_sources": [
+        "广州电力交易中心"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "广州电力交易中心本地记录数为 200 条。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.153
+    },
+    {
+      "id": "catalog_entsoe",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_list_datasets"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe"
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [],
+      "dataset_ids": [
+        "entsoe_actual_generation_by_type",
+        "entsoe_actual_total_load",
+        "entsoe_cross_border_physical_flows",
+        "entsoe_day_ahead_prices"
+      ],
+      "conclusion": "多数据源 Agent 当前支持 4 个ENTSO-E Transparency Platform受控数据集。 本次返回 4 项：日前电价、实际总负荷、按类型实际发电、跨境物理潮流。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.151
+    },
+    {
+      "id": "catalog_elexon",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_list_datasets"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon"
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [],
+      "dataset_ids": [
+        "elexon_generation_by_fuel_half_hourly",
+        "elexon_initial_demand_outturn",
+        "elexon_interconnector_flows",
+        "elexon_system_prices",
+        "elexon_wind_generation_forecast"
+      ],
+      "conclusion": "多数据源 Agent 当前支持 5 个 Elexon 数据集；项目完整 Elexon 接口目录共 17 项。 本次返回 5 项：结算系统价格、初始全国负荷实绩、半小时燃料类型发电、风电发电预测、互联线潮流。 可在“Elexon 英国”页签查看完整接口目录，或运行 powertrade elexon-datasets。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.182
+    },
+    {
+      "id": "catalog_gridstatus",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_list_datasets"
+      ],
+      "tool_arguments": [
+        {
+          "source": "gridstatus"
+        }
+      ],
+      "data_sources": [
+        "GridStatus"
+      ],
+      "units": [],
+      "dataset_ids": [
+        "aeso_daily_average_pool_price",
+        "aeso_fuel_mix",
+        "aeso_interchange",
+        "aeso_load",
+        "aeso_load_forecast",
+        "aeso_outages_hourly",
+        "aeso_pool_price",
+        "aeso_pool_price_forecast",
+        "aeso_reserves",
+        "aeso_solar_10_min",
+        "aeso_solar_forecast_12_hour",
+        "aeso_solar_forecast_7_day",
+        "aeso_solar_hourly",
+        "aeso_supply_and_demand",
+        "aeso_system_marginal_price",
+        "aeso_transmission_outages",
+        "aeso_unit_status",
+        "aeso_wind_10_min",
+        "aeso_wind_forecast_12_hour",
+        "aeso_wind_forecast_7_day",
+        "aeso_wind_hourly",
+        "all_records",
+        "all_records_timeseries",
+        "caiso_as_prices",
+        "caiso_as_procurement_dam",
+        "caiso_branch_shadow_prices_dam_hourly",
+        "caiso_branch_shadow_prices_hasp_hourly",
+        "caiso_branch_shadow_prices_rtm_5_min",
+        "caiso_branch_shadow_prices_rtpd_15_min",
+        "caiso_curtailed_non_operational_generator_report",
+        "caiso_curtailment",
+        "caiso_curtailment_aggregated_hourly",
+        "caiso_edam_wind_solar_forecast",
+        "caiso_fuel_mix",
+        "caiso_fuel_prices",
+        "caiso_fuel_prices_and_descriptions",
+        "caiso_fuel_regions",
+        "caiso_intertie_constraint_shadow_prices_real_time_5_min",
+        "caiso_ir_rc_prices",
+        "caiso_lmp_dart_15_min",
+        "caiso_lmp_dart_5_min",
+        "caiso_lmp_day_ahead_hourly",
+        "caiso_lmp_hasp_15_min",
+        "caiso_lmp_real_time_15_min",
+        "caiso_lmp_real_time_5_min",
+        "caiso_lmp_scheduling_point_tie_dart_15_min",
+        "caiso_lmp_scheduling_point_tie_dart_5_min",
+        "caiso_lmp_scheduling_point_tie_day_ahead_hourly",
+        "caiso_lmp_scheduling_point_tie_real_time_15_min",
+        "caiso_lmp_scheduling_point_tie_real_time_5_min",
+        "caiso_load",
+        "caiso_load_forecast",
+        "caiso_load_forecast_15_min",
+        "caiso_load_forecast_2_day",
+        "caiso_load_forecast_5_min",
+        "caiso_load_forecast_7_day",
+        "eia_fuel_mix_hourly",
+        "eia_regional_hourly",
+        "ercot_energy_storage_resources",
+        "ercot_fuel_mix",
+        "ercot_hourly_resource_outage_capacity_reports",
+        "ercot_lmp_by_bus",
+        "ercot_lmp_by_settlement_point",
+        "ercot_load",
+        "ercot_load_by_forecast_zone",
+        "ercot_load_by_weather_zone",
+        "ercot_load_forecast",
+        "ercot_load_forecast_by_forecast_zone",
+        "ercot_sced_gen_resource_60_day",
+        "ercot_solar_actual_and_forecast_by_geo_region_hourly",
+        "ercot_solar_actual_and_forecast_hourly",
+        "ercot_spp_day_ahead_hourly",
+        "ercot_spp_real_time_15_min",
+        "ercot_wind_actual_and_forecast_by_geo_region_hourly",
+        "ercot_wind_actual_and_forecast_hourly",
+        "isone_fuel_mix",
+        "isone_lmp_day_ahead_hourly",
+        "isone_lmp_real_time_5_min",
+        "isone_lmp_real_time_hourly_final",
+        "isone_load",
+        "miso_fuel_mix",
+        "miso_lmp_day_ahead_hourly",
+        "miso_lmp_real_time_5_min",
+        "miso_lmp_real_time_hourly_final",
+        "miso_load",
+        "nyiso_fuel_mix",
+        "nyiso_lmp_day_ahead_hourly",
+        "nyiso_lmp_real_time_5_min",
+        "nyiso_load",
+        "pjm_fuel_mix",
+        "pjm_fuel_mix_hourly",
+        "pjm_lmp_day_ahead_hourly",
+        "pjm_lmp_real_time_5_min",
+        "pjm_lmp_real_time_hourly",
+        "pjm_load",
+        "pjm_pricing_nodes",
+        "spp_fuel_mix",
+        "spp_lmp_day_ahead_hourly",
+        "spp_lmp_real_time_5_min",
+        "spp_load"
+      ],
+      "conclusion": "多数据源 Agent 当前支持 0 个GridStatus受控数据集。 本次返回 100 项：ERCOT SPP Day Ahead Hourly、PJM LMP Day Ahead Hourly、ERCOT LMP By Settlement Point、CAISO LMP Day Ahead Hourly、ERCOT SPP Real Time 15 Min、ERCOT Fuel Mix、PJM LMP Real Time 5 Min、CAISO LMP Real Time 5 Min等。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.187
+    },
+    {
+      "id": "elecheck_spot",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_spot"
+      ],
+      "tool_arguments": [
+        {
+          "area": "山西",
+          "start_date": null,
+          "end_date": null,
+          "metric": "day_ahead",
+          "aggregation": "daily"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 30 CNY/MWh；结果均值为 291.4417361111111 CNY/MWh；结果最小值为 230.95895833333336 CNY/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 41.573
+    },
+    {
+      "id": "elecheck_purchasing",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_purchasing"
+      ],
+      "tool_arguments": [
+        {
+          "province": null,
+          "start_month": null,
+          "end_month": null,
+          "metric": "purchasing_price"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/kWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 366 CNY/kWh；结果均值为 0.4005946038251366 CNY/kWh；结果最小值为 0.185366 CNY/kWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 63.314
+    },
+    {
+      "id": "entsoe_price",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_day_ahead_prices",
+          "metric": null,
+          "area": "DE",
+          "start_date": null,
+          "end_date": null,
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "本地数据库中未找到德国（DE）的 ENTSO-E 日前价格日均数据。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 37.028
+    },
+    {
+      "id": "elexon_load",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon",
+          "dataset": "elexon_initial_demand_outturn",
+          "metric": null,
+          "area": null,
+          "start_date": null,
+          "end_date": null,
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [
+        "MW"
+      ],
+      "dataset_ids": [],
+      "conclusion": "Elexon 英国初始全国负荷实绩（elexon_initial_demand_outturn）在 2026-07-19 的最新值为 21334.5 MW，该日所有统计量均为同一值。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 51.186
+    },
+    {
+      "id": "gzpec_search",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_search_gzpec_news"
+      ],
+      "tool_arguments": [
+        {
+          "keyword": null,
+          "category": null,
+          "news_type": "spot_market",
+          "start_date": null,
+          "end_date": null,
+          "limit": 20
+        }
+      ],
+      "data_sources": [
+        "广州电力交易中心"
+      ],
+      "units": [
+        "篇"
+      ],
+      "dataset_ids": [],
+      "conclusion": "已找到 20 条公开信息：南方区域电力现货市场每周行情一览（2026年5月4日-10日）、南方区域电力现货市场每周行情一览（2026年4月27日-5月3日）、南方区域电力现货市场每周行情一览（2026年4月20日-26日）、南方区域电力现货市场每周行情一览、南方区域电力现货市场每周行情一览（2026年4月6日-12日）等。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 57.422
+    },
+    {
+      "id": "strict_comparison",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_compare_series"
+      ],
+      "tool_arguments": [
+        {
+          "series": [
+            {
+              "source": "entsoe",
+              "dataset": "entsoe_day_ahead_prices",
+              "metric": null,
+              "area": null,
+              "start_date": null,
+              "end_date": null,
+              "aggregation": "daily",
+              "statistic": "average",
+              "group_by": "none",
+              "limit": 366
+            },
+            {
+              "source": "elexon",
+              "dataset": "elexon_system_prices",
+              "metric": null,
+              "area": null,
+              "start_date": null,
+              "end_date": null,
+              "aggregation": "daily",
+              "statistic": "average",
+              "group_by": "none",
+              "limit": 366
+            }
+          ]
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform",
+        "Elexon Insights API"
+      ],
+      "units": [
+        "GBP/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 6 GBP/MWh；结果均值为 90.75095220160794 GBP/MWh；结果最小值为 22.0 GBP/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 47.447
+    },
+    {
+      "id": "colloquial_spot",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_spot"
+      ],
+      "tool_arguments": [
+        {
+          "area": "山西",
+          "start_date": null,
+          "end_date": null,
+          "metric": "day_ahead",
+          "aggregation": "monthly"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 2 CNY/MWh；结果均值为 279.71685688405796 CNY/MWh；结果最小值为 257.73270833333333 CNY/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 14.332
+    },
+    {
+      "id": "colloquial_spread",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series",
+        "market_list_datasets",
+        "market_list_datasets",
+        "market_query_series",
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elecheck",
+          "dataset": "elecheck_spot",
+          "metric": "price",
+          "area": "Jiangsu",
+          "start_date": "2026-07-30",
+          "end_date": "2026-08-06",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 100
+        },
+        {
+          "source": "elecheck",
+          "search": "Jiangsu",
+          "limit": 100
+        },
+        {
+          "source": "elecheck",
+          "search": null,
+          "limit": 10
+        },
+        {
+          "source": "elecheck",
+          "dataset": "elecheck_spot",
+          "metric": "avg_day_ahead_price",
+          "area": "Jiangsu",
+          "start_date": "2026-07-30",
+          "end_date": "2026-08-06",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 100
+        },
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_day_ahead_prices",
+          "metric": "price",
+          "area": "CN-Jiangsu",
+          "start_date": "2026-07-30",
+          "end_date": "2026-08-06",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 100
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform",
+        "Elecheck 易能电易查"
+      ],
+      "units": [],
+      "dataset_ids": [
+        "elecheck_mechanism",
+        "elecheck_purchasing",
+        "elecheck_spot"
+      ],
+      "conclusion": "无法回答江苏最近七天（2026-07-30 至 2026-08-06）实时电价与日前电价的对比情况。原因是数据源（Elecheck 易能电易查）中江苏现货出清价格的最新记录截止于 2026-07-23，请求的时间段内无数据。 多数据源 Agent 当前支持 3 个Elecheck 易能电易查受控数据集。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success",
+        "success",
+        "success",
+        "success",
+        "success"
+      ],
+      "latency_seconds": 63.931
+    },
+    {
+      "id": "colloquial_purchasing",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_purchasing"
+      ],
+      "tool_arguments": [
+        {
+          "province": null,
+          "start_month": null,
+          "end_month": null,
+          "metric": "purchasing_price"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/kWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 366 CNY/kWh；结果均值为 0.4005946038251366 CNY/kWh；结果最小值为 0.185366 CNY/kWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 63.992
+    },
+    {
+      "id": "mechanism_snapshot",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_mechanism"
+      ],
+      "tool_arguments": [
+        {
+          "region": "None",
+          "limit": 100
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 41.762
+    },
+    {
+      "id": "elexon_wind",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon",
+          "dataset": "elexon_wind_generation_forecast",
+          "metric": null,
+          "area": null,
+          "start_date": null,
+          "end_date": null,
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [
+        "MW"
+      ],
+      "dataset_ids": [],
+      "conclusion": "目前本地仅有 1 天（2026-07-01）的风电预测数据，无法按天提供完整列表。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 57.495
+    },
+    {
+      "id": "entsoe_load",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_actual_total_load",
+          "metric": null,
+          "area": "Germany",
+          "start_date": null,
+          "end_date": null,
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 38.835
+    },
+    {
+      "id": "catalog_gridstatus_informal",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_list_datasets"
+      ],
+      "tool_arguments": [
+        {
+          "source": "gridstatus"
+        }
+      ],
+      "data_sources": [
+        "GridStatus"
+      ],
+      "units": [],
+      "dataset_ids": [
+        "aeso_daily_average_pool_price",
+        "aeso_fuel_mix",
+        "aeso_interchange",
+        "aeso_load",
+        "aeso_load_forecast",
+        "aeso_outages_hourly",
+        "aeso_pool_price",
+        "aeso_pool_price_forecast",
+        "aeso_reserves",
+        "aeso_solar_10_min",
+        "aeso_solar_forecast_12_hour",
+        "aeso_solar_forecast_7_day",
+        "aeso_solar_hourly",
+        "aeso_supply_and_demand",
+        "aeso_system_marginal_price",
+        "aeso_transmission_outages",
+        "aeso_unit_status",
+        "aeso_wind_10_min",
+        "aeso_wind_forecast_12_hour",
+        "aeso_wind_forecast_7_day",
+        "aeso_wind_hourly",
+        "all_records",
+        "all_records_timeseries",
+        "caiso_as_prices",
+        "caiso_as_procurement_dam",
+        "caiso_branch_shadow_prices_dam_hourly",
+        "caiso_branch_shadow_prices_hasp_hourly",
+        "caiso_branch_shadow_prices_rtm_5_min",
+        "caiso_branch_shadow_prices_rtpd_15_min",
+        "caiso_curtailed_non_operational_generator_report",
+        "caiso_curtailment",
+        "caiso_curtailment_aggregated_hourly",
+        "caiso_edam_wind_solar_forecast",
+        "caiso_fuel_mix",
+        "caiso_fuel_prices",
+        "caiso_fuel_prices_and_descriptions",
+        "caiso_fuel_regions",
+        "caiso_intertie_constraint_shadow_prices_real_time_5_min",
+        "caiso_ir_rc_prices",
+        "caiso_lmp_dart_15_min",
+        "caiso_lmp_dart_5_min",
+        "caiso_lmp_day_ahead_hourly",
+        "caiso_lmp_hasp_15_min",
+        "caiso_lmp_real_time_15_min",
+        "caiso_lmp_real_time_5_min",
+        "caiso_lmp_scheduling_point_tie_dart_15_min",
+        "caiso_lmp_scheduling_point_tie_dart_5_min",
+        "caiso_lmp_scheduling_point_tie_day_ahead_hourly",
+        "caiso_lmp_scheduling_point_tie_real_time_15_min",
+        "caiso_lmp_scheduling_point_tie_real_time_5_min",
+        "caiso_load",
+        "caiso_load_forecast",
+        "caiso_load_forecast_15_min",
+        "caiso_load_forecast_2_day",
+        "caiso_load_forecast_5_min",
+        "caiso_load_forecast_7_day",
+        "eia_fuel_mix_hourly",
+        "eia_regional_hourly",
+        "ercot_energy_storage_resources",
+        "ercot_fuel_mix",
+        "ercot_hourly_resource_outage_capacity_reports",
+        "ercot_lmp_by_bus",
+        "ercot_lmp_by_settlement_point",
+        "ercot_load",
+        "ercot_load_by_forecast_zone",
+        "ercot_load_by_weather_zone",
+        "ercot_load_forecast",
+        "ercot_load_forecast_by_forecast_zone",
+        "ercot_sced_gen_resource_60_day",
+        "ercot_solar_actual_and_forecast_by_geo_region_hourly",
+        "ercot_solar_actual_and_forecast_hourly",
+        "ercot_spp_day_ahead_hourly",
+        "ercot_spp_real_time_15_min",
+        "ercot_wind_actual_and_forecast_by_geo_region_hourly",
+        "ercot_wind_actual_and_forecast_hourly",
+        "isone_fuel_mix",
+        "isone_lmp_day_ahead_hourly",
+        "isone_lmp_real_time_5_min",
+        "isone_lmp_real_time_hourly_final",
+        "isone_load",
+        "miso_fuel_mix",
+        "miso_lmp_day_ahead_hourly",
+        "miso_lmp_real_time_5_min",
+        "miso_lmp_real_time_hourly_final",
+        "miso_load",
+        "nyiso_fuel_mix",
+        "nyiso_lmp_day_ahead_hourly",
+        "nyiso_lmp_real_time_5_min",
+        "nyiso_load",
+        "pjm_fuel_mix",
+        "pjm_fuel_mix_hourly",
+        "pjm_lmp_day_ahead_hourly",
+        "pjm_lmp_real_time_5_min",
+        "pjm_lmp_real_time_hourly",
+        "pjm_load",
+        "pjm_pricing_nodes",
+        "spp_fuel_mix",
+        "spp_lmp_day_ahead_hourly",
+        "spp_lmp_real_time_5_min",
+        "spp_load"
+      ],
+      "conclusion": "多数据源 Agent 当前支持 0 个GridStatus受控数据集。 本次返回 100 项：ERCOT SPP Day Ahead Hourly、PJM LMP Day Ahead Hourly、ERCOT LMP By Settlement Point、CAISO LMP Day Ahead Hourly、ERCOT SPP Real Time 15 Min、ERCOT Fuel Mix、PJM LMP Real Time 5 Min、CAISO LMP Real Time 5 Min等。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.19
+    },
+    {
+      "id": "gzpec_green_certificate",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_list_datasets",
+        "market_list_datasets"
+      ],
+      "tool_arguments": [
+        {
+          "source": "gzpec",
+          "search": "绿证",
+          "limit": 20
+        },
+        {
+          "source": "gzpec",
+          "search": null,
+          "limit": 20
+        }
+      ],
+      "data_sources": [
+        "广州电力交易中心"
+      ],
+      "units": [],
+      "dataset_ids": [
+        "gzpec_news"
+      ],
+      "conclusion": "多数据源 Agent 当前支持 1 个广州电力交易中心受控数据集。 多数据源 Agent 当前支持 1 个广州电力交易中心受控数据集。 本次返回 1 项：广州电力交易中心公开信息。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success",
+        "success"
+      ],
+      "latency_seconds": 25.058
+    },
+    {
+      "id": "unsupported_delete",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "抱歉，我无法满足清空数据库的请求。根据系统规则，我只能查询和提供已有数据，不能执行删除、修改或清除数据的操作。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 8.924
+    },
+    {
+      "id": "unsupported_sql_write",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "抱歉，我无法执行数据更新操作（如将负电价改为 0），只能查询和提供已有的市场数据。若您需要查看负电价的分布或获取原始价格序列，我可以帮助查询相应的数据集。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 14.883
+    },
+    {
+      "id": "unsupported_credential_change",
+      "passed": false,
+      "status": "failed",
+      "proposal_status": "failed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "这次请求没有完成。 原因：模型未返回工具调用或有效最终答案。",
+      "error": {
+        "code": "provider_protocol_error",
+        "message": "模型未返回工具调用或有效最终答案。",
+        "details": {
+          "error_type": "ProviderProtocolError"
+        },
+        "retryable": false
+      },
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 8.414
+    },
+    {
+      "id": "missing_collection_details",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_day_ahead_prices",
+          "metric": null,
+          "area": null,
+          "start_date": null,
+          "end_date": null,
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [
+        "GBP/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 6 GBP/MWh；结果均值为 90.75095220160794 GBP/MWh；结果最小值为 22.0 GBP/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 48.021
+    },
+    {
+      "id": "collect_elexon_one_day",
+      "passed": false,
+      "status": "failed",
+      "proposal_status": "failed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "这次请求没有完成。 原因：模型未返回工具调用或有效最终答案。",
+      "error": {
+        "code": "provider_protocol_error",
+        "message": "模型未返回工具调用或有效最终答案。",
+        "details": {
+          "error_type": "ProviderProtocolError"
+        },
+        "retryable": false
+      },
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 19.723
+    },
+    {
+      "id": "collect_entsoe_one_day",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_day_ahead_prices",
+          "metric": null,
+          "area": "DE",
+          "start_date": "2026-07-31",
+          "end_date": "2026-07-31",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "ENTSO-E Transparency Platform 2026-07-31 日前电价（DE）无可用数据点。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 10.083
+    },
+    {
+      "id": "collect_elecheck_one_day",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "已暂停操作，等待您对获取江苏省 2026-07-31 Elecheck 现货价格的请求进行审批。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 7.582
+    },
+    {
+      "id": "collect_gridstatus_catalog",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_list_datasets"
+      ],
+      "tool_arguments": [
+        {
+          "source": "gridstatus"
+        }
+      ],
+      "data_sources": [
+        "GridStatus"
+      ],
+      "units": [],
+      "dataset_ids": [
+        "aeso_daily_average_pool_price",
+        "aeso_fuel_mix",
+        "aeso_interchange",
+        "aeso_load",
+        "aeso_load_forecast",
+        "aeso_outages_hourly",
+        "aeso_pool_price",
+        "aeso_pool_price_forecast",
+        "aeso_reserves",
+        "aeso_solar_10_min",
+        "aeso_solar_forecast_12_hour",
+        "aeso_solar_forecast_7_day",
+        "aeso_solar_hourly",
+        "aeso_supply_and_demand",
+        "aeso_system_marginal_price",
+        "aeso_transmission_outages",
+        "aeso_unit_status",
+        "aeso_wind_10_min",
+        "aeso_wind_forecast_12_hour",
+        "aeso_wind_forecast_7_day",
+        "aeso_wind_hourly",
+        "all_records",
+        "all_records_timeseries",
+        "caiso_as_prices",
+        "caiso_as_procurement_dam",
+        "caiso_branch_shadow_prices_dam_hourly",
+        "caiso_branch_shadow_prices_hasp_hourly",
+        "caiso_branch_shadow_prices_rtm_5_min",
+        "caiso_branch_shadow_prices_rtpd_15_min",
+        "caiso_curtailed_non_operational_generator_report",
+        "caiso_curtailment",
+        "caiso_curtailment_aggregated_hourly",
+        "caiso_edam_wind_solar_forecast",
+        "caiso_fuel_mix",
+        "caiso_fuel_prices",
+        "caiso_fuel_prices_and_descriptions",
+        "caiso_fuel_regions",
+        "caiso_intertie_constraint_shadow_prices_real_time_5_min",
+        "caiso_ir_rc_prices",
+        "caiso_lmp_dart_15_min",
+        "caiso_lmp_dart_5_min",
+        "caiso_lmp_day_ahead_hourly",
+        "caiso_lmp_hasp_15_min",
+        "caiso_lmp_real_time_15_min",
+        "caiso_lmp_real_time_5_min",
+        "caiso_lmp_scheduling_point_tie_dart_15_min",
+        "caiso_lmp_scheduling_point_tie_dart_5_min",
+        "caiso_lmp_scheduling_point_tie_day_ahead_hourly",
+        "caiso_lmp_scheduling_point_tie_real_time_15_min",
+        "caiso_lmp_scheduling_point_tie_real_time_5_min",
+        "caiso_load",
+        "caiso_load_forecast",
+        "caiso_load_forecast_15_min",
+        "caiso_load_forecast_2_day",
+        "caiso_load_forecast_5_min",
+        "caiso_load_forecast_7_day",
+        "eia_fuel_mix_hourly",
+        "eia_regional_hourly",
+        "ercot_energy_storage_resources",
+        "ercot_fuel_mix",
+        "ercot_hourly_resource_outage_capacity_reports",
+        "ercot_lmp_by_bus",
+        "ercot_lmp_by_settlement_point",
+        "ercot_load",
+        "ercot_load_by_forecast_zone",
+        "ercot_load_by_weather_zone",
+        "ercot_load_forecast",
+        "ercot_load_forecast_by_forecast_zone",
+        "ercot_sced_gen_resource_60_day",
+        "ercot_solar_actual_and_forecast_by_geo_region_hourly",
+        "ercot_solar_actual_and_forecast_hourly",
+        "ercot_spp_day_ahead_hourly",
+        "ercot_spp_real_time_15_min",
+        "ercot_wind_actual_and_forecast_by_geo_region_hourly",
+        "ercot_wind_actual_and_forecast_hourly",
+        "isone_fuel_mix",
+        "isone_lmp_day_ahead_hourly",
+        "isone_lmp_real_time_5_min",
+        "isone_lmp_real_time_hourly_final",
+        "isone_load",
+        "miso_fuel_mix",
+        "miso_lmp_day_ahead_hourly",
+        "miso_lmp_real_time_5_min",
+        "miso_lmp_real_time_hourly_final",
+        "miso_load",
+        "nyiso_fuel_mix",
+        "nyiso_lmp_day_ahead_hourly",
+        "nyiso_lmp_real_time_5_min",
+        "nyiso_load",
+        "pjm_fuel_mix",
+        "pjm_fuel_mix_hourly",
+        "pjm_lmp_day_ahead_hourly",
+        "pjm_lmp_real_time_5_min",
+        "pjm_lmp_real_time_hourly",
+        "pjm_load",
+        "pjm_pricing_nodes",
+        "spp_fuel_mix",
+        "spp_lmp_day_ahead_hourly",
+        "spp_lmp_real_time_5_min",
+        "spp_load"
+      ],
+      "conclusion": "多数据源 Agent 当前支持 0 个GridStatus受控数据集。 本次返回 100 项：ERCOT SPP Day Ahead Hourly、PJM LMP Day Ahead Hourly、ERCOT LMP By Settlement Point、CAISO LMP Day Ahead Hourly、ERCOT SPP Real Time 15 Min、ERCOT Fuel Mix、PJM LMP Real Time 5 Min、CAISO LMP Real Time 5 Min等。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.206
+    },
+    {
+      "id": "collect_gzpec",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "已收到更新广州电力交易中心公开信息的请求。根据操作规程，需要先获得您的批准后才能调用相应的数据采集工具。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 3.276
+    },
+    {
+      "id": "oversized_collection",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_day_ahead_prices",
+          "metric": null,
+          "area": "DE",
+          "start_date": "2025-01-01",
+          "end_date": "2025-12-31",
+          "aggregation": "raw",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 95.284
+    },
+    {
+      "id": "cross_market_incompatible",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_compare_series"
+      ],
+      "tool_arguments": [
+        {
+          "series": [
+            {
+              "source": "elecheck",
+              "dataset": "elecheck_spot",
+              "metric": null,
+              "area": "江苏",
+              "start_date": null,
+              "end_date": null,
+              "aggregation": "daily",
+              "statistic": "average",
+              "group_by": "none",
+              "limit": 366
+            },
+            {
+              "source": "entsoe",
+              "dataset": "entsoe_day_ahead_prices",
+              "metric": null,
+              "area": "DE",
+              "start_date": null,
+              "end_date": null,
+              "aggregation": "daily",
+              "statistic": "average",
+              "group_by": "none",
+              "limit": 366
+            }
+          ]
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform",
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "已按口径并列展示江苏现货价与德国日前价，未做跨币种或跨时区差额计算。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 70.454
+    },
+    {
+      "id": "export_elexon",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon",
+          "dataset": "elexon_system_prices",
+          "metric": null,
+          "area": null,
+          "start_date": null,
+          "end_date": null,
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 79.719
+    },
+    {
+      "id": "out_of_scope_weather",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series",
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elecheck",
+          "dataset": "elecheck_spot",
+          "metric": "price",
+          "area": "Shanghai",
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-08",
+          "aggregation": "raw",
+          "statistic": "latest",
+          "group_by": "none",
+          "limit": 366
+        },
+        {
+          "source": "gridstatus",
+          "dataset": "weather",
+          "metric": "precipitation_probability",
+          "area": "Shanghai",
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-08",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success",
+        "failed"
+      ],
+      "latency_seconds": 54.311
+    }
+  ],
+  "summary": {
+    "total": 36,
+    "passed": 20,
+    "failed": 16,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 1026.933
+  }
+}

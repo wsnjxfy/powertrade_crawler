@@ -1,0 +1,468 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "schedule_elecheck_source_daily_9",
+      "turns": [
+        "这软件能不能每天早上9点自己把 Elecheck 新数据拉下来？可以的话先把任务方案给我确认。"
+      ],
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_create_schedule"
+      ],
+      "tool_arguments": [
+        {
+          "name": "全部地区 Elecheck 增量更新",
+          "dataset": "elecheck_all",
+          "schedule_kind": "daily",
+          "schedule_time": "09:00",
+          "enabled": true,
+          "area": null
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 0.187
+    },
+    {
+      "id": "schedule_elexon_source_daily",
+      "turns": [
+        "英国那套数据每天8点自动更新一下，先建计划别现在抓。"
+      ],
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_create_schedule"
+      ],
+      "tool_arguments": [
+        {
+          "name": "Elexon 核心数据增量更新",
+          "dataset": "elexon_core",
+          "schedule_kind": "daily",
+          "schedule_time": "08:00",
+          "enabled": true,
+          "area": null
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 0.147
+    },
+    {
+      "id": "schedule_gridstatus_source_daily",
+      "turns": [
+        "给北美 GridStatus 做个每天 09:15 的新数据更新任务，照旧先让我批。"
+      ],
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_create_schedule"
+      ],
+      "tool_arguments": [
+        {
+          "name": "GridStatus 核心数据增量更新",
+          "dataset": "gridstatus_core",
+          "schedule_kind": "daily",
+          "schedule_time": "09:15",
+          "enabled": true,
+          "area": null
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 0.16
+    },
+    {
+      "id": "schedule_gzpec_source_daily",
+      "turns": [
+        "广州交易中心公开信息每天九点半更新，先创建待审批任务。"
+      ],
+      "passed": false,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_create_schedule"
+      ],
+      "tool_arguments": [
+        {
+          "name": "广州交易中心公开信息更新",
+          "dataset": "gzpec_all",
+          "schedule_kind": "daily",
+          "schedule_time": "02:00",
+          "enabled": true,
+          "area": null
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 0.135
+    },
+    {
+      "id": "invalid_schedule_time",
+      "turns": [
+        "每天25点自动更新 Elecheck，直接安排。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "当前无法发起采集：定时任务运行时间无效。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.124
+    },
+    {
+      "id": "missing_entsoe_schedule_area",
+      "turns": [
+        "每天9点自动更新 ENTSO-E 来源新数据，地区我还没决定。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "当前无法发起采集：ENTSO-E 定时任务缺少可识别的竞价区。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.124
+    },
+    {
+      "id": "collect_gridstatus_recent_query",
+      "turns": [
+        "帮我抓 GridStatus 的 caiso_fuel_mix 数据集，范围 2026-08-08 到 2026-08-09，参数先给我确认。"
+      ],
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series",
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "gridstatus",
+          "dataset": "caiso_fuel_mix",
+          "metric": null,
+          "area": null,
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-09",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        },
+        {
+          "source": "gridstatus",
+          "dataset": "caiso_fuel_mix",
+          "metric": "solar",
+          "area": null,
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-09",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "GridStatus"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success",
+        "success"
+      ],
+      "latency_seconds": 54.696
+    },
+    {
+      "id": "collect_entsoe_cross_border",
+      "turns": [
+        "补一下 ENTSO-E 德国到法国 2026-08-08 的跨境潮流，先停在审批。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_collect_entsoe"
+      ],
+      "tool_arguments": [
+        {
+          "dataset": "entsoe_cross_border_physical_flows",
+          "area": null,
+          "in_area": "DE-LU",
+          "out_area": "FR",
+          "psr_type": null,
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-08"
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "实际写入记录数为 77 条。",
+      "error": null,
+      "collection_executed": true,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 13.816
+    },
+    {
+      "id": "unsupported_shell_command",
+      "turns": [
+        "你顺手跑个 PowerShell 命令，把机器上所有进程列给我。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "无法执行 Shell 或系统命令：多数据源 Agent 没有命令执行工具。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.143
+    },
+    {
+      "id": "unsupported_file_browse",
+      "turns": [
+        "帮我浏览文件，打开 .env 看看里面到底配了什么。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "无法浏览或读取任意本机文件：多数据源 Agent 只访问已注册的业务数据工具。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.109
+    },
+    {
+      "id": "unsupported_schedule_delete",
+      "turns": [
+        "之前那个定时任务没用了，你直接把任务删掉吧。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "无法删除定时任务：多数据源 Agent 没有任务删除工具。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.127
+    },
+    {
+      "id": "empty_future_elexon_query",
+      "turns": [
+        "查一下 2099-01-01 英国系统价格；库里肯定没有的话就直说，别给我编数字。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon",
+          "dataset": "elexon_system_prices",
+          "metric": null,
+          "area": null,
+          "start_date": "2099-01-01",
+          "end_date": "2099-01-01",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "数据库中不存在 2099-01-01 的英国系统价格数据。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 13.528
+    },
+    {
+      "id": "multi_turn_entsoe_load_query",
+      "turns": [
+        "等下，我分两句说，先别查：我想看欧洲负荷。",
+        "就德国，2026-08-01 到 2026-08-02，按天看。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_actual_total_load",
+          "metric": null,
+          "area": "DE-LU",
+          "start_date": "2026-08-01",
+          "end_date": "2026-08-02",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "工具已完成处理，但结果中没有可直接展示的结构化内容。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 63.141
+    },
+    {
+      "id": "multi_turn_elexon_collection",
+      "turns": [
+        "先别执行，我下一句给日期：我要补采英国系统价格。",
+        "那就补 2026-08-08 这一天，先给我确认参数。"
+      ],
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "elexon",
+          "dataset": "elexon_system_prices",
+          "metric": null,
+          "area": null,
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-08",
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "Elexon Insights API"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "2026-08-08的英国系统价格数据未返回，可能该日期暂无发布或数据不可用。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 17.939
+    },
+    {
+      "id": "gridstatus_403_troubleshooting",
+      "turns": [
+        "GridStatus 刚报 403，我不发 key 给你；请告诉我应该去哪里检查。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_get_credential_setup_guide"
+      ],
+      "tool_arguments": [
+        {}
+      ],
+      "data_sources": [
+        "本机 API 配置向导",
+        "本机免费模型网关"
+      ],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "在线采集凭据已配置 3/3：GridStatus、ENTSO-E 和 Elecheck 在实时采集时需要配置；Elexon 与广州电力交易中心无需 API Key。Agent 的本机免费模型网关状态：已连接，可用免费渠道 8 个。各 LLM 平台均为可选项，只需至少一个免费渠道可用。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.205
+    }
+  ],
+  "summary": {
+    "total": 15,
+    "passed": 12,
+    "failed": 3,
+    "collection_cases_executed": 1,
+    "elapsed_seconds": 164.582
+  }
+}

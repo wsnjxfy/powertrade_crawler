@@ -1,0 +1,44 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "schedule_gzpec_source_daily",
+      "turns": [
+        "广州交易中心公开信息每天九点半更新，先创建待审批任务。"
+      ],
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_create_schedule"
+      ],
+      "tool_arguments": [
+        {
+          "name": "广州交易中心公开信息更新",
+          "dataset": "gzpec_all",
+          "schedule_kind": "daily",
+          "schedule_time": "09:30",
+          "enabled": true,
+          "area": null
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 0.172
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.172
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 1,
+    "action_cases_executed": 0,
+    "elapsed_seconds": 0.214
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "请发起创建一个禁用状态、每天 02:20 运行、采集江苏昨日现货数据的定时任务，名称为 Agent评测-江苏昨日现货，并停下来等待我审批。",
+      "turns": [
+        "请发起创建一个禁用状态、每天 02:20 运行、采集江苏昨日现货数据的定时任务，名称为 Agent评测-江苏昨日现货，并停下来等待我审批。"
+      ],
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_create_schedule"
+      ],
+      "expected_tool": "elecheck_create_schedule",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "conclusion": "",
+      "latency_seconds": 0.214,
+      "usage": {},
+      "error_code": null
+    }
+  ]
+}

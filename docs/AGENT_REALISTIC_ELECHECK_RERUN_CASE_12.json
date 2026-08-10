@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 1,
+    "action_cases_executed": 0,
+    "elapsed_seconds": 0.222
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "请立即发起更新增量机制电价最新快照，并停下来等待我审批。",
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_update_mechanism"
+      ],
+      "expected_tool": "elecheck_update_mechanism",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "conclusion": "",
+      "latency_seconds": 0.222,
+      "usage": {},
+      "error_code": null
+    }
+  ]
+}

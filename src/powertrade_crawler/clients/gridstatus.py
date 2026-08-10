@@ -12,6 +12,12 @@ from powertrade_crawler.gridstatus_rate_limit import (
     GRIDSTATUS_SAFE_INTERVAL_SECONDS,
     gridstatus_request_limiter,
 )
+from powertrade_crawler.network_errors import (
+    NetworkFailure,
+    failure_from_exception,
+    failure_from_response,
+    retry_after_seconds,
+)
 
 
 class GridStatusClient:
@@ -72,24 +78,43 @@ class GridStatusClient:
         raise ValueError(f"Unsupported GridStatus request config: {request_config}")
 
     def get(self, path: str, params: dict[str, Any]) -> httpx.Response:
-        last_error: Exception | None = None
         for attempt in range(self.retry_times + 1):
             self.wait_for_rate_limit()
             try:
                 response = self.client.get(path, params=params)
-                if response.status_code == 429:
-                    retry_after = float(response.headers.get("Retry-After", "5"))
-                    logger.warning("GridStatus rate limited; sleeping {} seconds", retry_after)
-                    sleep(retry_after)
-                    continue
-                response.raise_for_status()
+                if response.is_error:
+                    failure = failure_from_response(
+                        "GridStatus",
+                        response,
+                        attempts=attempt + 1,
+                    )
+                    if failure.retryable and attempt < self.retry_times:
+                        delay = retry_after_seconds(response, default=1 + attempt)
+                        logger.warning(
+                            "GridStatus GET {} failed on attempt {}: {}",
+                            path,
+                            attempt + 1,
+                            failure.kind.value,
+                        )
+                        sleep(delay)
+                        continue
+                    raise failure
                 return response
-            except Exception as exc:
-                last_error = exc
-                logger.warning("GridStatus GET {} failed on attempt {}: {}", path, attempt + 1, exc)
-                if attempt < self.retry_times:
+            except NetworkFailure:
+                raise
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                failure = failure_from_exception("GridStatus", exc, attempts=attempt + 1)
+                logger.warning(
+                    "GridStatus GET {} failed on attempt {}: {}",
+                    path,
+                    attempt + 1,
+                    failure.kind.value,
+                )
+                if failure.retryable and attempt < self.retry_times:
                     sleep(1 + attempt)
-        raise RuntimeError(f"GridStatus GET {path} failed after retries") from last_error
+                    continue
+                raise failure from exc
+        raise AssertionError("unreachable")
 
     def wait_for_rate_limit(self) -> None:
         gridstatus_request_limiter.wait(

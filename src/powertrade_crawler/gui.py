@@ -4,9 +4,11 @@ import json
 import sqlite3
 import threading
 import webbrowser
+from contextlib import AbstractContextManager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from time import sleep
+from typing import TYPE_CHECKING
 from urllib.parse import urlencode
 from tkinter import (
     BOTH,
@@ -61,6 +63,7 @@ from powertrade_crawler.spiders.elecheck import (
 )
 from powertrade_crawler.models import ElexonRecord, EntsoeRecord, MarketRecord
 from powertrade_crawler.registry import get_spider
+from powertrade_crawler.sqlite_utils import sqlite_row_connection
 from powertrade_crawler.spiders.entsoe import ENTSOE_BIDDING_ZONES, load_entsoe_request_configs
 from powertrade_crawler.spiders.elexon import load_elexon_request_configs
 from powertrade_crawler.storage import (
@@ -73,6 +76,9 @@ from powertrade_crawler.storage import (
     upsert_gridstatus_dataset_metadata_records,
     upsert_records,
 )
+
+if TYPE_CHECKING:
+    from powertrade_crawler.app_shell import PowertradeAppShell
 
 
 GRIDSTATUS_QUERY_BASE_URL = "https://api.gridstatus.io/v1/datasets/{dataset_id}/query"
@@ -239,10 +245,8 @@ class GridStatusMetadataRepository:
     def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or resolve_sqlite_path()
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+    def connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return sqlite_row_connection(self.db_path)
 
     def filter_values(self, column: str) -> list[str]:
         if column not in {"source", "data_frequency", "status"}:
@@ -386,42 +390,64 @@ class GridStatusMetadataApp:
 
     def build_layout(self) -> None:
         toolbar = ttk.Frame(self.root, style="Toolbar.TFrame")
-        toolbar.pack(fill=X)
+        toolbar.pack(fill=X, padx=8, pady=(8, 0))
 
         ttk.Label(toolbar, text="关键词").pack(side=LEFT, padx=(0, 6))
-        keyword_entry = ttk.Entry(toolbar, textvariable=self.keyword_var, width=34)
+        keyword_entry = ttk.Entry(toolbar, textvariable=self.keyword_var, width=24)
         keyword_entry.pack(side=LEFT, padx=(0, 12))
         keyword_entry.bind("<Return>", lambda _event: self.refresh_results())
 
         ttk.Label(toolbar, text="来源").pack(side=LEFT, padx=(0, 6))
-        self.source_combo = ttk.Combobox(toolbar, textvariable=self.source_var, width=12, state="readonly")
+        self.source_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.source_var,
+            width=10,
+            state="readonly",
+        )
         self.source_combo.pack(side=LEFT, padx=(0, 12))
 
         ttk.Label(toolbar, text="频率").pack(side=LEFT, padx=(0, 6))
         self.frequency_combo = ttk.Combobox(
             toolbar,
             textvariable=self.frequency_var,
-            width=15,
+            width=12,
             state="readonly",
         )
         self.frequency_combo.pack(side=LEFT, padx=(0, 12))
 
         ttk.Label(toolbar, text="状态").pack(side=LEFT, padx=(0, 6))
-        self.status_combo = ttk.Combobox(toolbar, textvariable=self.status_var, width=12, state="readonly")
+        self.status_combo = ttk.Combobox(
+            toolbar,
+            textvariable=self.status_var,
+            width=10,
+            state="readonly",
+        )
         self.status_combo.pack(side=LEFT, padx=(0, 12))
 
         ttk.Button(toolbar, text="搜索", command=self.refresh_results).pack(side=LEFT)
         ttk.Button(toolbar, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+
+        catalog_actions = ttk.Frame(self.root, padding=(8, 6, 8, 4))
+        catalog_actions.pack(fill=X)
         self.catalog_refresh_button = ttk.Button(
-            toolbar,
+            catalog_actions,
             text="更新数据集目录",
             command=self.refresh_dataset_catalog,
         )
-        self.catalog_refresh_button.pack(side=LEFT, padx=(8, 0))
-        ttk.Button(toolbar, text="更换 API key", command=self.change_gridstatus_api_key).pack(
+        self.catalog_refresh_button.pack(side=LEFT)
+        ttk.Button(
+            catalog_actions,
+            text="更换 API key",
+            command=self.change_gridstatus_api_key,
+        ).pack(
             side=LEFT,
             padx=(8, 0),
         )
+        ttk.Label(
+            catalog_actions,
+            text="选择数据集后可在右侧查看字段、API 地址并下载数据。",
+            style="Muted.TLabel",
+        ).pack(side=RIGHT)
 
         status_bar = ttk.Frame(self.root)
         status_bar.pack(fill=X, side="bottom")
@@ -448,10 +474,17 @@ class GridStatusMetadataApp:
         self.tree.column("status", width=64, minwidth=56, anchor="center", stretch=False)
         self.tree.column("time_range", width=360, minwidth=260)
 
+        left.columnconfigure(0, weight=1)
+        left.rowconfigure(0, weight=1)
         tree_scroll = ttk.Scrollbar(left, orient=VERTICAL, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=tree_scroll.set)
-        self.tree.pack(side=LEFT, fill=BOTH, expand=True)
-        tree_scroll.pack(side=RIGHT, fill=Y)
+        tree_scroll_x = ttk.Scrollbar(left, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(
+            yscrollcommand=tree_scroll.set,
+            xscrollcommand=tree_scroll_x.set,
+        )
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        tree_scroll.grid(row=0, column=1, sticky="ns")
+        tree_scroll_x.grid(row=1, column=0, sticky="ew")
         self.tree.bind("<<TreeviewSelect>>", self.on_select_dataset)
 
         self.build_detail_panel(right)
@@ -466,14 +499,35 @@ class GridStatusMetadataApp:
 
         action_bar = ttk.Frame(parent)
         action_bar.pack(fill=X, pady=(0, 8))
-        ttk.Button(action_bar, text="复制 dataset_id", command=self.copy_dataset_id).pack(side=LEFT)
-        ttk.Button(action_bar, text="复制 API 地址", command=self.copy_api_url).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(action_bar, text="下载 CSV", command=self.download_csv).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(action_bar, text="更换 API key", command=self.change_gridstatus_api_key).pack(
-            side=LEFT,
+        ttk.Button(action_bar, text="复制 ID", command=self.copy_dataset_id).grid(
+            row=0,
+            column=0,
+            sticky="w",
+        )
+        ttk.Button(action_bar, text="复制 API 地址", command=self.copy_api_url).grid(
+            row=0,
+            column=1,
+            sticky="w",
             padx=(8, 0),
         )
-        ttk.Button(action_bar, text="打开来源", command=self.open_source_url).pack(side=LEFT, padx=(8, 0))
+        ttk.Button(
+            action_bar,
+            text="下载 CSV",
+            style="Primary.TButton",
+            command=self.download_csv,
+        ).grid(row=0, column=2, sticky="w", padx=(8, 0))
+        ttk.Button(
+            action_bar,
+            text="更换 API key",
+            command=self.change_gridstatus_api_key,
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        ttk.Button(action_bar, text="打开来源", command=self.open_source_url).grid(
+            row=1,
+            column=2,
+            sticky="w",
+            padx=(8, 0),
+            pady=(6, 0),
+        )
 
         notebook = ttk.Notebook(parent)
         notebook.pack(fill=BOTH, expand=True)
@@ -1254,10 +1308,8 @@ class ElecheckDataRepository:
     def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or resolve_sqlite_path()
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+    def connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return sqlite_row_connection(self.db_path)
 
     def table_exists(self, table_name: str) -> bool:
         with self.connect() as connection:
@@ -1606,10 +1658,8 @@ class EntsoeDataRepository:
     def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or resolve_sqlite_path()
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+    def connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return sqlite_row_connection(self.db_path)
 
     def table_exists(self, table_name: str) -> bool:
         with self.connect() as connection:
@@ -1676,10 +1726,10 @@ class EntsoeDataRepository:
             where.append("out_domain = ?")
             params.append(out_domain)
         if start_date:
-            where.append("COALESCE(interval_start_utc, '') >= ?")
+            where.append("interval_start_utc >= ?")
             params.append(f"{start_date}T00:00Z")
         if end_date:
-            where.append("COALESCE(interval_start_utc, '') < ?")
+            where.append("interval_start_utc < ?")
             params.append(f"{end_date}T00:00Z")
 
         where_sql = f"WHERE {' AND '.join(where)}" if where else ""
@@ -1692,7 +1742,7 @@ class EntsoeDataRepository:
                        business_type, raw_json, collected_at
                 FROM entsoe_records
                 {where_sql}
-                ORDER BY COALESCE(interval_start_utc, '') DESC, dataset, area
+                ORDER BY interval_start_utc DESC, dataset, area
                 LIMIT ?
                 """,
                 [*params, limit],
@@ -2192,9 +2242,15 @@ class DatePickerDialog:
 class ElecheckDataApp:
     all_areas_label = "全部"
 
-    def __init__(self, root, repository: ElecheckDataRepository) -> None:
+    def __init__(
+        self,
+        root,
+        repository: ElecheckDataRepository,
+        on_navigate=None,
+    ) -> None:
         self.root = root
         self.repository = repository
+        self.on_navigate = on_navigate
         self.summary_var = StringVar(value="Ready")
 
         self.clear_area_var = StringVar()
@@ -2270,7 +2326,7 @@ class ElecheckDataApp:
 
         agent_frame = ttk.Frame(notebook)
         notebook.add(agent_frame, text="智能 Agent")
-        self.agent_app = ElecheckAgentApp(agent_frame)
+        self.agent_app = ElecheckAgentApp(agent_frame, on_navigate=self.on_navigate)
 
         dashboard_frame = ttk.Frame(notebook)
         notebook.add(dashboard_frame, text="现货价格分析")
@@ -2360,7 +2416,7 @@ class ElecheckDataApp:
             side=LEFT,
             padx=(0, 8),
         )
-        ttk.Label(crawl_bar, text="authorization").pack(side=LEFT, padx=(0, 6))
+        ttk.Label(crawl_bar, text="采集凭据（可留空）").pack(side=LEFT, padx=(0, 6))
         ttk.Entry(crawl_bar, textvariable=self.clear_authorization_var, width=16, show="*").pack(
             side=LEFT,
             padx=(0, 8),
@@ -2515,7 +2571,7 @@ class ElecheckDataApp:
 
         collect_toolbar = ttk.Frame(frame, style="Toolbar.TFrame")
         collect_toolbar.pack(fill=X)
-        ttk.Label(collect_toolbar, text="authorization").pack(side=LEFT, padx=(0, 4))
+        ttk.Label(collect_toolbar, text="采集凭据（可留空）").pack(side=LEFT, padx=(0, 4))
         ttk.Entry(
             collect_toolbar,
             textvariable=self.purchasing_authorization_var,
@@ -2999,6 +3055,8 @@ class ElecheckDataApp:
         targets: list[dict[str, str]],
         authorization: str,
     ) -> None:
+        record_count = 0
+        written = 0
         try:
             pause_event = self.clear_crawl_pause_event
             stop_event = self.clear_crawl_stop_event
@@ -3022,8 +3080,6 @@ class ElecheckDataApp:
 
             total_ranges = sum(len(request_ranges) for _target, _spider, request_ranges in area_jobs)
             completed_ranges = 0
-            record_count = 0
-            written = 0
             stopped_early = False
 
             for area_index, (target, spider, request_ranges) in enumerate(area_jobs, start=1):
@@ -3115,11 +3171,18 @@ class ElecheckDataApp:
                 )
                 return
 
-        except ElecheckUnauthorizedError:
-            self.root.after(0, self.on_clear_price_unauthorized)
+        except ElecheckUnauthorizedError as exc:
+            message = str(exc)
+            self.root.after(
+                0,
+                lambda: self.on_clear_price_unauthorized(record_count, written, message),
+            )
         except Exception as exc:
             message = str(exc)
-            self.root.after(0, lambda message=message: self.on_clear_price_crawl_error(message))
+            self.root.after(
+                0,
+                lambda: self.on_clear_price_crawl_error(message, record_count, written),
+            )
         else:
             self.root.after(
                 0,
@@ -3132,18 +3195,35 @@ class ElecheckDataApp:
                 ),
             )
 
-    def on_clear_price_unauthorized(self) -> None:
+    def on_clear_price_unauthorized(
+        self,
+        record_count: int = 0,
+        written: int = 0,
+        message: str | None = None,
+    ) -> None:
         self.finish_clear_price_crawl()
-        messagebox.showerror(
-            "授权已过期",
-            "授权已过期，请联系管理员更新授权文件。",
+        detail = message or (
+            "Elecheck 凭据无效或已过期。请在 API 配置向导中重新配置并验证凭据。"
         )
-        self.summary_var.set("现货价格采集失败：授权已过期，请联系管理员更新授权文件。")
+        self.on_clear_price_crawl_error(detail, record_count, written, finish=False)
 
-    def on_clear_price_crawl_error(self, message: str) -> None:
-        self.finish_clear_price_crawl()
-        messagebox.showerror("现货价格采集失败", message)
-        self.summary_var.set("现货价格采集失败。")
+    def on_clear_price_crawl_error(
+        self,
+        message: str,
+        record_count: int = 0,
+        written: int = 0,
+        *,
+        finish: bool = True,
+    ) -> None:
+        if finish:
+            self.finish_clear_price_crawl()
+        data_note = (
+            f"失败前已抓取 {record_count} 条、写入/更新 {written} 条；请刷新页面核对已保存数据。"
+            if written
+            else "本次没有修改业务数据。"
+        )
+        messagebox.showerror("现货价格采集失败", f"{message}\n\n{data_note}")
+        self.summary_var.set(f"现货价格采集失败：{data_note}")
 
     def on_clear_price_crawl_success(
         self,
@@ -3156,6 +3236,13 @@ class ElecheckDataApp:
         self.refresh_clear_price()
         if self.clear_price_dashboard is not None:
             self.clear_price_dashboard.refresh_after_crawl(select_latest=True)
+        if record_count == 0:
+            self.summary_var.set("现货价格采集请求已完成：所选范围无新数据，数据库未修改。")
+            messagebox.showinfo(
+                "无新数据",
+                "所选地区和日期范围没有返回记录。请求执行成功，数据库未修改。",
+            )
+            return
         status = "已结束并保存" if stopped_early else "采集完成"
         self.summary_var.set(f"现货价格{status}：抓取 {record_count} 条，写入/更新 {written} 条。")
         messagebox.showinfo(
@@ -3346,6 +3433,8 @@ class ElecheckDataApp:
 
     def purchasing_collect_all_worker(self, authorization: str) -> None:
         client = None
+        record_count = 0
+        written = 0
         try:
             resolved_authorization = resolve_elecheck_authorization(authorization)
             if resolved_authorization:
@@ -3356,9 +3445,6 @@ class ElecheckDataApp:
             spider = ElecheckPurchasingNationalRangeSpider(client=client)
             months = list(spider.iter_months(spider.start_month, spider.end_month))
             total_months = len(months)
-            record_count = 0
-            written = 0
-
             for month_index, data_month in enumerate(months, start=1):
                 self.root.after(
                     0,
@@ -3396,11 +3482,18 @@ class ElecheckDataApp:
                         percent=(month_index / total_months * 100) if total_months else 100,
                     ),
                 )
-        except ElecheckUnauthorizedError:
-            self.root.after(0, self.on_purchasing_collect_unauthorized)
+        except ElecheckUnauthorizedError as exc:
+            message = str(exc)
+            self.root.after(
+                0,
+                lambda: self.on_purchasing_collect_error(message, record_count, written),
+            )
         except Exception as exc:
             message = str(exc)
-            self.root.after(0, lambda message=message: self.on_purchasing_collect_error(message))
+            self.root.after(
+                0,
+                lambda: self.on_purchasing_collect_error(message, record_count, written),
+            )
         else:
             self.root.after(
                 0,
@@ -3412,18 +3505,20 @@ class ElecheckDataApp:
             if client is not None:
                 client.close()
 
-    def on_purchasing_collect_unauthorized(self) -> None:
+    def on_purchasing_collect_error(
+        self,
+        message: str,
+        record_count: int = 0,
+        written: int = 0,
+    ) -> None:
         self.finish_purchasing_collect()
-        messagebox.showerror(
-            "授权已过期",
-            "授权已过期，请联系管理员更新授权文件。",
+        data_note = (
+            f"失败前已抓取 {record_count} 条、写入/更新 {written} 条；请刷新页面核对已保存数据。"
+            if written
+            else "本次没有修改业务数据。"
         )
-        self.summary_var.set("代理购电价格采集失败：授权已过期，请联系管理员更新授权文件。")
-
-    def on_purchasing_collect_error(self, message: str) -> None:
-        self.finish_purchasing_collect()
-        messagebox.showerror("代理购电价格采集失败", message)
-        self.summary_var.set("代理购电价格采集失败。")
+        messagebox.showerror("代理购电价格采集失败", f"{message}\n\n{data_note}")
+        self.summary_var.set(f"代理购电价格采集失败：{data_note}")
 
     def on_purchasing_collect_success(self, record_count: int, written: int) -> None:
         self.finish_purchasing_collect()
@@ -3431,6 +3526,13 @@ class ElecheckDataApp:
         self.refresh_purchasing()
         if self.purchasing_dashboard is not None:
             self.purchasing_dashboard.refresh_after_crawl(select_latest=True)
+        if record_count == 0:
+            self.summary_var.set("代理购电采集请求已完成：所选月份无新数据，数据库未修改。")
+            messagebox.showinfo(
+                "无新数据",
+                "所选月份没有返回代理购电记录。请求执行成功，数据库未修改。",
+            )
+            return
         self.summary_var.set(
             f"代理购电价格采集完成：抓取 {record_count} 条，写入/更新 {written} 条。"
         )
@@ -3561,8 +3663,9 @@ class ElecheckDataApp:
                 ),
             )
             written = upsert_elecheck_mechanism_electricity_price_records(records)
-        except ElecheckUnauthorizedError:
-            self.root.after(0, self.on_mechanism_collect_unauthorized)
+        except ElecheckUnauthorizedError as exc:
+            message = str(exc)
+            self.root.after(0, lambda: self.on_mechanism_collect_error(message))
         except Exception as exc:
             message = str(exc)
             self.root.after(0, lambda message=message: self.on_mechanism_collect_error(message))
@@ -3577,18 +3680,13 @@ class ElecheckDataApp:
             if client is not None:
                 client.close()
 
-    def on_mechanism_collect_unauthorized(self) -> None:
-        self.finish_mechanism_collect()
-        messagebox.showerror(
-            "授权已过期",
-            "授权已过期，请联系管理员更新授权文件。",
-        )
-        self.summary_var.set("增量机制电价采集失败：授权已过期，请联系管理员更新授权文件。")
-
     def on_mechanism_collect_error(self, message: str) -> None:
         self.finish_mechanism_collect()
-        messagebox.showerror("增量机制电价采集失败", message)
-        self.summary_var.set("增量机制电价采集失败。")
+        messagebox.showerror(
+            "增量机制电价采集失败",
+            f"{message}\n\n本次没有修改业务数据。",
+        )
+        self.summary_var.set("增量机制电价采集失败：本次没有修改业务数据。")
 
     def on_mechanism_collect_success(self, record_count: int, written: int) -> None:
         self.finish_mechanism_collect()
@@ -3596,6 +3694,13 @@ class ElecheckDataApp:
         self.refresh_mechanism()
         if self.mechanism_dashboard is not None:
             self.mechanism_dashboard.refresh_after_crawl()
+        if record_count == 0:
+            self.summary_var.set("增量机制电价采集请求已完成：当前无新数据，数据库未修改。")
+            messagebox.showinfo(
+                "无新数据",
+                "接口当前没有返回增量机制电价记录。请求执行成功，数据库未修改。",
+            )
+            return
         self.summary_var.set(
             f"增量机制电价采集完成：抓取 {record_count} 条，写入/更新 {written} 条。"
         )
@@ -3988,41 +4093,120 @@ class EntsoeDataApp:
         self.refresh_results()
 
     def build_layout(self) -> None:
-        outer = ttk.Frame(self.root)
-        outer.pack(fill=BOTH, expand=True, padx=8, pady=8)
-
-        request_frame = ttk.Frame(outer, style="Toolbar.TFrame")
-        request_frame.pack(fill=X)
-        ttk.Label(request_frame, text="Token").pack(side=LEFT, padx=(0, 6))
-        ttk.Label(request_frame, textvariable=self.token_status_var, width=12).pack(side=LEFT, padx=(0, 8))
-        ttk.Button(request_frame, text="刷新状态", command=self.refresh_token_status).pack(
-            side=LEFT,
-            padx=(0, 12),
+        outer = ttk.Frame(
+            self.root,
+            style="AppSurface.TFrame",
+            padding=(12, 10, 12, 8),
         )
-        ttk.Label(request_frame, textvariable=self.dataset_count_var, width=16).pack(side=LEFT, padx=(0, 12))
+        outer.pack(fill=BOTH, expand=True)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
 
-        ttk.Label(request_frame, text="数据集").pack(side=LEFT, padx=(0, 6))
+        command_card = ttk.Frame(outer, style="Card.TFrame", padding=(14, 10))
+        command_card.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        command_card.columnconfigure(1, weight=1)
+        ttk.Label(command_card, text="数据集", style="SectionTitle.TLabel").grid(
+            row=0,
+            column=0,
+            sticky=W,
+            padx=(0, 8),
+        )
         self.dataset_combo = ttk.Combobox(
-            request_frame,
+            command_card,
             textvariable=self.dataset_var,
             values=self.dataset_options,
-            width=76,
             state="readonly",
         )
-        self.dataset_combo.pack(side=LEFT, padx=(0, 8))
-        self.dataset_combo.bind("<<ComboboxSelected>>", lambda _event: self.update_dataset_description())
+        self.dataset_combo.grid(row=0, column=1, sticky="ew", padx=(0, 12))
+        self.dataset_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.update_dataset_description(),
+        )
+        ttk.Label(
+            command_card,
+            textvariable=self.dataset_count_var,
+            style="CardMuted.TLabel",
+        ).grid(row=0, column=2, sticky="e", padx=(0, 12))
+        ttk.Button(
+            command_card,
+            text="预览请求",
+            command=lambda: (self.content_notebook.select(0), self.preview_request()),
+        ).grid(
+            row=0,
+            column=3,
+            padx=(0, 7),
+        )
+        self.collect_button = ttk.Button(
+            command_card,
+            text="执行爬取",
+            style="Primary.TButton",
+            command=self.start_collect,
+        )
+        self.collect_button.grid(row=0, column=4)
 
-        form_frame = ttk.Frame(outer, style="Toolbar.TFrame")
-        form_frame.pack(fill=X)
-        ttk.Label(form_frame, textvariable=self.mode_hint_var, width=18).pack(side=LEFT, padx=(0, 8))
-        ttk.Label(form_frame, text="区域").pack(side=LEFT, padx=(0, 4))
+        token_row = ttk.Frame(command_card, style="CardBody.TFrame")
+        token_row.grid(row=1, column=0, columnspan=5, sticky="ew", pady=(8, 0))
+        ttk.Label(token_row, text="ENTSO-E 访问凭据", style="CardMuted.TLabel").pack(side=LEFT)
+        ttk.Label(token_row, textvariable=self.token_status_var, style="Success.TLabel").pack(
+            side=LEFT,
+            padx=(7, 8),
+        )
+        ttk.Button(
+            token_row,
+            text="刷新凭据状态",
+            style="Link.TButton",
+            command=self.refresh_token_status,
+        ).pack(side=LEFT)
+        ttk.Label(
+            token_row,
+            text="选择条件 → 预览请求 → 执行爬取",
+            style="CardMuted.TLabel",
+        ).pack(side=RIGHT)
+
+        workspace = ttk.PanedWindow(outer, orient="horizontal")
+        workspace.grid(row=1, column=0, sticky="nsew")
+        settings = ttk.LabelFrame(workspace, text="采集条件", width=380, padding=(12, 10))
+        settings.grid_propagate(False)
+        settings.columnconfigure(0, weight=1)
+        settings.rowconfigure(0, weight=1)
+        content = ttk.Frame(workspace, style="AppSurface.TFrame")
+        workspace.add(settings, weight=0)
+        workspace.add(content, weight=1)
+
+        condition_tabs = ttk.Notebook(settings)
+        condition_tabs.grid(row=0, column=0, sticky="nsew")
+        basic_tab = ttk.Frame(condition_tabs, padding=(10, 10))
+        advanced_tab = ttk.Frame(condition_tabs, padding=(10, 10))
+        condition_tabs.add(basic_tab, text="区域与时间")
+        condition_tabs.add(advanced_tab, text="高级参数")
+        basic_tab.columnconfigure(1, weight=1)
+
+        ttk.Label(basic_tab, text="区域模式", style="CardMuted.TLabel").grid(
+            row=0,
+            column=0,
+            sticky=W,
+            pady=(0, 6),
+        )
+        ttk.Label(basic_tab, textvariable=self.mode_hint_var, style="SectionTitle.TLabel").grid(
+            row=0,
+            column=1,
+            sticky=W,
+            pady=(0, 6),
+        )
+
+        def add_area_field(row: int, label: str, widget: ttk.Combobox) -> ttk.Label:
+            label_widget = ttk.Label(basic_tab, text=label)
+            label_widget.grid(row=row, column=0, sticky=W, pady=4, padx=(0, 8))
+            widget.grid(row=row, column=1, sticky="ew", pady=4)
+            return label_widget
+
         self.area_combo = ttk.Combobox(
-            form_frame,
+            basic_tab,
             textvariable=self.area_var,
             values=self.area_options,
-            width=24,
+            style="Compact.TCombobox",
         )
-        self.area_combo.pack(side=LEFT, padx=(0, 8))
+        self.area_field_label = add_area_field(1, "区域", self.area_combo)
         self.area_combo.bind(
             "<<ComboboxSelected>>",
             lambda _event: self.maybe_warn_gb_after_publication_stop(),
@@ -4031,14 +4215,14 @@ class EntsoeDataApp:
             "<FocusOut>",
             lambda _event: self.maybe_warn_gb_after_publication_stop(),
         )
-        ttk.Label(form_frame, text="来源区域").pack(side=LEFT, padx=(0, 4))
+
         self.in_area_combo = ttk.Combobox(
-            form_frame,
+            basic_tab,
             textvariable=self.in_area_var,
             values=self.area_options,
-            width=24,
+            style="Compact.TCombobox",
         )
-        self.in_area_combo.pack(side=LEFT, padx=(0, 8))
+        self.in_area_field_label = add_area_field(2, "来源区域", self.in_area_combo)
         self.in_area_combo.bind(
             "<<ComboboxSelected>>",
             lambda _event: self.on_border_area_changed(changed="in"),
@@ -4047,14 +4231,14 @@ class EntsoeDataApp:
             "<FocusOut>",
             lambda _event: self.on_border_area_changed(changed="in"),
         )
-        ttk.Label(form_frame, text="目标区域").pack(side=LEFT, padx=(0, 4))
+
         self.out_area_combo = ttk.Combobox(
-            form_frame,
+            basic_tab,
             textvariable=self.out_area_var,
             values=self.area_options,
-            width=24,
+            style="Compact.TCombobox",
         )
-        self.out_area_combo.pack(side=LEFT, padx=(0, 8))
+        self.out_area_field_label = add_area_field(3, "目标区域", self.out_area_combo)
         self.out_area_combo.bind(
             "<<ComboboxSelected>>",
             lambda _event: self.on_border_area_changed(changed="out"),
@@ -4063,71 +4247,162 @@ class EntsoeDataApp:
             "<FocusOut>",
             lambda _event: self.on_border_area_changed(changed="out"),
         )
-        ttk.Label(form_frame, textvariable=self.border_availability_var, foreground="#666666").pack(
-            side=LEFT,
-            padx=(0, 4),
+        self.border_status_label = ttk.Label(
+            basic_tab,
+            textvariable=self.border_availability_var,
+            style="CardMuted.TLabel",
+            wraplength=260,
+        )
+        self.border_status_label.grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky=W,
+            pady=(2, 10),
         )
 
-        date_frame = ttk.Frame(outer, style="Toolbar.TFrame")
-        date_frame.pack(fill=X)
-        ttk.Label(date_frame, text="开始日期").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.start_date_var, width=12, state="readonly").pack(
-            side=LEFT,
-            padx=(0, 3),
+        ttk.Separator(basic_tab).grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 9))
+        ttk.Label(basic_tab, text="查询时间", style="SectionTitle.TLabel").grid(
+            row=6,
+            column=0,
+            columnspan=2,
+            sticky=W,
+            pady=(0, 4),
         )
-        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.start_date_var)).pack(
-            side=LEFT,
-            padx=(0, 8),
-        )
-        ttk.Label(date_frame, text="结束日期").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.end_date_var, width=12, state="readonly").pack(
-            side=LEFT,
-            padx=(0, 3),
-        )
-        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.end_date_var)).pack(
-            side=LEFT,
-            padx=(0, 8),
-        )
-        ttk.Label(date_frame, text="psrType").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.psr_type_var, width=8).pack(side=LEFT, padx=(0, 8))
-        ttk.Label(date_frame, text="额外参数").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.extra_params_var, width=26).pack(side=LEFT, padx=(0, 8))
 
-        action_frame = ttk.Frame(outer, style="Toolbar.TFrame")
-        action_frame.pack(fill=X)
-        ttk.Button(action_frame, text="dry-run 预览", command=self.preview_request).pack(side=LEFT)
-        self.collect_button = ttk.Button(action_frame, text="执行爬取", command=self.start_collect)
-        self.collect_button.pack(side=LEFT, padx=(8, 0))
-        ttk.Button(action_frame, text="刷新数据", command=self.refresh_results).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(action_frame, text="导出数据", command=self.export_records).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(action_frame, text="清除数据", command=self.clear_records).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(action_frame, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+        def add_date_field(row: int, label: str, variable: StringVar) -> None:
+            ttk.Label(basic_tab, text=label).grid(row=row, column=0, sticky=W, pady=4, padx=(0, 8))
+            date_row = ttk.Frame(basic_tab)
+            date_row.grid(row=row, column=1, sticky="ew", pady=4)
+            date_row.columnconfigure(0, weight=1)
+            ttk.Entry(
+                date_row,
+                textvariable=variable,
+                state="readonly",
+                width=10,
+                style="Compact.TEntry",
+            ).grid(
+                row=0,
+                column=0,
+                sticky="ew",
+                padx=(0, 5),
+            )
+            ttk.Button(
+                date_row,
+                text="选择",
+                width=5,
+                style="Compact.TButton",
+                command=lambda: self.pick_date(variable),
+            ).grid(
+                row=0,
+                column=1,
+            )
 
-        info_pane = ttk.PanedWindow(outer, orient="horizontal")
-        info_pane.pack(fill=BOTH, expand=True)
-        left = ttk.Frame(info_pane)
-        right = ttk.Frame(info_pane)
-        info_pane.add(left, weight=3)
-        info_pane.add(right, weight=5)
+        add_date_field(7, "开始", self.start_date_var)
+        add_date_field(8, "结束", self.end_date_var)
 
+        advanced_tab.columnconfigure(0, weight=1)
+        ttk.Label(advanced_tab, text="电源类型 psrType", style="SectionTitle.TLabel").grid(
+            row=0,
+            column=0,
+            sticky=W,
+        )
+        ttk.Entry(advanced_tab, textvariable=self.psr_type_var).grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(5, 14),
+        )
+        ttk.Label(advanced_tab, text="额外请求参数", style="SectionTitle.TLabel").grid(
+            row=2,
+            column=0,
+            sticky=W,
+        )
+        ttk.Entry(advanced_tab, textvariable=self.extra_params_var).grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            pady=(5, 6),
+        )
+        ttk.Label(
+            advanced_tab,
+            text="格式：KEY=VALUE；多个参数使用分号分隔。通常可保持为空。",
+            style="CardMuted.TLabel",
+            wraplength=280,
+        ).grid(row=4, column=0, sticky=W)
+        ttk.Button(settings, text="重置全部条件", command=self.reset_filters).grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(8, 0),
+        )
+
+        content.columnconfigure(0, weight=1)
+        content.rowconfigure(0, weight=1)
+        self.content_notebook = ttk.Notebook(content)
+        self.content_notebook.grid(row=0, column=0, sticky="nsew")
+        results_tab = ttk.Frame(self.content_notebook, padding=(8, 8))
+        description_tab = ttk.Frame(self.content_notebook, padding=(8, 8))
+        self.content_notebook.add(results_tab, text="数据结果")
+        self.content_notebook.add(description_tab, text="数据集说明")
+
+        result_actions = ttk.Frame(results_tab)
+        result_actions.pack(fill=X, pady=(0, 7))
+        ttk.Label(result_actions, text="本地结果", style="SectionTitle.TLabel").pack(side=LEFT)
+        ttk.Button(
+            result_actions,
+            text="清除",
+            style="Compact.Danger.TButton",
+            width=5,
+            command=self.clear_records,
+        ).pack(side=RIGHT)
+        ttk.Button(
+            result_actions,
+            text="导出",
+            width=5,
+            style="Compact.TButton",
+            command=self.export_records,
+        ).pack(
+            side=RIGHT,
+            padx=(0, 6),
+        )
+        ttk.Button(
+            result_actions,
+            text="刷新",
+            width=5,
+            style="Compact.TButton",
+            command=self.refresh_results,
+        ).pack(
+            side=RIGHT,
+            padx=(0, 6),
+        )
+        self.result_tree, self.raw_text = self.build_result_panel(results_tab)
+
+        description_tab.columnconfigure(0, weight=1)
+        description_tab.rowconfigure(0, weight=1)
         self.description_text = __import__("tkinter").Text(
-            left,
+            description_tab,
             wrap="word",
-            width=54,
-            height=16,
-            padx=10,
-            pady=8,
+            padx=12,
+            pady=10,
         )
-        description_scroll = ttk.Scrollbar(left, orient=VERTICAL, command=self.description_text.yview)
+        description_scroll = ttk.Scrollbar(
+            description_tab,
+            orient=VERTICAL,
+            command=self.description_text.yview,
+        )
         self.description_text.configure(yscrollcommand=description_scroll.set, state="disabled")
-        self.description_text.pack(side=LEFT, fill=BOTH, expand=True)
-        description_scroll.pack(side=RIGHT, fill=Y)
+        self.description_text.grid(row=0, column=0, sticky="nsew")
+        description_scroll.grid(row=0, column=1, sticky="ns")
 
-        self.result_tree, self.raw_text = self.build_result_panel(right)
-
-        status_bar = ttk.Frame(outer)
-        status_bar.pack(fill=X, side="bottom")
-        ttk.Label(status_bar, textvariable=self.summary_var, anchor=W).pack(fill=X, padx=4, pady=4)
+        status_bar = ttk.Frame(outer, style="AppSurface.TFrame")
+        status_bar.grid(row=2, column=0, sticky="ew", pady=(7, 0))
+        ttk.Label(
+            status_bar,
+            textvariable=self.summary_var,
+            style="PageSubtitle.TLabel",
+            anchor=W,
+        ).pack(fill=X)
 
     def build_result_panel(self, parent: ttk.Frame):
         main = ttk.PanedWindow(parent, orient="vertical")
@@ -4160,10 +4435,14 @@ class EntsoeDataApp:
         for column, (label, width) in headings.items():
             tree.heading(column, text=label)
             tree.column(column, width=width, minwidth=max(70, width // 2), anchor="center")
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
         scroll = ttk.Scrollbar(table_frame, orient=VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scroll.set)
-        tree.pack(side=LEFT, fill=BOTH, expand=True)
-        scroll.pack(side=RIGHT, fill=Y)
+        scroll_x = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
         tree.bind("<<TreeviewSelect>>", self.on_select_result)
 
         raw_text = __import__("tkinter").Text(detail_frame, wrap="word", height=7, padx=10, pady=8)
@@ -4388,7 +4667,7 @@ class EntsoeDataApp:
         params = dict(config["params"])
         lines = [
             f"{config['title_zh']} / {config['title_en']}",
-            f"Command: {config['name']}",
+            f"采集项目标识：{config['name']}",
             f"Category: {config['category']}",
             f"Domain mode: {config['domain_mode']}",
             "",
@@ -4437,10 +4716,32 @@ class EntsoeDataApp:
     def set_area_state(self, *, single_enabled: bool, border_enabled: bool) -> None:
         if self.area_combo is not None:
             self.area_combo.configure(state="normal" if single_enabled else "disabled")
+            if single_enabled:
+                self.area_field_label.grid()
+                self.area_combo.grid()
+            else:
+                self.area_field_label.grid_remove()
+                self.area_combo.grid_remove()
         if self.in_area_combo is not None:
             self.in_area_combo.configure(state="normal" if border_enabled else "disabled")
+            if border_enabled:
+                self.in_area_field_label.grid()
+                self.in_area_combo.grid()
+            else:
+                self.in_area_field_label.grid_remove()
+                self.in_area_combo.grid_remove()
         if self.out_area_combo is not None:
             self.out_area_combo.configure(state="normal" if border_enabled else "disabled")
+            if border_enabled:
+                self.out_area_field_label.grid()
+                self.out_area_combo.grid()
+            else:
+                self.out_area_field_label.grid_remove()
+                self.out_area_combo.grid_remove()
+        if border_enabled:
+            self.border_status_label.grid()
+        else:
+            self.border_status_label.grid_remove()
 
     def preview_request(self) -> None:
         if not self.maybe_warn_gb_after_publication_stop(block_action=True):
@@ -4451,7 +4752,7 @@ class EntsoeDataApp:
             messagebox.showerror("预览失败", str(exc))
             return
         self.set_text(self.raw_text, json.dumps(request, ensure_ascii=False, indent=2))
-        self.summary_var.set("dry-run 预览已生成；未访问 ENTSO-E，也未写入数据库。")
+        self.summary_var.set("请求预览已生成；未访问 ENTSO-E，也未写入数据库。")
 
     def build_request_preview(self) -> dict[str, object]:
         config = self.selected_config()
@@ -4625,7 +4926,10 @@ class EntsoeDataApp:
                     raise ValueError("ENTSO-E spider returned unsupported record types.")
         except Exception as exc:
             message = str(exc)
-            self.root.after(0, lambda message=message: self.on_collect_error(message))
+            self.root.after(
+                0,
+                lambda: self.on_collect_error(message, record_count, written),
+            )
         else:
             self.root.after(0, lambda: self.on_collect_success(record_count, written))
 
@@ -4637,16 +4941,33 @@ class EntsoeDataApp:
     def on_collect_success(self, record_count: int, written: int) -> None:
         self.finish_collect()
         self.refresh_results()
+        if record_count == 0:
+            self.summary_var.set("ENTSO-E 请求已完成：所选范围无新数据，数据库未修改。")
+            messagebox.showinfo(
+                "无新数据",
+                "ENTSO-E 在所选竞价区和日期范围没有返回记录。请求执行成功，数据库未修改。",
+            )
+            return
         self.summary_var.set(f"ENTSO-E 采集完成：抓取 {record_count} 条，写入/更新 {written} 条。")
         messagebox.showinfo(
             "采集完成",
             f"ENTSO-E 采集完成。\n\n抓取记录：{record_count}\n写入/更新：{written}",
         )
 
-    def on_collect_error(self, message: str) -> None:
+    def on_collect_error(
+        self,
+        message: str,
+        record_count: int = 0,
+        written: int = 0,
+    ) -> None:
         self.finish_collect()
-        self.summary_var.set("ENTSO-E 采集失败。")
-        messagebox.showerror("ENTSO-E 采集失败", message)
+        data_note = (
+            f"失败前已抓取 {record_count} 条、写入/更新 {written} 条；请刷新页面核对已保存数据。"
+            if written
+            else "本次没有修改业务数据。"
+        )
+        self.summary_var.set(f"ENTSO-E 采集失败：{data_note}")
+        messagebox.showerror("ENTSO-E 采集失败", f"{message}\n\n{data_note}")
 
     def finish_collect(self) -> None:
         if self.collect_button is not None:
@@ -4875,10 +5196,8 @@ class ElexonDataRepository:
     def __init__(self, db_path: Path | None = None) -> None:
         self.db_path = db_path or resolve_sqlite_path()
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+    def connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return sqlite_row_connection(self.db_path)
 
     def table_exists(self, table_name: str) -> bool:
         with self.connect() as connection:
@@ -5082,100 +5401,270 @@ class ElexonDataApp:
         self.refresh_results()
 
     def build_layout(self) -> None:
-        outer = ttk.Frame(self.root)
-        outer.pack(fill=BOTH, expand=True, padx=8, pady=8)
+        outer = ttk.Frame(
+            self.root,
+            style="AppSurface.TFrame",
+            padding=(12, 10, 12, 8),
+        )
+        outer.pack(fill=BOTH, expand=True)
+        outer.columnconfigure(0, weight=1)
+        outer.rowconfigure(1, weight=1)
 
-        request_frame = ttk.Frame(outer, style="Toolbar.TFrame")
-        request_frame.pack(fill=X)
-        ttk.Label(request_frame, text="API key").pack(side=LEFT, padx=(0, 6))
-        ttk.Label(request_frame, textvariable=self.api_key_status_var, width=20).pack(
-            side=LEFT,
+        command_card = ttk.Frame(outer, style="Card.TFrame", padding=(14, 10))
+        command_card.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        command_card.columnconfigure(1, weight=1)
+        ttk.Label(command_card, text="数据集", style="SectionTitle.TLabel").grid(
+            row=0,
+            column=0,
+            sticky=W,
             padx=(0, 8),
         )
-        ttk.Button(request_frame, text="刷新状态", command=self.refresh_api_key_status).pack(
-            side=LEFT,
-            padx=(0, 12),
-        )
-        ttk.Label(request_frame, textvariable=self.dataset_count_var, width=16).pack(
-            side=LEFT,
-            padx=(0, 12),
-        )
-        ttk.Label(request_frame, text="数据集").pack(side=LEFT, padx=(0, 6))
         self.dataset_combo = ttk.Combobox(
-            request_frame,
+            command_card,
             textvariable=self.dataset_var,
             values=self.dataset_options,
-            width=76,
             state="readonly",
         )
-        self.dataset_combo.pack(side=LEFT, padx=(0, 8))
-        self.dataset_combo.bind("<<ComboboxSelected>>", lambda _event: self.update_dataset_description())
-
-        date_frame = ttk.Frame(outer, style="Toolbar.TFrame")
-        date_frame.pack(fill=X)
-        ttk.Label(date_frame, text="开始日期").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.start_date_var, width=12, state="readonly").pack(
-            side=LEFT,
-            padx=(0, 3),
+        self.dataset_combo.grid(row=0, column=1, sticky="ew", padx=(0, 12))
+        self.dataset_combo.bind(
+            "<<ComboboxSelected>>",
+            lambda _event: self.update_dataset_description(),
         )
-        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.start_date_var)).pack(
+        ttk.Label(
+            command_card,
+            textvariable=self.dataset_count_var,
+            style="CardMuted.TLabel",
+        ).grid(row=0, column=2, sticky="e", padx=(0, 12))
+        ttk.Button(
+            command_card,
+            text="预览请求",
+            command=lambda: (self.content_notebook.select(0), self.preview_request()),
+        ).grid(
+            row=0,
+            column=3,
+            padx=(0, 7),
+        )
+        self.collect_button = ttk.Button(
+            command_card,
+            text="执行爬取",
+            style="Primary.TButton",
+            command=self.start_collect,
+        )
+        self.collect_button.grid(row=0, column=4)
+
+        access_row = ttk.Frame(command_card, style="CardBody.TFrame")
+        access_row.grid(row=1, column=0, columnspan=5, sticky="ew", pady=(8, 0))
+        ttk.Label(access_row, text="Elexon Insights API", style="CardMuted.TLabel").pack(side=LEFT)
+        ttk.Label(access_row, textvariable=self.api_key_status_var, style="Success.TLabel").pack(
             side=LEFT,
+            padx=(7, 8),
+        )
+        ttk.Button(
+            access_row,
+            text="刷新访问状态",
+            style="Link.TButton",
+            command=self.refresh_api_key_status,
+        ).pack(side=LEFT)
+        ttk.Label(
+            access_row,
+            text="选择条件 → 预览请求 → 执行爬取",
+            style="CardMuted.TLabel",
+        ).pack(side=RIGHT)
+
+        workspace = ttk.PanedWindow(outer, orient="horizontal")
+        workspace.grid(row=1, column=0, sticky="nsew")
+        settings = ttk.LabelFrame(workspace, text="采集条件", width=360, padding=(12, 10))
+        settings.grid_propagate(False)
+        settings.columnconfigure(0, weight=1)
+        settings.rowconfigure(0, weight=1)
+        content = ttk.Frame(workspace, style="AppSurface.TFrame")
+        workspace.add(settings, weight=0)
+        workspace.add(content, weight=1)
+
+        condition_tabs = ttk.Notebook(settings)
+        condition_tabs.grid(row=0, column=0, sticky="nsew")
+        basic_tab = ttk.Frame(condition_tabs, padding=(10, 10))
+        filter_tab = ttk.Frame(condition_tabs, padding=(10, 10))
+        advanced_tab = ttk.Frame(condition_tabs, padding=(10, 10))
+        condition_tabs.add(basic_tab, text="时间")
+        condition_tabs.add(filter_tab, text="筛选")
+        condition_tabs.add(advanced_tab, text="高级")
+        basic_tab.columnconfigure(1, weight=1)
+        filter_tab.columnconfigure(1, weight=1)
+
+        ttk.Label(basic_tab, text="查询时间", style="SectionTitle.TLabel").grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky=W,
+            pady=(0, 5),
+        )
+
+        def add_date_field(row: int, label: str, variable: StringVar) -> None:
+            ttk.Label(basic_tab, text=label).grid(row=row, column=0, sticky=W, pady=4, padx=(0, 8))
+            date_row = ttk.Frame(basic_tab)
+            date_row.grid(row=row, column=1, sticky="ew", pady=4)
+            date_row.columnconfigure(0, weight=1)
+            ttk.Entry(
+                date_row,
+                textvariable=variable,
+                state="readonly",
+                width=10,
+                style="Compact.TEntry",
+            ).grid(
+                row=0,
+                column=0,
+                sticky="ew",
+                padx=(0, 5),
+            )
+            ttk.Button(
+                date_row,
+                text="选择",
+                width=5,
+                style="Compact.TButton",
+                command=lambda: self.pick_date(variable),
+            ).grid(
+                row=0,
+                column=1,
+            )
+
+        add_date_field(1, "开始", self.start_date_var)
+        add_date_field(2, "结束", self.end_date_var)
+        ttk.Label(filter_tab, text="本地结果筛选", style="SectionTitle.TLabel").grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky=W,
+            pady=(0, 5),
+        )
+        ttk.Label(filter_tab, text="数据项 / 指标").grid(
+            row=1,
+            column=0,
+            sticky=W,
+            pady=2,
             padx=(0, 8),
         )
-        ttk.Label(date_frame, text="结束日期").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.end_date_var, width=12, state="readonly").pack(
-            side=LEFT,
-            padx=(0, 3),
+        ttk.Entry(filter_tab, textvariable=self.metric_var, style="Compact.TEntry").grid(
+            row=1,
+            column=1,
+            sticky="ew",
+            pady=2,
         )
-        ttk.Button(date_frame, text="选择", width=5, command=lambda: self.pick_date(self.end_date_var)).pack(
-            side=LEFT,
+        ttk.Label(filter_tab, text="BMU").grid(
+            row=2,
+            column=0,
+            sticky=W,
+            pady=2,
             padx=(0, 8),
         )
-        ttk.Label(date_frame, text="数据项/指标").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.metric_var, width=24).pack(side=LEFT, padx=(0, 8))
-        ttk.Label(date_frame, text="BMU（可留空）").pack(side=LEFT, padx=(0, 4))
-        ttk.Entry(date_frame, textvariable=self.bm_unit_var, width=18).pack(side=LEFT, padx=(0, 8))
-
-        param_frame = ttk.Frame(outer, style="Toolbar.TFrame")
-        param_frame.pack(fill=X)
-        ttk.Label(param_frame, text="额外参数").pack(side=LEFT, padx=(0, 6))
-        ttk.Entry(param_frame, textvariable=self.extra_params_var, width=72).pack(
-            side=LEFT,
-            padx=(0, 8),
+        ttk.Entry(filter_tab, textvariable=self.bm_unit_var, style="Compact.TEntry").grid(
+            row=2,
+            column=1,
+            sticky="ew",
+            pady=2,
         )
-        ttk.Button(param_frame, text="dry-run 预览", command=self.preview_request).pack(side=LEFT)
-        self.collect_button = ttk.Button(param_frame, text="执行爬取", command=self.start_collect)
-        self.collect_button.pack(side=LEFT, padx=(8, 0))
-        ttk.Button(param_frame, text="刷新数据", command=self.refresh_results).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(param_frame, text="导出数据", command=self.export_records).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(param_frame, text="清除数据", command=self.clear_records).pack(side=LEFT, padx=(8, 0))
-        ttk.Button(param_frame, text="重置", command=self.reset_filters).pack(side=LEFT, padx=(8, 0))
+        ttk.Label(
+            filter_tab,
+            text="均可留空；只影响本地结果筛选。",
+            style="CardMuted.TLabel",
+            wraplength=260,
+        ).grid(row=3, column=0, columnspan=2, sticky=W, pady=(5, 0))
 
-        info_pane = ttk.PanedWindow(outer, orient="horizontal")
-        info_pane.pack(fill=BOTH, expand=True)
-        left = ttk.Frame(info_pane)
-        right = ttk.Frame(info_pane)
-        info_pane.add(left, weight=3)
-        info_pane.add(right, weight=5)
+        advanced_tab.columnconfigure(0, weight=1)
+        ttk.Label(advanced_tab, text="额外请求参数", style="SectionTitle.TLabel").grid(
+            row=0,
+            column=0,
+            sticky=W,
+        )
+        ttk.Entry(
+            advanced_tab,
+            textvariable=self.extra_params_var,
+            style="Compact.TEntry",
+        ).grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(5, 6),
+        )
+        ttk.Label(
+            advanced_tab,
+            text="格式：KEY=VALUE；多个参数使用分号分隔。通常可保持为空。",
+            style="CardMuted.TLabel",
+            wraplength=270,
+        ).grid(row=2, column=0, sticky=W)
+        ttk.Button(settings, text="重置全部条件", command=self.reset_filters).grid(
+            row=1,
+            column=0,
+            sticky="ew",
+            pady=(8, 0),
+        )
 
+        content.columnconfigure(0, weight=1)
+        content.rowconfigure(0, weight=1)
+        self.content_notebook = ttk.Notebook(content)
+        self.content_notebook.grid(row=0, column=0, sticky="nsew")
+        results_tab = ttk.Frame(self.content_notebook, padding=(8, 8))
+        description_tab = ttk.Frame(self.content_notebook, padding=(8, 8))
+        self.content_notebook.add(results_tab, text="数据结果")
+        self.content_notebook.add(description_tab, text="数据集说明")
+
+        result_actions = ttk.Frame(results_tab)
+        result_actions.pack(fill=X, pady=(0, 7))
+        ttk.Label(result_actions, text="本地结果", style="SectionTitle.TLabel").pack(side=LEFT)
+        ttk.Button(
+            result_actions,
+            text="清除",
+            style="Compact.Danger.TButton",
+            width=5,
+            command=self.clear_records,
+        ).pack(side=RIGHT)
+        ttk.Button(
+            result_actions,
+            text="导出",
+            width=5,
+            style="Compact.TButton",
+            command=self.export_records,
+        ).pack(
+            side=RIGHT,
+            padx=(0, 6),
+        )
+        ttk.Button(
+            result_actions,
+            text="刷新",
+            width=5,
+            style="Compact.TButton",
+            command=self.refresh_results,
+        ).pack(
+            side=RIGHT,
+            padx=(0, 6),
+        )
+        self.result_tree, self.raw_text = self.build_result_panel(results_tab)
+
+        description_tab.columnconfigure(0, weight=1)
+        description_tab.rowconfigure(0, weight=1)
         self.description_text = __import__("tkinter").Text(
-            left,
+            description_tab,
             wrap="word",
-            width=54,
-            height=16,
-            padx=10,
-            pady=8,
+            padx=12,
+            pady=10,
         )
-        description_scroll = ttk.Scrollbar(left, orient=VERTICAL, command=self.description_text.yview)
+        description_scroll = ttk.Scrollbar(
+            description_tab,
+            orient=VERTICAL,
+            command=self.description_text.yview,
+        )
         self.description_text.configure(yscrollcommand=description_scroll.set, state="disabled")
-        self.description_text.pack(side=LEFT, fill=BOTH, expand=True)
-        description_scroll.pack(side=RIGHT, fill=Y)
+        self.description_text.grid(row=0, column=0, sticky="nsew")
+        description_scroll.grid(row=0, column=1, sticky="ns")
 
-        self.result_tree, self.raw_text = self.build_result_panel(right)
-
-        status_bar = ttk.Frame(outer)
-        status_bar.pack(fill=X, side="bottom")
-        ttk.Label(status_bar, textvariable=self.summary_var, anchor=W).pack(fill=X, padx=4, pady=4)
+        status_bar = ttk.Frame(outer, style="AppSurface.TFrame")
+        status_bar.grid(row=2, column=0, sticky="ew", pady=(7, 0))
+        ttk.Label(
+            status_bar,
+            textvariable=self.summary_var,
+            style="PageSubtitle.TLabel",
+            anchor=W,
+        ).pack(fill=X)
 
     def build_result_panel(self, parent: ttk.Frame):
         main = ttk.PanedWindow(parent, orient="vertical")
@@ -5202,10 +5691,14 @@ class ElexonDataApp:
         for column, (label, width) in headings.items():
             tree.heading(column, text=label)
             tree.column(column, width=width, minwidth=max(55, width // 2), anchor="center")
+        table_frame.columnconfigure(0, weight=1)
+        table_frame.rowconfigure(0, weight=1)
         scroll = ttk.Scrollbar(table_frame, orient=VERTICAL, command=tree.yview)
-        tree.configure(yscrollcommand=scroll.set)
-        tree.pack(side=LEFT, fill=BOTH, expand=True)
-        scroll.pack(side=RIGHT, fill=Y)
+        scroll_x = ttk.Scrollbar(table_frame, orient="horizontal", command=tree.xview)
+        tree.configure(yscrollcommand=scroll.set, xscrollcommand=scroll_x.set)
+        tree.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
         tree.bind("<<TreeviewSelect>>", self.on_select_result)
 
         raw_text = __import__("tkinter").Text(detail_frame, wrap="word", height=7, padx=10, pady=8)
@@ -5238,10 +5731,10 @@ class ElexonDataApp:
         config = self.selected_config()
         lines = [
             f"{config['title_zh']} / {config['title_en']}",
-            f"Command: {config['name']}",
+            f"采集项目标识：{config['name']}",
             f"Category: {config['category']}",
-            f"Endpoint: {config['endpoint']}",
-            f"Time mode: {config['time_mode']}",
+            f"官方接口：{config['endpoint']}",
+            f"时间口径：{config['time_mode']}",
             "",
             f"中文说明：{config['meaning_zh']}",
             f"English: {config['meaning_en']}",
@@ -5309,7 +5802,7 @@ class ElexonDataApp:
             "dry_run": True,
         }
         self.set_text(self.raw_text, json.dumps(request, ensure_ascii=False, indent=2))
-        self.summary_var.set("dry-run 预览已生成；未访问 Elexon，也未写入数据库。")
+        self.summary_var.set("请求预览已生成；未访问 Elexon，也未写入数据库。")
 
     def start_collect(self) -> None:
         try:
@@ -5378,6 +5871,13 @@ class ElexonDataApp:
     def on_collect_success(self, record_count: int, written: int) -> None:
         self.finish_collect()
         self.refresh_results()
+        if record_count == 0:
+            self.summary_var.set("Elexon 请求已完成：所选范围无新数据，数据库未修改。")
+            messagebox.showinfo(
+                "无新数据",
+                "Elexon 在所选数据集和日期范围没有返回记录。请求执行成功，数据库未修改。",
+            )
+            return
         self.summary_var.set(f"Elexon 采集完成：抓取 {record_count} 条，写入/更新 {written} 条。")
         messagebox.showinfo(
             "采集完成",
@@ -5386,8 +5886,11 @@ class ElexonDataApp:
 
     def on_collect_error(self, message: str) -> None:
         self.finish_collect()
-        self.summary_var.set("Elexon 采集失败。")
-        messagebox.showerror("Elexon 采集失败", message)
+        self.summary_var.set("Elexon 采集失败：本次没有修改业务数据。")
+        messagebox.showerror(
+            "Elexon 采集失败",
+            f"{message}\n\n本次没有修改业务数据。",
+        )
 
     def finish_collect(self) -> None:
         if self.collect_button is not None:
@@ -5552,44 +6055,69 @@ class ElexonDataApp:
             return value
 
 
-def launch_gui() -> None:
+def build_gui(root: Tk, db_path: Path) -> "PowertradeAppShell":
+    from powertrade_crawler.app_shell import PowertradeAppShell
+    from powertrade_crawler.credential_setup_gui import CredentialSetupApp
     from powertrade_crawler.market_agent.gui import MarketAgentApp
+    from powertrade_crawler.overview_gui import OverviewApp
+    from powertrade_crawler.ui_theme import (
+        apply_semantic_widget_styles,
+        configure_app_theme,
+    )
 
-    db_path = prepare_gui_database()
-    root = Tk()
-    root.title("Powertrade Crawler 数据浏览器")
-    root.geometry("1280x800")
-    root.minsize(1060, 680)
+    configure_app_theme(root)
+    shell = PowertradeAppShell(root, db_path)
 
-    style = ttk.Style()
-    style.configure("Treeview", rowheight=28)
-    style.configure("TButton", padding=(10, 5))
-    style.configure("Toolbar.TFrame", padding=8)
-
-    notebook = ttk.Notebook(root)
-    notebook.pack(fill=BOTH, expand=True)
-
-    gridstatus_tab = ttk.Frame(notebook)
-    elecheck_tab = ttk.Frame(notebook)
-    entsoe_tab = ttk.Frame(notebook)
-    elexon_tab = ttk.Frame(notebook)
-    market_agent_tab = ttk.Frame(notebook)
-    schedule_tab = ttk.Frame(notebook)
-    notebook.add(gridstatus_tab, text="GridStatus")
-    notebook.add(elecheck_tab, text="Elecheck 易能电易查")
-    notebook.add(entsoe_tab, text="ENTSO-E 欧洲")
-    notebook.add(elexon_tab, text="Elexon 英国")
-    notebook.add(market_agent_tab, text="多数据源 Agent")
-    notebook.add(schedule_tab, text="定时任务/数据维护")
-
-    GridStatusMetadataApp(
-        gridstatus_tab,
+    overview_app = OverviewApp(
+        shell.page("overview"),
+        on_navigate=shell.show_page,
+        on_agent_question=shell.open_agent_with_prompt,
+    )
+    gridstatus_app = GridStatusMetadataApp(
+        shell.page("gridstatus"),
         GridStatusMetadataRepository(db_path),
         configure_window=False,
     )
-    ElecheckDataApp(elecheck_tab, ElecheckDataRepository(db_path))
-    EntsoeDataApp(entsoe_tab, EntsoeDataRepository(db_path))
-    ElexonDataApp(elexon_tab, ElexonDataRepository(db_path))
-    MarketAgentApp(market_agent_tab)
-    ScheduleDataApp(schedule_tab)
+    elecheck_app = ElecheckDataApp(
+        shell.page("elecheck"),
+        ElecheckDataRepository(db_path),
+        on_navigate=shell.show_page,
+    )
+    entsoe_app = EntsoeDataApp(
+        shell.page("entsoe"),
+        EntsoeDataRepository(db_path),
+    )
+    elexon_app = ElexonDataApp(
+        shell.page("elexon"),
+        ElexonDataRepository(db_path),
+    )
+    market_agent_app = MarketAgentApp(
+        shell.page("agent"),
+        on_navigate=shell.show_page,
+    )
+    schedule_app = ScheduleDataApp(shell.page("schedule"))
+    credential_setup_app = CredentialSetupApp(shell.page("setup"))
+    for key, controller in (
+        ("overview", overview_app),
+        ("gridstatus", gridstatus_app),
+        ("elecheck", elecheck_app),
+        ("entsoe", entsoe_app),
+        ("elexon", elexon_app),
+        ("agent", market_agent_app),
+        ("schedule", schedule_app),
+        ("setup", credential_setup_app),
+    ):
+        shell.register_controller(key, controller)
+    shell.show_page("overview")
+    root.after_idle(lambda: apply_semantic_widget_styles(root))
+    return shell
+
+
+def launch_gui() -> None:
+    db_path = prepare_gui_database()
+    root = Tk()
+    root.title("Powertrade Crawler 数据浏览器")
+    root.geometry("1440x900")
+    root.minsize(1060, 680)
+    build_gui(root, db_path)
     root.mainloop()

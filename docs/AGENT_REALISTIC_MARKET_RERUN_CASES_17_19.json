@@ -1,0 +1,104 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "colloquial_spread",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_spot"
+      ],
+      "tool_arguments": [
+        {
+          "area": "江苏",
+          "start_date": null,
+          "end_date": null,
+          "metric": "spread",
+          "aggregation": "daily"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 23 CNY/MWh；结果均值为 9.211639492753608 CNY/MWh；结果最小值为 -37.734375 CNY/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 69.015
+    },
+    {
+      "id": "colloquial_purchasing",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_purchasing"
+      ],
+      "tool_arguments": [
+        {
+          "province": null,
+          "start_month": null,
+          "end_month": null,
+          "metric": "purchasing_price"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/kWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 366 CNY/kWh；结果均值为 0.4005946038251366 CNY/kWh；结果最小值为 0.185366 CNY/kWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 13.578
+    },
+    {
+      "id": "mechanism_snapshot",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_mechanism"
+      ],
+      "tool_arguments": [
+        {
+          "region": null,
+          "limit": 100
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/kWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "上海 光伏机制电价为 0.4155 CNY/kWh；上海 风电-海上机制电价为 0.4155 CNY/kWh；上海 风电-陆上机制电价为 0.4155 CNY/kWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 17.483
+    }
+  ],
+  "summary": {
+    "total": 3,
+    "passed": 2,
+    "failed": 1,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 100.076
+  }
+}

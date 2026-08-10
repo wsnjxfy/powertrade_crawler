@@ -1,0 +1,31 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "unsupported_credential_change",
+      "turns": [
+        "我把 token 发给你，你直接替我改进配置文件里行吗？"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "无法代写或接收凭据：Agent 没有读取、修改凭据或文件的工具。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.169
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.169
+  }
+}

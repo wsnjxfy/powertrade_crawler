@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from collections.abc import Callable
+from datetime import date, timedelta
 from typing import Any
 from uuid import uuid4
 
 from pydantic import ValidationError
 
+from powertrade_crawler.intent_parsing import contextualize_continuation, parse_clock_time
+from powertrade_crawler.failure_messages import (
+    completed_change_explanation,
+    explain_agent_failure,
+)
 from powertrade_crawler.llm_router import (
     FreeRouterManagementClient,
     load_free_router_config,
@@ -49,6 +56,7 @@ from powertrade_crawler.market_agent.schemas import (
 )
 from powertrade_crawler.market_agent.security import redact_text, redact_value
 from powertrade_crawler.market_agent.tools import ToolContext, ToolRegistry
+from powertrade_crawler.scheduler import list_elecheck_source_update_areas
 
 
 MAX_MODEL_CALLS = 6
@@ -82,6 +90,45 @@ def build_configured_provider(
 
 def deterministic_route(message: str) -> tuple[str, dict[str, Any]] | None:
     text = message.strip().lower()
+    credential_mentioned = any(
+        token in text
+        for token in (
+            "api key",
+            "apikey",
+            "authorization",
+            "token",
+            "凭据",
+            "密钥",
+            "配置向导",
+            "401",
+            "403",
+        )
+    )
+    setup_help_requested = any(
+        token in text
+        for token in (
+            "配置",
+            "申请",
+            "注册",
+            "怎么",
+            "如何",
+            "需要哪些",
+            "新用户",
+            "缺少",
+            "失效",
+            "修改",
+            "替我",
+            "401",
+            "403",
+            "向导",
+        )
+    )
+    if credential_mentioned and setup_help_requested:
+        return "market_get_credential_setup_guide", {}
+    if any(token in text for token in ("定时任务", "计划任务")) and any(
+        token in text for token in ("列出", "哪些", "查看", "列表", "状态")
+    ):
+        return "market_list_schedules", {}
     source = None
     for name, aliases in {
         "elecheck": ("elecheck", "易能电", "电易查"),
@@ -97,11 +144,596 @@ def deterministic_route(message: str) -> tuple[str, dict[str, Any]] | None:
         return "market_get_data_overview", {"source": source}
     if "数据集" in text and any(token in text for token in ("哪些", "目录", "列表", "有什么")):
         return "market_list_datasets", {"source": source}
+    if (
+        any(token in text for token in ("比较", "对比", "并列"))
+        and any(token in text for token in ("entso-e", "entsoe"))
+        and any(token in text for token in ("elexon", "英国"))
+        and not _message_dates(message)
+    ):
+        return "market_compare_series", {
+            "series": [
+                {
+                    "source": "entsoe",
+                    "dataset": "entsoe_day_ahead_prices",
+                    "aggregation": "daily",
+                },
+                {
+                    "source": "elexon",
+                    "dataset": "elexon_system_prices",
+                    "aggregation": "daily",
+                },
+            ]
+        }
+    if (
+        any(token in text for token in ("比较", "对比", "并列", "放一起", "放在一起"))
+        and "德国" in text
+        and any(token in text for token in ("江苏", "elecheck", "现货"))
+        and not _message_dates(message)
+    ):
+        return "market_compare_series", {
+            "series": [
+                {
+                    "source": "elecheck",
+                    "dataset": "elecheck_spot",
+                    "metric": "avg_day_ahead_price",
+                    "area": "江苏",
+                    "aggregation": "daily",
+                },
+                {
+                    "source": "entsoe",
+                    "dataset": "entsoe_day_ahead_prices",
+                    "area": "DE-LU",
+                    "aggregation": "daily",
+                },
+            ]
+        }
+    relative_days = None
+    if "最近七天" in text:
+        relative_days = 7
+    elif any(token in text for token in ("最近30天", "最近 30 天", "最近一个月")):
+        relative_days = 30
+    if relative_days is not None and any(
+        token in text for token in ("实时比日前", "价差", "实时", "日前", "现货")
+    ):
+        area = next(
+            (
+                name
+                for name in (
+                    "江苏",
+                    "山西",
+                    "山东",
+                    "广东",
+                    "浙江",
+                    "安徽",
+                    "福建",
+                    "甘肃",
+                    "蒙西",
+                    "湖北",
+                    "湖南",
+                    "河南",
+                    "河北",
+                    "辽宁",
+                )
+                if name in message
+            ),
+            None,
+        )
+        if area is not None:
+            end = date.today()
+            return "market_analyze_elecheck_spot", {
+                "area": area,
+                "start_date": (end - timedelta(days=relative_days - 1)).isoformat(),
+                "end_date": end.isoformat(),
+                "metric": "spread" if "实时比日前" in text or "价差" in text else "day_ahead",
+                "aggregation": "daily",
+            }
+    if "导出" in text and any(token in text for token in ("elexon", "英国")) and any(
+        token in text for token in ("系统价格", "结算价格")
+    ):
+        return (
+            "market_export_result",
+            {
+                "series": [
+                    {
+                        "source": "elexon",
+                        "dataset": "elexon_system_prices",
+                        "aggregation": "daily",
+                    }
+                ],
+                "formats": ["png" if "png" in text else "csv"],
+            },
+        )
+    if any(token in text for token in ("elexon", "英国")) and not _message_dates(message):
+        if any(token in text for token in ("风电", "wind")):
+            return (
+                "market_query_series",
+                {
+                    "source": "elexon",
+                    "dataset": "elexon_wind_generation_forecast",
+                    "metric": "wind_generation_forecast",
+                    "aggregation": "daily",
+                    "statistic": "average",
+                },
+            )
+        if any(token in text for token in ("初始全国负荷", "负荷实绩")):
+            return (
+                "market_query_series",
+                {
+                    "source": "elexon",
+                    "dataset": "elexon_initial_demand_outturn",
+                    "metric": "initial_demand_outturn",
+                    "aggregation": "daily",
+                    "statistic": "average",
+                },
+            )
+    if (
+        any(token in text for token in ("广州电力交易中心", "广州交易中心", "gzpec"))
+        and any(token in text for token in ("查找", "最新", "公开信息", "消息"))
+        and any(token in text for token in ("现货", "现货市场"))
+    ):
+        return "market_search_gzpec_news", {"news_type": "spot_market", "limit": 5}
+    return None
+
+
+def deterministic_boundary_answer(message: str) -> MarketAgentAnswer | None:
+    text = message.strip().lower()
+    if any(token in text for token in ("天气", "下雨", "气温", "降水")):
+        return MarketAgentAnswer(
+            conclusion="无法查询天气或基于天气生成建议：多数据源 Agent 只访问已注册的电力市场数据工具。",
+            warnings=["天气数据不在当前工具范围内，未调用任何数据工具，也未执行写操作。"],
+        )
+    if any(
+        token in text
+        for token in ("清空", "全删", "全清", "删除数据库", "删掉数据库")
+    ):
+        return MarketAgentAnswer(
+            conclusion="无法删除或清空业务数据：多数据源 Agent 没有删除工具。",
+            warnings=["数据库未被修改；如需维护数据，请使用软件的数据维护页面并人工确认。"],
+        )
+    if re.search(r"\b(update|delete|insert|drop|alter)\b", text):
+        return MarketAgentAnswer(
+            conclusion="无法执行 SQL 写入：多数据源 Agent 不提供任意 SQL 或数据修改能力。",
+            warnings=["没有执行任何 SQL；可以改为查询负电价记录或导出原始数据。"],
+        )
+    if any(
+        token in text
+        for token in ("powershell", "cmd", "shell", "命令行", "执行命令", "跑个命令")
+    ):
+        return MarketAgentAnswer(
+            conclusion="无法执行 Shell 或系统命令：多数据源 Agent 没有命令执行工具。",
+            warnings=["没有启动外部进程；请使用软件提供的受控采集、导出和定时任务入口。"],
+        )
+    if any(
+        token in text
+        for token in ("浏览文件", "任意文件", "打开.env", "读取.env", "凭据文件")
+    ):
+        return MarketAgentAnswer(
+            conclusion="无法浏览或读取任意本机文件：多数据源 Agent 只访问已注册的业务数据工具。",
+            warnings=["没有读取文件；凭据只能通过“API 配置向导”检查配置状态。"],
+        )
+    if any(
+        token in text
+        for token in ("删除定时任务", "删掉定时任务", "把任务删", "任务删")
+    ):
+        return MarketAgentAnswer(
+            conclusion="无法删除定时任务：多数据源 Agent 没有任务删除工具。",
+            warnings=["任务未被修改；请在“定时任务 / 数据维护”页面人工确认后删除。"],
+        )
+    if any(
+        token in text
+        for token in ("token", "api key", "apikey", "authorization", "凭据")
+    ) and any(
+        token in text
+        for token in ("替我", "帮我改", "直接改", "写进", "写入", "发给你", "接收")
+    ) and not any(token in text for token in ("不发", "不想把", "不会把", "不要把")):
+        return MarketAgentAnswer(
+            conclusion="无法代写或接收凭据：Agent 没有读取、修改凭据或文件的工具。",
+            warnings=["请使用“API 配置向导”在本机完成配置，不要把密钥发送到对话中。"],
+        )
+    return None
+
+
+def deterministic_software_help_answer(message: str) -> MarketAgentAnswer | None:
+    text = message.strip().lower()
+    asks_how = any(
+        token in text
+        for token in ("怎么用", "如何使用", "怎么操作", "在哪里", "找不到", "使用流程", "新手")
+    )
+    if not asks_how:
+        return None
+    if any(token in text for token in ("api key", "apikey", "凭据", "密钥", "token")):
+        return None
+    if any(token in text for token in ("定时", "计划任务")):
+        return MarketAgentAnswer(
+            conclusion=(
+                "设置定时采集时，请先说明数据源、数据集、运行频率和时间；Agent 会生成"
+                "受控任务参数并等待审批。审批后只保存本地任务定义，不会立即采集。"
+            ),
+            warnings=[
+                "如需软件关闭后仍自动运行，请打开“定时任务 / 数据维护”页面，为任务安装 Windows 触发器。",
+                "运行结果和失败原因也在任务页面查看；缺少来源凭据时先到“API 配置向导”处理。",
+            ],
+        )
+    if any(token in text for token in ("采集", "下载", "更新数据")):
+        return MarketAgentAnswer(
+            conclusion=(
+                "采集数据时，请给出数据源、数据集或业务类型、地区和日期范围。Agent 会先"
+                "展示范围、预计请求数、凭据状态和写库副作用，只有审批后才执行。"
+            ),
+            warnings=[
+                "不确定数据集名称时，先问“某来源有哪些数据集”；不确定本地数据是否足够时，先问“数据更新到哪”。",
+                "外部服务失败时，先检查 API 配置向导，再缩短日期范围并查看任务时间线中的具体原因。",
+            ],
+        )
+    if "导出" in text:
+        return MarketAgentAnswer(
+            conclusion=(
+                "先让 Agent 查询或分析目标数据，再说明 CSV 或 PNG 格式；导出文件只写入"
+                "项目预设的 exports 目录，不需要审批。"
+            ),
+            warnings=["请明确来源、指标、地区、日期范围和文件格式，避免导出内容与预期不一致。"],
+        )
+    return MarketAgentAnswer(
+        conclusion=(
+            "新用户建议按“数据总览 → API 配置向导 → 单一数据源小范围采集 → Agent 查询/比较"
+            " → 定时任务”的顺序使用。左侧导航覆盖全部功能，顶部搜索可按关键词快速跳转。"
+        ),
+        warnings=[
+            "数据总览用于确认本地覆盖；API 配置向导用于申请、保存和验证凭据；所有 Agent 写数据操作都需要审批。"
+        ],
+    )
+
+
+def _collection_failure(reason: str, guidance: str) -> MarketAgentAnswer:
+    return MarketAgentAnswer(
+        conclusion=f"当前无法发起采集：{reason}",
+        warnings=[f"未执行采集，也没有修改业务数据。{guidance}"],
+    )
+
+
+def _message_dates(message: str) -> list[date]:
+    values = []
+    for raw in re.findall(r"20\d{2}-\d{2}-\d{2}", message):
+        try:
+            parsed = date.fromisoformat(raw)
+        except ValueError:
+            continue
+        if parsed not in values:
+            values.append(parsed)
+    return values
+
+
+def _has_schedule_intent(text: str) -> bool:
+    explicit_schedule = any(
+        token in text for token in ("定时任务", "计划任务", "定时采集")
+    )
+    recurring_schedule = any(token in text for token in ("每天", "每周", "每月")) and any(
+        token in text
+        for token in ("自动", "采集", "补采", "抓取", "更新", "安排", "创建", "任务")
+    )
+    return explicit_schedule or recurring_schedule
+
+
+def deterministic_schedule_route(
+    message: str,
+) -> tuple[str, dict[str, Any]] | MarketAgentAnswer | None:
+    text = message.strip().lower()
+    schedule_intent = _has_schedule_intent(text)
+    if not schedule_intent:
+        return None
+    if any(token in text for token in ("列出", "哪些", "查看", "列表", "状态")):
+        return None
+
+    hour, minute = parse_clock_time(message)
+    if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+        return _collection_failure(
+            "定时任务运行时间无效。",
+            "请使用 00:00 至 23:59 的本地时间。",
+        )
+
+    schedule_kind = "daily"
+    if "每周" in text:
+        schedule_kind = "weekly"
+    elif "每月" in text:
+        schedule_kind = "monthly"
+    enabled = not any(token in text for token in ("禁用", "先别启用", "不要启用"))
+    name_match = re.search(r"名字叫([^；;，,。]+)", message)
+
+    dataset = None
+    area = None
+    label = None
+    if any(token in text for token in ("entso-e", "entsoe", "欧洲", "德国", "法国")):
+        area = "DE-LU" if any(token in text for token in ("德国", "de-lu")) else None
+        if "法国" in text:
+            area = "FR"
+        if area is None:
+            return _collection_failure(
+                "ENTSO-E 定时任务缺少可识别的竞价区。",
+                "请指定德国、法国或明确的 ENTSO-E 区域代码。",
+            )
+        if any(token in text for token in ("负荷", "需求")):
+            dataset = "entsoe_actual_total_load"
+            label = "ENTSO-E 昨日负荷"
+        elif any(token in text for token in ("电价", "价格", "日前价")):
+            dataset = "entsoe_day_ahead_prices"
+            label = "ENTSO-E 昨日价格"
+        else:
+            dataset = "entsoe_core"
+            label = "ENTSO-E 核心数据增量更新"
+    elif any(token in text for token in ("elexon", "英国")):
+        if any(token in text for token in ("负荷", "需求")):
+            dataset = "elexon_initial_demand_outturn"
+            label = "Elexon 需求补采"
+        elif any(token in text for token in ("电价", "价格", "系统价")):
+            dataset = "elexon_system_prices"
+            label = "Elexon 系统价格补采"
+        else:
+            dataset = "elexon_core"
+            label = "Elexon 核心数据增量更新"
+    elif any(token in text for token in ("gridstatus", "北美")):
+        if any(token in text for token in ("仅目录", "只更新目录", "只刷新目录")):
+            dataset = "gridstatus_datasets"
+            label = "GridStatus 目录刷新"
+        else:
+            dataset = "gridstatus_core"
+            label = "GridStatus 核心数据增量更新"
+    elif any(token in text for token in ("广州电力交易中心", "广州交易中心", "gzpec")):
+        dataset = "gzpec_all"
+        label = "广州交易中心公开信息更新"
+    elif any(token in text for token in ("elecheck", "易能电", "现货")):
+        try:
+            elecheck_areas = list_elecheck_source_update_areas()
+        except (OSError, ValueError, sqlite3.Error):
+            elecheck_areas = []
+        if not elecheck_areas:
+            elecheck_areas = [
+                "江苏",
+                "山西",
+                "山东",
+                "广东",
+                "浙江",
+                "安徽",
+                "福建",
+                "甘肃",
+                "蒙西",
+                "湖北",
+                "湖南",
+                "河南",
+                "河北",
+                "辽宁",
+            ]
+        area = next(
+            (
+                item for item in sorted(elecheck_areas, key=len, reverse=True) if item in message
+            ),
+            None,
+        )
+        if area is not None and "现货" in text and not any(
+            token in text for token in ("全部", "各类", "所有数据", "来源新数据")
+        ):
+            dataset = "elecheck_spot"
+            label = f"{area} Elecheck 昨日现货"
+        else:
+            dataset = "elecheck_all"
+            label = f"{area or '全部地区'} Elecheck 增量更新"
+    if dataset is None or label is None:
+        return _collection_failure(
+            "没有识别出受支持的数据源和数据集。",
+            "请指定 ENTSO-E、Elexon、GridStatus、Elecheck 或广州交易中心。",
+        )
+    name = name_match.group(1).strip() if name_match else label
+    return "market_create_schedule", {
+        "name": name,
+        "dataset": dataset,
+        "schedule_kind": schedule_kind,
+        "schedule_time": f"{hour:02d}:{minute:02d}",
+        "enabled": enabled,
+        "area": area,
+    }
+
+
+def deterministic_collection_route(
+    message: str,
+) -> tuple[str, dict[str, Any]] | MarketAgentAnswer | None:
+    text = message.strip().lower()
+    explicit_collection = any(
+        token in text
+        for token in (
+            "采集",
+            "补采",
+            "补一下",
+            "采一下",
+            "采一采",
+            "采完",
+            "全采",
+            "抓取",
+            "帮我抓",
+            "刷新",
+        )
+    )
+    explicit_collection = explicit_collection or (
+        "更新" in text and "更新时间" not in text and "更新到哪" not in text
+    )
+    if not explicit_collection:
+        return None
+
+    dates = _message_dates(message)
+    if any(token in text for token in ("广州电力交易中心", "广州交易中心", "gzpec")):
+        return "market_collect_gzpec", {}
+    if "gridstatus" in text or "北美" in text:
+        if any(token in text for token in ("目录", "数据集", "catalog")):
+            dataset_candidates = [
+                token
+                for token in re.findall(r"\b[a-z][a-z0-9_]{2,}\b", text)
+                if "_" in token and token != "gridstatus"
+            ]
+            if not dataset_candidates:
+                return "market_collect_gridstatus", {"operation": "refresh_catalog"}
+        else:
+            dataset_candidates = [
+                token
+                for token in re.findall(r"\b[a-z][a-z0-9_]{2,}\b", text)
+                if "_" in token and token != "gridstatus"
+            ]
+        if dataset_candidates and dates:
+            start, end = dates[0], dates[-1]
+            if (end - start).days + 1 > 7:
+                return _collection_failure(
+                    "GridStatus 单次查询范围超过 7 天。",
+                    "请缩短日期范围后重试。",
+                )
+            return "market_collect_gridstatus", {
+                "operation": "query",
+                "dataset": dataset_candidates[0],
+                "location": "PSEG" if "pseg" in text else None,
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "limit": 1000,
+            }
+        return _collection_failure(
+            "GridStatus 数据查询缺少精确数据集和日期范围。",
+            "请先查看本地数据集目录，再指定数据集以及最多 7 天的日期范围。",
+        )
+
+    if any(token in text for token in ("elexon", "英国")):
+        if not dates:
+            return _collection_failure(
+                "Elexon 采集缺少业务日期。",
+                "请提供开始和结束日期；单次范围最多 31 天。",
+            )
+        start, end = dates[0], dates[-1]
+        if (end - start).days + 1 > 31:
+            return _collection_failure(
+                "Elexon 单次采集范围超过 31 天。",
+                "请把任务拆分为多个不超过 31 天的批次。",
+            )
+        dataset = "elexon_system_prices"
+        if any(token in text for token in ("负荷", "需求")):
+            dataset = "elexon_initial_demand_outturn"
+        elif "风电" in text:
+            dataset = "elexon_wind_generation_forecast"
+        elif any(token in text for token in ("燃料", "发电")):
+            dataset = "elexon_generation_by_fuel_half_hourly"
+        elif any(token in text for token in ("互联", "潮流")):
+            dataset = "elexon_interconnector_flows"
+        return "market_collect_elexon", {
+            "dataset": dataset,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        }
+
+    if any(token in text for token in ("entso-e", "entsoe", "欧洲")):
+        if not dates:
+            return _collection_failure(
+                "ENTSO-E 采集缺少地区和日期范围。",
+                "请指定竞价区以及开始、结束日期；单次范围最多 31 天。",
+            )
+        start, end = dates[0], dates[-1]
+        if (end - start).days + 1 > 31:
+            return _collection_failure(
+                "ENTSO-E 单次采集范围超过 31 天。",
+                "请把任务拆分为多个不超过 31 天的批次。",
+            )
+        area_aliases = {
+            "德国": "DE-LU",
+            "de-lu": "DE-LU",
+            "法国": "FR",
+            "西班牙": "ES",
+            "意大利": "IT-NORTH",
+            "英国": "GB",
+        }
+        matched_areas = []
+        for token, value in area_aliases.items():
+            if token in text and value not in matched_areas:
+                matched_areas.append(value)
+        cross_border = any(token in text for token in ("跨境", "跨区", "潮流", "互联线"))
+        if cross_border:
+            if len(matched_areas) < 2:
+                return _collection_failure(
+                    "ENTSO-E 跨境潮流采集缺少两个竞价区。",
+                    "请明确流入区和流出区，例如德国到法国；单次范围最多 31 天。",
+                )
+            return "market_collect_entsoe", {
+                "dataset": "entsoe_cross_border_physical_flows",
+                "in_area": matched_areas[0],
+                "out_area": matched_areas[1],
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+            }
+        area = matched_areas[0] if matched_areas else None
+        if area is None:
+            return _collection_failure(
+                "ENTSO-E 采集缺少可识别的竞价区。",
+                "请补充地区，例如德国、法国或明确的 ENTSO-E 区域代码。",
+            )
+        dataset = "entsoe_day_ahead_prices"
+        if "负荷" in text:
+            dataset = "entsoe_actual_total_load"
+        elif "发电" in text:
+            dataset = "entsoe_actual_generation_by_type"
+        return "market_collect_entsoe", {
+            "dataset": dataset,
+            "area": area,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        }
+
+    if any(token in text for token in ("elecheck", "易能电", "现货", "代理购电", "机制电价")):
+        if any(token in text for token in ("机制电价", "增量机制")):
+            return "market_collect_elecheck", {"category": "mechanism"}
+        if "代理购电" in text:
+            months = []
+            for raw in re.findall(r"20\d{2}-(?:0[1-9]|1[0-2])", message):
+                if raw not in months:
+                    months.append(raw)
+            if not months:
+                return _collection_failure(
+                    "代理购电采集缺少月份范围。",
+                    "请提供 YYYY-MM 格式的开始和结束月份。",
+                )
+            return "market_collect_elecheck", {
+                "category": "purchasing",
+                "start_month": months[0],
+                "end_month": months[-1],
+            }
+        try:
+            areas = list_elecheck_source_update_areas()
+        except (OSError, ValueError, sqlite3.Error):
+            areas = []
+        if not areas:
+            areas = ["江苏", "山西", "山东", "广东", "浙江", "安徽", "福建", "甘肃", "蒙西"]
+        area = next(
+            (item for item in sorted(areas, key=len, reverse=True) if item in message),
+            None,
+        )
+        if area is None or not dates:
+            return _collection_failure(
+                "Elecheck 现货采集缺少地区或日期范围。",
+                "请指定一个地区和开始、结束日期；单次范围最多 31 天。",
+            )
+        start, end = dates[0], dates[-1]
+        if (end - start).days + 1 > 31:
+            return _collection_failure(
+                "Elecheck 现货单次采集范围超过 31 天。",
+                "请把任务拆分为多个不超过 31 天的批次。",
+            )
+        return "market_collect_elecheck", {
+            "category": "spot",
+            "area": area,
+            "start_date": start.isoformat(),
+            "end_date": end.isoformat(),
+        }
     return None
 
 
 def candidate_tool_names(message: str, registry: ToolRegistry) -> list[str]:
     text = message.strip().lower()
+    if any(token in text for token in ("api key", "apikey", "凭据", "密钥", "401", "403")):
+        return ["market_get_credential_setup_guide"]
+    if _has_schedule_intent(text):
+        if any(token in text for token in ("列出", "查看", "哪些", "状态")):
+            return ["market_list_schedules"]
+        return ["market_create_schedule"]
     is_write = any(token in text for token in ("采集", "更新", "刷新", "抓取"))
     if is_write:
         if any(token in text for token in ("entso-e", "entsoe", "欧洲")):
@@ -117,9 +749,52 @@ def candidate_tool_names(message: str, registry: ToolRegistry) -> list[str]:
             for token in ("elecheck", "易能电", "现货", "代理购电", "机制电价")
         ):
             return ["market_collect_elecheck"]
+    if any(token in text for token in ("导出", "csv", "png")):
+        return ["market_export_result"]
+    source_mentions = sum(
+        any(alias in text for alias in aliases)
+        for aliases in (
+            ("elecheck", "易能电", "江苏", "山西"),
+            ("entso-e", "entsoe", "欧洲", "德国"),
+            ("elexon", "英国"),
+            ("gridstatus", "北美"),
+            ("广州电力交易中心", "广州交易中心", "gzpec"),
+        )
+    )
+    mentions_external_source = any(
+        token in text
+        for token in (
+            "entso-e",
+            "entsoe",
+            "欧洲",
+            "德国",
+            "elexon",
+            "英国",
+            "gridstatus",
+            "北美",
+            "广州电力交易中心",
+            "广州交易中心",
+            "gzpec",
+        )
+    )
+    if source_mentions <= 1 and not mentions_external_source and any(
+        token in text for token in ("日前价", "实时价", "现货", "价差", "实时比日前")
+    ):
+        return ["market_analyze_elecheck_spot"]
     if any(token in text for token in ("比较", "对比", "并列", "差额", "排名")):
         return ["market_compare_series"]
-    if any(token in text for token in ("广州电力交易中心", "gzpec", "新闻", "公开信息")):
+    if any(
+        token in text
+        for token in (
+            "广州电力交易中心",
+            "广州交易中心",
+            "gzpec",
+            "新闻",
+            "消息",
+            "公开信息",
+            "绿证",
+        )
+    ):
         return ["market_search_gzpec_news", "market_get_gzpec_article"]
     if "代理购电" in text:
         return ["market_analyze_elecheck_purchasing"]
@@ -130,10 +805,6 @@ def candidate_tool_names(message: str, registry: ToolRegistry) -> list[str]:
         for token in ("entso-e", "entsoe", "elexon", "gridstatus", "英国", "欧洲", "北美")
     ):
         return ["market_query_series"]
-    if any(token in text for token in ("日前价", "实时价", "现货", "价差")):
-        return ["market_analyze_elecheck_spot"]
-    if any(token in text for token in ("导出", "csv", "png")):
-        return ["market_export_result"]
     preferred = [
         "market_query_series",
         "market_compare_series",
@@ -141,6 +812,16 @@ def candidate_tool_names(message: str, registry: ToolRegistry) -> list[str]:
         "market_list_datasets",
     ]
     return [name for name in preferred if name in registry.names()]
+
+
+def user_failure_explanation(error: AgentError) -> tuple[str, str]:
+    """Turn internal failures into a concise, actionable user-facing explanation."""
+    return explain_agent_failure(
+        code=error.code,
+        message=error.message,
+        retryable=error.retryable,
+        scope_label="对应数据源",
+    )
 
 
 class MarketAgentLoop:
@@ -215,6 +896,86 @@ class MarketAgentLoop:
         self._event(run_id, session_id, "run_started", {"protocol": self.protocol.value})
         try:
             route = deterministic_route(message)
+            boundary_answer = deterministic_boundary_answer(message)
+            if boundary_answer is not None:
+                self._event(
+                    run_id,
+                    session_id,
+                    "request_declined",
+                    {"reason": "unsupported_or_unsafe_capability"},
+                )
+                return self._complete(
+                    run_id,
+                    session_id,
+                    boundary_answer,
+                    model_calls=0,
+                    usage={},
+                )
+            software_help = deterministic_software_help_answer(message)
+            if software_help is not None:
+                self._event(
+                    run_id,
+                    session_id,
+                    "software_guidance",
+                    {},
+                )
+                return self._complete(
+                    run_id,
+                    session_id,
+                    software_help,
+                    model_calls=0,
+                    usage={},
+                )
+            schedule_route = deterministic_schedule_route(message)
+            if isinstance(schedule_route, MarketAgentAnswer):
+                self._event(
+                    run_id,
+                    session_id,
+                    "schedule_details_required",
+                    {"reason": schedule_route.conclusion},
+                )
+                return self._complete(
+                    run_id,
+                    session_id,
+                    schedule_route,
+                    model_calls=0,
+                    usage={},
+                )
+            if schedule_route is not None:
+                tool_name, arguments = schedule_route
+                return self._propose_direct_approval(
+                    run_id,
+                    session_id,
+                    tool_name,
+                    arguments,
+                )
+            contextual_message = contextualize_continuation(
+                message,
+                self.repository.model_messages(session_id),
+            )
+            collection_route = deterministic_collection_route(contextual_message)
+            if isinstance(collection_route, MarketAgentAnswer):
+                self._event(
+                    run_id,
+                    session_id,
+                    "collection_details_required",
+                    {"reason": collection_route.conclusion},
+                )
+                return self._complete(
+                    run_id,
+                    session_id,
+                    collection_route,
+                    model_calls=0,
+                    usage={},
+                )
+            if collection_route is not None:
+                tool_name, arguments = collection_route
+                return self._propose_direct_approval(
+                    run_id,
+                    session_id,
+                    tool_name,
+                    arguments,
+                )
             if route is not None:
                 tool_name, arguments = route
                 direct_call = ProviderToolCall(
@@ -294,6 +1055,104 @@ class MarketAgentLoop:
             if self.close_provider_after_run:
                 self.provider.close()
 
+    def _propose_direct_approval(
+        self,
+        run_id: str,
+        session_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> AgentRunResult:
+        definition, parsed = self.registry.validate(tool_name, arguments)
+        if definition.risk_level != RiskLevel.APPROVAL:
+            raise ValueError("确定性采集路由只能提出需要审批的工具。")
+        normalized_arguments = parsed.model_dump(mode="json")
+        call = ProviderToolCall(
+            id=f"direct-{uuid4()}",
+            name=tool_name,
+            arguments=normalized_arguments,
+        )
+        record = self.repository.create_tool_call(
+            call_id=call.id,
+            run_id=run_id,
+            session_id=session_id,
+            tool_name=tool_name,
+            risk_level=definition.risk_level,
+            arguments=normalized_arguments,
+        )
+        call = call.model_copy(update={"id": record["id"]})
+        self._active_tool_names = [tool_name]
+        messages = self._initial_messages(session_id)
+        messages.append(self._assistant_tool_message(ProviderResponse(), [call]))
+        preview = (
+            collection_preview(tool_name, normalized_arguments)
+            if tool_name.startswith("market_collect_")
+            else {
+                "estimated_requests": 0,
+                "start": "保存本地任务定义",
+                "end": "不立即运行",
+            }
+        )
+        side_effect = (
+            f"{definition.side_effect} "
+            f"预计请求：{preview['estimated_requests']}；"
+            f"范围：{preview.get('start') or '当前快照'}"
+            f" 至 {preview.get('end') or '当前快照'}；"
+            f"运行凭据：{preview.get('credential_status') or '不适用'}。"
+        )
+        pending_context = {
+            "protocol": self.protocol.value,
+            "active_tool_names": self._active_tool_names,
+            "messages": messages,
+            "tool_payloads": [],
+        }
+        self.repository.update_run(
+            run_id,
+            status=RunStatus.AWAITING_APPROVAL.value,
+            pending_context=pending_context,
+            protocol=self.protocol.value,
+        )
+        self._event(
+            run_id,
+            session_id,
+            "intent_routed",
+            {"tool_name": tool_name, "arguments": normalized_arguments},
+        )
+        self._event(
+            run_id,
+            session_id,
+            "tool_proposed",
+            {"tool_name": tool_name, "arguments": normalized_arguments},
+        )
+        self._event(
+            run_id,
+            session_id,
+            "approval_required",
+            {
+                "tool_name": tool_name,
+                "arguments": normalized_arguments,
+                "arguments_hash": record["arguments_hash"],
+                "side_effect": side_effect,
+                "preview": preview,
+            },
+        )
+        return AgentRunResult(
+            ok=False,
+            status=RunStatus.AWAITING_APPROVAL,
+            session_id=session_id,
+            run_id=run_id,
+            pending_approval=PendingApproval(
+                tool_call_id=call.id,
+                run_id=run_id,
+                tool_name=tool_name,
+                risk_level=definition.risk_level,
+                arguments=normalized_arguments,
+                arguments_hash=record["arguments_hash"],
+                side_effect=side_effect,
+            ),
+            events=self.repository.list_events(run_id),
+            usage={},
+        )
+
     def resume_approval(
         self,
         tool_call_id: str,
@@ -318,11 +1177,24 @@ class MarketAgentLoop:
                     code="approval_rejected",
                     message="用户拒绝了待执行操作。",
                 )
+                conclusion, guidance = user_failure_explanation(error)
+                answer = MarketAgentAnswer(
+                    conclusion=conclusion,
+                    warnings=[guidance],
+                )
+                answer_payload = answer.model_dump(mode="json")
                 self.repository.update_run(
                     run_id,
                     status=RunStatus.REJECTED.value,
+                    answer=answer_payload,
                     error=error.model_dump(mode="json"),
                     clear_pending_context=True,
+                )
+                self.repository.add_message(
+                    session_id,
+                    role="assistant",
+                    content=answer_payload,
+                    run_id=run_id,
                 )
                 self._event(run_id, session_id, "approval_rejected", {})
                 return AgentRunResult(
@@ -330,6 +1202,7 @@ class MarketAgentLoop:
                     status=RunStatus.REJECTED,
                     session_id=session_id,
                     run_id=run_id,
+                    answer=answer,
                     error=error,
                     events=self.repository.list_events(run_id),
                     usage=run["usage"],
@@ -370,6 +1243,16 @@ class MarketAgentLoop:
                 status=RunStatus.RUNNING.value,
                 clear_pending_context=True,
             )
+            if self._payload_is_program_renderable(payload):
+                answer = self._ground_answer(None, tool_payloads)
+                return self._complete(
+                    run_id,
+                    session_id,
+                    answer,
+                    model_calls=int(run["model_calls"]),
+                    usage=dict(run["usage"]),
+                )
+            self._active_tool_names = []
             return self._run_model_loop(
                 run_id,
                 session_id,
@@ -513,30 +1396,67 @@ class MarketAgentLoop:
                     continue
                 if len(action) > MAX_TOOL_CALLS_PER_RESPONSE:
                     raise ProviderProtocolError("模型单次返回的工具调用数量超过限制。")
-                if len(action) > 1 and any(
-                    self.registry.get(call.name).risk_level == RiskLevel.APPROVAL
-                    for call in action
-                ):
+                approval_calls = []
+                for call in action:
+                    try:
+                        is_approval = (
+                            self.registry.get(call.name).risk_level
+                            == RiskLevel.APPROVAL
+                        )
+                    except ValueError:
+                        is_approval = False
+                    if is_approval:
+                        approval_calls.append(call)
+                if len(action) > 1 and approval_calls:
                     raise ProviderProtocolError("需要审批的操作必须单独调用。")
                 prepared_calls = []
+                invalid_calls: list[tuple[ProviderToolCall, str]] = []
+                assistant_calls: list[ProviderToolCall] = []
                 for call in action:
-                    definition, _parsed = self.registry.validate(call.name, call.arguments)
-                    record = self.repository.create_tool_call(
-                        call_id=call.id,
-                        run_id=run_id,
-                        session_id=session_id,
-                        tool_name=call.name,
-                        risk_level=definition.risk_level,
-                        arguments=call.arguments,
-                    )
+                    try:
+                        definition, parsed = self.registry.validate(
+                            call.name,
+                            call.arguments,
+                        )
+                        normalized_arguments = parsed.model_dump(mode="json")
+                        record = self.repository.create_tool_call(
+                            call_id=call.id,
+                            run_id=run_id,
+                            session_id=session_id,
+                            tool_name=call.name,
+                            risk_level=definition.risk_level,
+                            arguments=normalized_arguments,
+                        )
+                    except ValueError as exc:
+                        message = redact_text(str(exc))
+                        self._event(
+                            run_id,
+                            session_id,
+                            "tool_validation_failed",
+                            {"tool_name": call.name, "message": message},
+                        )
+                        invalid_calls.append((call, message))
+                        assistant_calls.append(call)
+                        continue
+                    call = call.model_copy(update={"arguments": normalized_arguments})
                     call = call.model_copy(update={"id": record["id"]})
                     prepared_calls.append((call, definition, record))
-                messages.append(
-                    self._assistant_tool_message(
-                        response,
-                        [call for call, _definition, _record in prepared_calls],
+                    assistant_calls.append(call)
+                messages.append(self._assistant_tool_message(response, assistant_calls))
+                for call, message in invalid_calls:
+                    messages.append(
+                        self._tool_result_message(
+                            call.id,
+                            call.name,
+                            {
+                                "ok": False,
+                                "error": {
+                                    "code": "invalid_tool_call",
+                                    "message": message,
+                                },
+                            },
+                        )
                     )
-                )
                 for call, definition, record in prepared_calls:
                     if definition.risk_level == RiskLevel.APPROVAL:
                         preview = collection_preview(call.name, call.arguments)
@@ -590,14 +1510,43 @@ class MarketAgentLoop:
                             events=self.repository.list_events(run_id),
                             usage=usage,
                         )
-                    payload = self._execute_tool_call(
-                        run_id,
-                        session_id,
-                        call,
-                        existing_call=True,
-                    )
+                    reused_success = record["status"] == "success"
+                    try:
+                        payload = self._execute_tool_call(
+                            run_id,
+                            session_id,
+                            call,
+                            existing_call=True,
+                        )
+                    except ValueError as exc:
+                        messages.append(
+                            self._tool_result_message(
+                                call.id,
+                                call.name,
+                                {
+                                    "ok": False,
+                                    "error": {
+                                        "code": "tool_execution_failed",
+                                        "message": redact_text(str(exc)),
+                                    },
+                                },
+                            )
+                        )
+                        continue
                     tool_payloads.append((call.name, payload))
                     messages.append(self._tool_result_message(call.id, call.name, payload))
+                    if reused_success and self._payload_is_program_renderable(payload):
+                        answer = self._ground_answer(None, tool_payloads)
+                        answer.warnings.append(
+                            "模型重复了相同查询，系统已复用结果并直接生成结论。"
+                        )
+                        return self._complete(
+                            run_id,
+                            session_id,
+                            answer,
+                            model_calls=model_calls,
+                            usage=usage,
+                        )
                 correction_attempted = False
                 continue
         if tool_payloads:
@@ -795,7 +1744,12 @@ class MarketAgentLoop:
         datasets: list[DatasetCatalogItem] = []
         catalog_summaries: list[DatasetCatalogSummary] = []
         reference_items: list[ReferenceItem] = []
+        assistant_conclusions: list[str] = []
+        series_units: list[str] = []
+        empty_series_count = 0
         for tool_name, payload in tool_payloads:
+            if payload.get("assistant_conclusion"):
+                assistant_conclusions.append(str(payload["assistant_conclusion"]))
             for raw_fact in payload.get("facts") or []:
                 try:
                     fact = GroundedFact.model_validate(raw_fact)
@@ -816,6 +1770,21 @@ class MarketAgentLoop:
                 str(item) for item in payload.get("comparison_basis") or []
             )
             completeness.extend(payload.get("completeness") or [])
+            raw_series = payload.get("series")
+            series_items = (
+                [raw_series]
+                if isinstance(raw_series, dict)
+                else raw_series
+                if isinstance(raw_series, list)
+                else []
+            )
+            for series in series_items:
+                if not isinstance(series, dict):
+                    continue
+                if series.get("unit"):
+                    series_units.append(str(series["unit"]))
+                if "points" in series and not series.get("points"):
+                    empty_series_count += 1
             for raw_dataset in payload.get("datasets") or []:
                 if not isinstance(raw_dataset, dict):
                     continue
@@ -840,6 +1809,8 @@ class MarketAgentLoop:
         conclusion = (
             model_answer.conclusion.strip()
             if model_answer and model_answer.conclusion.strip()
+            else " ".join(assistant_conclusions)
+            if assistant_conclusions
             else self._deterministic_conclusion(
                 facts,
                 files,
@@ -860,6 +1831,9 @@ class MarketAgentLoop:
             )
             if model_answer:
                 warnings.append("已将不适用于非数值结果的模型兜底语句替换为工具内容。")
+        if not facts and empty_series_count:
+            conclusion = "查询完成，但在所选地区和日期范围内没有找到本地数据；未补零，也未编造数值。"
+            warnings.append("可以先采集对应日期的数据，或调整日期范围后重试。")
         if not self._numeric_claims_are_grounded(conclusion, facts):
             conclusion = self._deterministic_conclusion(
                 facts,
@@ -893,7 +1867,9 @@ class MarketAgentLoop:
             conclusion=conclusion,
             data_range=self._unique(data_ranges),
             business_metrics=metrics,
-            units=self._unique([fact.unit for fact in facts if fact.unit]),
+            units=self._unique(
+                [fact.unit for fact in facts if fact.unit] + series_units
+            ),
             completeness=completeness,
             warnings=self._unique(warnings),
             generated_files=self._unique(files),
@@ -915,6 +1891,8 @@ class MarketAgentLoop:
 
     @staticmethod
     def _payload_is_program_renderable(payload: dict[str, Any]) -> bool:
+        if payload.get("assistant_conclusion"):
+            return True
         if "datasets" in payload or isinstance(payload.get("article"), dict):
             return True
         if payload.get("facts") or payload.get("generated_files"):
@@ -1053,10 +2031,35 @@ class MarketAgentLoop:
             suffix = "等" if len(reference_items) > 5 else ""
             return f"已找到 {len(reference_items)} 条公开信息：{names}{suffix}。"
         if facts:
+            dataset_keys = list(dict.fromkeys((fact.source, fact.dataset) for fact in facts))
+            selected_facts = facts[:3]
+            if len(dataset_keys) > 1:
+                selected_facts = []
+                for source, dataset in dataset_keys[:4]:
+                    average = next(
+                        (
+                            fact
+                            for fact in facts
+                            if fact.source == source
+                            and fact.dataset == dataset
+                            and fact.label == "结果均值"
+                        ),
+                        None,
+                    )
+                    if average is not None:
+                        selected_facts.append(average)
             snippets = []
-            for fact in facts[:3]:
+            for fact in selected_facts:
                 unit = f" {fact.unit}" if fact.unit else ""
-                snippets.append(f"{fact.label}为 {fact.value}{unit}")
+                value = (
+                    f"{fact.value:.2f}"
+                    if isinstance(fact.value, float)
+                    else str(fact.value)
+                )
+                label = fact.label
+                if len(dataset_keys) > 1:
+                    label = f"{fact.source} / {fact.dataset} {label}"
+                snippets.append(f"{label}为 {value}{unit}")
             return "；".join(snippets) + "。"
         if files:
             return f"已生成 {len(files)} 个文件。"
@@ -1187,6 +2190,16 @@ class MarketAgentLoop:
             retryable=bool(getattr(exc, "retryable", False)),
             details={"error_type": type(exc).__name__},
         )
+        conclusion, guidance = user_failure_explanation(error)
+        completed_actions, change_note = completed_change_explanation(
+            self.repository.list_tool_calls(run_id)
+        )
+        answer = MarketAgentAnswer(
+            conclusion=conclusion,
+            warnings=[change_note, guidance],
+            executed_actions=completed_actions,
+        )
+        answer_payload = answer.model_dump(mode="json")
         try:
             run = self.repository.get_run(run_id)
             if run["status"] == RunStatus.AWAITING_APPROVAL.value:
@@ -1196,7 +2209,14 @@ class MarketAgentLoop:
                 self.repository.update_run(
                     run_id,
                     status=status.value,
+                    answer=answer_payload,
                     error=error.model_dump(mode="json"),
+                )
+                self.repository.add_message(
+                    session_id,
+                    role="assistant",
+                    content=answer_payload,
+                    run_id=run_id,
                 )
             self._event(
                 run_id,
@@ -1215,6 +2235,7 @@ class MarketAgentLoop:
             status=status,
             session_id=session_id,
             run_id=run_id,
+            answer=answer,
             error=error,
             events=events,
             usage=usage,
@@ -1227,11 +2248,23 @@ class MarketAgentLoop:
         usage: dict[str, int | float],
     ) -> AgentRunResult:
         error = AgentError(code="run_stopped", message="用户已停止运行。")
+        answer = MarketAgentAnswer(
+            conclusion="任务已按用户要求停止。",
+            warnings=["未完成的模型结果已丢弃，后续工具不会执行。"],
+        )
+        answer_payload = answer.model_dump(mode="json")
         self.repository.update_run(
             run_id,
             status=RunStatus.STOPPED.value,
+            answer=answer_payload,
             error=error.model_dump(mode="json"),
             usage=usage,
+        )
+        self.repository.add_message(
+            session_id,
+            role="assistant",
+            content=answer_payload,
+            run_id=run_id,
         )
         self._event(run_id, session_id, "stopped", {})
         return AgentRunResult(
@@ -1239,6 +2272,7 @@ class MarketAgentLoop:
             status=RunStatus.STOPPED,
             session_id=session_id,
             run_id=run_id,
+            answer=answer,
             error=error,
             events=self.repository.list_events(run_id),
             usage=usage,

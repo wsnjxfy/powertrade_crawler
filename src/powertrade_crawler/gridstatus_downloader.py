@@ -20,6 +20,13 @@ from powertrade_crawler.gridstatus_rate_limit import (
     GRIDSTATUS_SAFE_INTERVAL_SECONDS,
     gridstatus_request_limiter,
 )
+from powertrade_crawler.network_errors import (
+    NetworkFailure,
+    NetworkFailureKind,
+    failure_from_exception,
+    failure_from_response,
+    retry_after_seconds,
+)
 
 
 GRIDSTATUS_QUERY_BASE_URL = "https://api.gridstatus.io/v1/datasets/{dataset_id}/query"
@@ -514,8 +521,6 @@ def default_window_seconds(metadata: dict[str, Any], *, filtered: bool = False) 
 
 def default_fetch_csv(url: str) -> bytes:
     settings = get_settings()
-    last_error: Exception | None = None
-    safe_url = redact_api_key(url)
     for attempt in range(settings.request_retry_times + 1):
         try:
             gridstatus_request_limiter.wait(
@@ -528,30 +533,27 @@ def default_fetch_csv(url: str) -> bytes:
                 trust_env=False,
             ) as client:
                 response = client.get(url)
-                response.raise_for_status()
+                if response.is_error:
+                    failure = failure_from_response(
+                        "GridStatus",
+                        response,
+                        detail=response.text[:240],
+                        attempts=attempt + 1,
+                    )
+                    if failure.retryable and attempt < settings.request_retry_times:
+                        time.sleep(retry_after_seconds(response, default=1 + attempt))
+                        continue
+                    raise failure
                 return response.content
-        except httpx.HTTPStatusError as exc:
-            body = exc.response.text[:500]
-            raise RuntimeError(
-                f"GridStatus request failed with HTTP {exc.response.status_code}: {body}"
-            ) from exc
-        except httpx.TimeoutException as exc:
-            last_error = exc
-            if attempt < settings.request_retry_times:
+        except NetworkFailure:
+            raise
+        except (httpx.TimeoutException, httpx.RequestError) as exc:
+            failure = failure_from_exception("GridStatus", exc, attempts=attempt + 1)
+            if failure.retryable and attempt < settings.request_retry_times:
                 time.sleep(1 + attempt)
                 continue
-            raise RuntimeError(
-                f"GridStatus request timed out after {settings.request_timeout_seconds} seconds: "
-                f"{safe_url}"
-            ) from exc
-        except httpx.RequestError as exc:
-            last_error = exc
-            if attempt < settings.request_retry_times:
-                time.sleep(1 + attempt)
-                continue
-            raise RuntimeError(f"GridStatus request failed: {exc}. URL: {safe_url}") from exc
-
-    raise RuntimeError(f"GridStatus request failed after retries: {safe_url}") from last_error
+            raise failure from exc
+    raise AssertionError("unreachable")
 
 
 def default_fetch_json(url: str) -> dict[str, Any]:
@@ -560,9 +562,17 @@ def default_fetch_json(url: str) -> dict[str, Any]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"API did not return JSON: {text[:300]}") from exc
+        raise NetworkFailure(
+            service="GridStatus",
+            kind=NetworkFailureKind.INVALID_RESPONSE,
+            retryable=True,
+        ) from exc
     if not isinstance(payload, dict):
-        raise RuntimeError("API JSON response was not an object.")
+        raise NetworkFailure(
+            service="GridStatus",
+            kind=NetworkFailureKind.INVALID_RESPONSE,
+            retryable=True,
+        )
     return payload
 
 

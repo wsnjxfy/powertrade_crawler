@@ -1,0 +1,44 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "colloquial_spread",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_spot"
+      ],
+      "tool_arguments": [
+        {
+          "area": "江苏",
+          "start_date": null,
+          "end_date": null,
+          "metric": "spread",
+          "aggregation": "daily"
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 23 CNY/MWh；结果均值为 9.211639492753608 CNY/MWh；结果最小值为 -37.734375 CNY/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 48.06
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 48.06
+  }
+}

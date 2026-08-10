@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import math
 import sqlite3
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
@@ -12,6 +13,7 @@ from tkinter.filedialog import asksaveasfilename
 from typing import Any, Literal
 
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.sqlite_utils import sqlite_row_connection
 
 
 DAY_AHEAD_METRIC = "avg_day_ahead_price"
@@ -87,10 +89,8 @@ class ElecheckPriceDashboardRepository:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
 
-    def connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        return connection
+    def connect(self) -> AbstractContextManager[sqlite3.Connection]:
+        return sqlite_row_connection(self.db_path)
 
     def table_exists(self, table_name: str) -> bool:
         if not self.db_path.exists():

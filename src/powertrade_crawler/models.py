@@ -3,6 +3,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from powertrade_crawler.datetime_utils import utc_now_naive
+
 
 class NewsContentBlock(BaseModel):
     sequence: int
@@ -21,7 +23,7 @@ class GzpecNewsRecord(BaseModel):
     index_url: str = Field(description="The index page where this news link was found.")
     news_type: str = Field(description="green_certificate, spot_market, or ordinary.")
     content_blocks: list[NewsContentBlock] = Field(default_factory=list)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -38,7 +40,7 @@ class GridStatusRecord(BaseModel):
     interval_end_utc: str | None = None
     record_time_utc: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -68,7 +70,7 @@ class EntsoeRecord(BaseModel):
     unit: str | None = None
     currency: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -97,7 +99,7 @@ class ElexonRecord(BaseModel):
     unit: str | None = None
     currency: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -155,7 +157,7 @@ class GridStatusDatasetMetadataRecord(BaseModel):
     # GridStatus 返回的完整原始元数据，保留用于追溯和兼容未来新增字段。
     raw: dict[str, Any] = Field(default_factory=dict)
     # 本项目采集这条元数据的时间。
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -174,7 +176,7 @@ class ElecheckClearPriceRecord(BaseModel):
     unit: str
     currency: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -201,7 +203,7 @@ class ElecheckAreaRecord(BaseModel):
     source: str = "易能电易查"
     note: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -223,7 +225,7 @@ class ElecheckPurchasingRecord(BaseModel):
     statistic: str | None = None
     related_province_name: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -245,7 +247,7 @@ class ElecheckPurchasingProvinceRecord(BaseModel):
     source: str = "易能电易查"
     province_name: str
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -261,7 +263,7 @@ class ElecheckMechanismElectricityPriceRecord(BaseModel):
     clear_price: float | None = None
     unit: str = "CNY/kWh"
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:
@@ -278,7 +280,7 @@ class MarketRecord(BaseModel):
     unit: str
     currency: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
-    collected_at: datetime = Field(default_factory=datetime.utcnow)
+    collected_at: datetime = Field(default_factory=utc_now_naive)
 
     @property
     def natural_key(self) -> str:

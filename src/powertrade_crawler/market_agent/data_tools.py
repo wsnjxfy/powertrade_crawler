@@ -11,9 +11,13 @@ from pathlib import Path
 from statistics import fmean
 from typing import Any, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.credential_setup import (
+    assistant_credential_setup_payload,
+    credential_is_configured,
+)
 from powertrade_crawler.credentials import get_credential
 from powertrade_crawler.market_agent.schemas import (
     BusinessMetric,
@@ -29,7 +33,13 @@ from powertrade_crawler.market_agent.tools import (
     ToolDefinition,
     ToolRegistry,
 )
-from powertrade_crawler.scheduler import run_spider_and_upsert
+from powertrade_crawler.scheduler import (
+    create_scheduled_job,
+    create_source_update_job,
+    list_scheduled_jobs,
+    run_spider_and_upsert,
+    synchronize_windows_task_state,
+)
 from powertrade_crawler.spiders.elexon import (
     get_elexon_request_config,
     load_elexon_request_configs,
@@ -190,6 +200,32 @@ ELEXON_COLLECTION_DATASETS = {
     "elexon_interconnector_flows",
 }
 
+DATASET_ALIASES = {
+    "spot": "elecheck_spot",
+    "purchasing": "elecheck_purchasing",
+    "mechanism": "elecheck_mechanism",
+    "day_ahead_prices": "entsoe_day_ahead_prices",
+    "actual_total_load": "entsoe_actual_total_load",
+    "actual_generation_by_type": "entsoe_actual_generation_by_type",
+    "cross_border_physical_flows": "entsoe_cross_border_physical_flows",
+    "system_prices": "elexon_system_prices",
+    "indo": "elexon_initial_demand_outturn",
+    "initial_demand_outturn": "elexon_initial_demand_outturn",
+    "generation_by_fuel_half_hourly": "elexon_generation_by_fuel_half_hourly",
+    "wind_generation_forecast": "elexon_wind_generation_forecast",
+    "interconnector_flows": "elexon_interconnector_flows",
+}
+
+DATASET_ID_GUIDANCE = (
+    "使用精确数据集 ID。Elecheck: elecheck_spot, elecheck_purchasing, "
+    "elecheck_mechanism；ENTSO-E: entsoe_day_ahead_prices, "
+    "entsoe_actual_total_load, entsoe_actual_generation_by_type, "
+    "entsoe_cross_border_physical_flows；Elexon: elexon_system_prices, "
+    "elexon_initial_demand_outturn, elexon_generation_by_fuel_half_hourly, "
+    "elexon_wind_generation_forecast, elexon_interconnector_flows。"
+    "GridStatus 使用本地目录返回的动态数据集 ID。"
+)
+
 
 def project_root() -> Path:
     return Path(__file__).resolve().parents[3]
@@ -341,25 +377,71 @@ def _facts_for_series(series: SeriesResult) -> list[GroundedFact]:
             fact_id=f"{prefix}_{name}",
             label=label,
             value=value,
-            unit=series.unit,
+            unit=unit,
             source=series.source,
             dataset=series.dataset,
             time_basis=series.time_basis,
             calculation=calculation,
             coverage=coverage,
         )
-        for name, label, value, calculation in (
-            ("count", "有效点数", len(values), "非空结果点计数"),
-            ("average", "结果均值", fmean(values), "结果点算术平均"),
-            ("minimum", "结果最小值", min(values), "结果点最小值"),
-            ("maximum", "结果最大值", max(values), "结果点最大值"),
-            ("latest", "最新值", values[-1], "按结果时间排序后的最后一个值"),
+        for name, label, value, unit, calculation in (
+            ("count", "有效点数", len(values), "个", "非空结果点计数"),
+            ("average", "结果均值", fmean(values), series.unit, "结果点算术平均"),
+            ("minimum", "结果最小值", min(values), series.unit, "结果点最小值"),
+            ("maximum", "结果最大值", max(values), series.unit, "结果点最大值"),
+            (
+                "latest",
+                "最新值",
+                values[-1],
+                series.unit,
+                "按结果时间排序后的最后一个值",
+            ),
         )
     ]
 
 
 class EmptyArgs(StrictModel):
     pass
+
+
+ManagedScheduleDataset = Literal[
+    "elecheck_all",
+    "entsoe_core",
+    "elexon_core",
+    "gridstatus_core",
+    "gzpec_all",
+    "entsoe_day_ahead_prices",
+    "entsoe_actual_total_load",
+    "elexon_system_prices",
+    "elexon_initial_demand_outturn",
+    "gridstatus_datasets",
+    "gzpec_news",
+    "elecheck_spot",
+]
+
+
+class CreateManagedScheduleArgs(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    dataset: ManagedScheduleDataset
+    schedule_kind: Literal["daily", "weekly", "monthly"] = "daily"
+    schedule_time: str = "02:00"
+    enabled: bool = True
+    area: str | None = Field(default=None, max_length=80)
+
+    @field_validator("schedule_time")
+    @classmethod
+    def validate_schedule_time(cls, value: str) -> str:
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("schedule_time must use 24-hour HH:MM format")
+        return value
+
+    @model_validator(mode="after")
+    def validate_area(self) -> "CreateManagedScheduleArgs":
+        if self.dataset.startswith("entsoe_") and not self.area:
+            raise ValueError("ENTSO-E schedules require a bidding area")
+        if self.dataset == "elecheck_spot" and not self.area:
+            raise ValueError("Elecheck spot schedules require an area")
+        return self
 
 
 class DataOverviewArgs(StrictModel):
@@ -374,7 +456,7 @@ class ListDatasetsArgs(StrictModel):
 
 class QuerySeriesArgs(StrictModel):
     source: SourceName
-    dataset: str = Field(min_length=1, max_length=160)
+    dataset: str = Field(min_length=1, max_length=160, description=DATASET_ID_GUIDANCE)
     metric: str | None = Field(default=None, max_length=160)
     area: str | None = Field(default=None, max_length=160)
     start_date: date | None = None
@@ -384,8 +466,23 @@ class QuerySeriesArgs(StrictModel):
     group_by: GroupBy = "none"
     limit: int = Field(default=366, ge=1, le=1000)
 
+    @field_validator("dataset", mode="before")
+    @classmethod
+    def normalize_dataset_alias(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower().replace("-", "_")
+        return DATASET_ALIASES.get(normalized, normalized)
+
     @model_validator(mode="after")
     def validate_window(self) -> "QuerySeriesArgs":
+        if self.source == "entsoe" and self.area in {
+            "DE",
+            "DE_LU",
+            "Germany",
+            "德国",
+        }:
+            self.area = "DE-LU"
         _iso_range(self.start_date, self.end_date, max_days=366)
         if self.source == "gzpec":
             raise ValueError("GZPEC 新闻请使用 market_search_gzpec_news。")
@@ -411,6 +508,30 @@ class AnalyzeSpotArgs(StrictModel):
     metric: Literal["day_ahead", "real_time", "spread"] = "day_ahead"
     aggregation: Literal["daily", "monthly"] = "daily"
 
+    @field_validator("area", mode="before")
+    @classmethod
+    def normalize_area_alias(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower().replace(" ", "")
+        return {
+            "jiangsu": "江苏",
+            "shanxi": "山西",
+            "shandong": "山东",
+            "guangdong": "广东",
+            "zhejiang": "浙江",
+            "anhui": "安徽",
+            "fujian": "福建",
+            "gansu": "甘肃",
+            "westerninner mongolia": "蒙西",
+            "westerninnermongolia": "蒙西",
+            "hubei": "湖北",
+            "hunan": "湖南",
+            "henan": "河南",
+            "hebei": "河北",
+            "liaoning": "辽宁",
+        }.get(normalized, value.strip())
+
     @model_validator(mode="after")
     def validate_window(self) -> "AnalyzeSpotArgs":
         _iso_range(self.start_date, self.end_date, max_days=366)
@@ -432,6 +553,20 @@ class AnalyzePurchasingArgs(StrictModel):
 class AnalyzeMechanismArgs(StrictModel):
     region: str | None = Field(default=None, max_length=120)
     limit: int = Field(default=100, ge=1, le=200)
+
+    @field_validator("region", mode="before")
+    @classmethod
+    def normalize_empty_region(cls, value: Any) -> Any:
+        if isinstance(value, str) and value.strip().lower() in {
+            "",
+            "none",
+            "null",
+            "all",
+            "全部",
+            "全国",
+        }:
+            return None
+        return value
 
 
 class SearchNewsArgs(StrictModel):
@@ -1819,6 +1954,12 @@ def _collection_result(
 
 
 def collection_preview(tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    credential_names = {
+        "market_collect_elecheck": "elecheck_authorization",
+        "market_collect_entsoe": "entsoe_security_token",
+        "market_collect_gridstatus": "gridstatus_api_key",
+    }
+    credential_name = credential_names.get(tool_name)
     preview = {
         "source": tool_name.removeprefix("market_collect_"),
         "dataset": arguments.get("dataset") or arguments.get("category") or "news",
@@ -1830,6 +1971,13 @@ def collection_preview(tool_name: str, arguments: dict[str, Any]) -> dict[str, A
         "start": arguments.get("start_date") or arguments.get("start_month"),
         "end": arguments.get("end_date") or arguments.get("end_month"),
         "estimated_requests": 1,
+        "credential_status": (
+            "无需配置"
+            if credential_name is None
+            else "已配置"
+            if credential_is_configured(credential_name)
+            else "待配置"
+        ),
     }
     if tool_name == "market_collect_elecheck":
         if arguments.get("category") == "spot":
@@ -2056,6 +2204,207 @@ def collect_gzpec(_args: CollectGzpecArgs, context: ToolContext) -> dict[str, An
     )
 
 
+def credential_setup_guide(
+    _args: EmptyArgs,
+    _context: ToolContext,
+) -> dict[str, Any]:
+    return assistant_credential_setup_payload()
+
+
+def list_managed_schedules(
+    _args: EmptyArgs,
+    _context: ToolContext,
+) -> dict[str, Any]:
+    jobs = []
+    for row in list_scheduled_jobs():
+        windows_status = synchronize_windows_task_state(row.id)
+        jobs.append({
+            "id": row.id,
+            "name": row.name,
+            "job_type": row.job_type,
+            "spider_name": row.spider_name,
+            "schedule_kind": row.schedule_kind,
+            "schedule_time": row.schedule_time,
+            "date_mode": row.date_mode,
+            "enabled": row.enabled,
+            "windows_installed": windows_status == "installed",
+            "windows_task_status": windows_status,
+        })
+    conclusion = (
+        f"当前共有 {len(jobs)} 个本地定时任务。"
+        if jobs
+        else "当前没有本地定时任务。"
+    )
+    windows_status_labels = {
+        "installed": "已安装",
+        "missing": "已被外部删除",
+        "unknown": "状态未知",
+        "unavailable": "当前系统无法核验",
+    }
+    warnings = [
+        (
+            f"#{job['id']} {job['name']}：{job['schedule_kind']} "
+            f"{job['schedule_time']}，{'已启用' if job['enabled'] else '已禁用'}，"
+            "Windows 触发器"
+            f"{windows_status_labels.get(job['windows_task_status'], '未安装')}。"
+        )
+        for job in jobs[:12]
+    ]
+    if len(jobs) > 12:
+        warnings.append("仅展示前 12 个任务；完整列表请打开“定时任务 / 数据维护”页面。")
+    return {
+        "assistant_conclusion": conclusion,
+        "warnings": warnings,
+        "schedules": jobs,
+        "data_sources": ["本地定时任务"],
+    }
+
+
+def create_managed_schedule(
+    args: CreateManagedScheduleArgs,
+    _context: ToolContext,
+) -> dict[str, Any]:
+    source_presets = {
+        "elecheck_all": ("elecheck", "Elecheck 全来源增量更新", "elecheck_authorization"),
+        "entsoe_core": ("entsoe", "ENTSO-E 核心数据增量更新", "entsoe_security_token"),
+        "elexon_core": ("elexon", "Elexon 核心数据增量更新", None),
+        "gridstatus_core": (
+            "gridstatus",
+            "GridStatus 核心数据增量更新",
+            "gridstatus_api_key",
+        ),
+        "gzpec_all": ("gzpec", "广州电力交易中心公开信息更新", None),
+    }
+    if args.dataset in source_presets:
+        source, label, credential_name = source_presets[args.dataset]
+        job = create_source_update_job(
+            name=args.name,
+            source=source,
+            area=args.area,
+            schedule_kind=args.schedule_kind,
+            schedule_time=args.schedule_time,
+            enabled=args.enabled,
+        )
+        warnings = [
+            "已创建来源级增量更新任务，但不会立即采集；要让 Windows 在软件关闭时仍自动触发，请到“定时任务 / 数据维护”页面安装 Windows 任务。"
+        ]
+        if credential_name is not None and not credential_is_configured(credential_name):
+            warnings.append(
+                f"{label} 所需凭据尚未配置；任务可以保留，但运行前请先打开“API 配置向导”。"
+            )
+        if not args.enabled:
+            warnings.append("该任务按请求创建为禁用状态，不会自动运行。")
+        return {
+            "assistant_conclusion": (
+                f"已创建定时任务“{job.name}”（编号 {job.id}）："
+                f"{label}，{job.schedule_kind} {job.schedule_time}。"
+            ),
+            "warnings": warnings,
+            "schedules": [
+                {
+                    "id": job.id,
+                    "name": job.name,
+                    "job_type": job.job_type,
+                    "source": job.spider_name,
+                    "schedule_kind": job.schedule_kind,
+                    "schedule_time": job.schedule_time,
+                    "date_mode": job.date_mode,
+                    "enabled": job.enabled,
+                }
+            ],
+            "executed_actions": ["market_create_schedule"],
+            "data_sources": ["本地定时任务"],
+        }
+
+    mapping = {
+        "entsoe_day_ahead_prices": (
+            "entsoe_day_ahead_prices",
+            "yesterday",
+            "ENTSO-E 日前价格",
+            "entsoe_security_token",
+        ),
+        "entsoe_actual_total_load": (
+            "entsoe_actual_total_load",
+            "yesterday",
+            "ENTSO-E 实际负荷",
+            "entsoe_security_token",
+        ),
+        "elexon_system_prices": (
+            "elexon_system_prices",
+            "last-7-days",
+            "Elexon 系统价格",
+            None,
+        ),
+        "elexon_initial_demand_outturn": (
+            "elexon_initial_demand_outturn",
+            "last-7-days",
+            "Elexon 初始需求实绩",
+            None,
+        ),
+        "gridstatus_datasets": (
+            "gridstatus_datasets",
+            "none",
+            "GridStatus 数据集目录",
+            "gridstatus_api_key",
+        ),
+        "gzpec_news": (
+            "gzpec-news-combined",
+            "none",
+            "广州电力交易中心公开信息",
+            None,
+        ),
+        "elecheck_spot": (
+            "elecheck_clear_price",
+            "yesterday",
+            "Elecheck 现货价格",
+            "elecheck_authorization",
+        ),
+    }
+    spider_name, date_mode, label, credential_name = mapping[args.dataset]
+    params: dict[str, Any] = {}
+    if args.dataset.startswith("entsoe_") or args.dataset == "elecheck_spot":
+        params["area"] = args.area
+    job = create_scheduled_job(
+        name=args.name,
+        job_type="crawl",
+        spider_name=spider_name,
+        schedule_kind=args.schedule_kind,
+        schedule_time=args.schedule_time,
+        date_mode=date_mode,
+        enabled=args.enabled,
+        params=params,
+    )
+    warnings = [
+        "已创建本地任务定义，但不会立即采集；要让 Windows 在软件关闭时仍自动触发，请到“定时任务 / 数据维护”页面安装 Windows 任务。"
+    ]
+    if credential_name is not None and not credential_is_configured(credential_name):
+        warnings.append(
+            f"{label} 所需凭据尚未配置；任务可以保留，但运行前请先打开“API 配置向导”。"
+        )
+    if not args.enabled:
+        warnings.append("该任务按请求创建为禁用状态，不会自动运行。")
+    return {
+        "assistant_conclusion": (
+            f"已创建定时任务“{job.name}”（编号 {job.id}）："
+            f"{label}，{job.schedule_kind} {job.schedule_time}。"
+        ),
+        "warnings": warnings,
+        "schedules": [
+            {
+                "id": job.id,
+                "name": job.name,
+                "spider_name": job.spider_name,
+                "schedule_kind": job.schedule_kind,
+                "schedule_time": job.schedule_time,
+                "date_mode": job.date_mode,
+                "enabled": job.enabled,
+            }
+        ],
+        "executed_actions": ["market_create_schedule"],
+        "data_sources": ["本地定时任务"],
+    }
+
+
 def build_market_tool_registry() -> ToolRegistry:
     registry = ToolRegistry()
     for definition in (
@@ -2064,6 +2413,35 @@ def build_market_tool_registry() -> ToolRegistry:
             description="查看五类来源的本地数据量、业务日期范围、采集时间和凭据状态。",
             args_model=DataOverviewArgs,
             handler=data_overview,
+        ),
+        ToolDefinition(
+            name="market_get_credential_setup_guide",
+            description=(
+                "安全检查全部电力网站和本机免费模型网关的配置状态，并返回新用户"
+                "申请、配置和排障步骤；绝不读取或返回密钥内容。"
+            ),
+            args_model=EmptyArgs,
+            handler=credential_setup_guide,
+        ),
+        ToolDefinition(
+            name="market_list_schedules",
+            description="列出本地定时任务、启用状态和 Windows 触发器安装状态。",
+            args_model=EmptyArgs,
+            handler=list_managed_schedules,
+        ),
+        ToolDefinition(
+            name="market_create_schedule",
+            description=(
+                "为精选 ENTSO-E、Elexon、GridStatus、Elecheck 或广州交易中心数据集"
+                "创建受控本地定时采集任务；不支持任意参数、删除或凭据写入。"
+            ),
+            args_model=CreateManagedScheduleArgs,
+            handler=create_managed_schedule,
+            risk_level=RiskLevel.APPROVAL,
+            side_effect=(
+                "将在本地数据库创建一条定时任务定义；不会立即采集，也不会自动安装"
+                " Windows 任务计划程序。"
+            ),
         ),
         ToolDefinition(
             name="market_list_datasets",

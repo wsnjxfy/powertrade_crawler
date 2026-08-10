@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
-from typing import Annotated
+import sys
+from pathlib import Path
+from typing import Annotated, Any
 
 import typer
 
@@ -39,8 +41,19 @@ market_agent_app.add_typer(approvals_app, name="approvals")
 market_agent_app.add_typer(tools_app, name="tools")
 
 
+def console_safe_json(
+    value: Any,
+    *,
+    indent: int | None = 2,
+    encoding: str | None = None,
+) -> str:
+    text = json.dumps(value, ensure_ascii=False, indent=indent, default=str)
+    output_encoding = encoding or sys.stdout.encoding or "utf-8"
+    return text.encode(output_encoding, errors="backslashreplace").decode(output_encoding)
+
+
 def echo_json(value) -> None:
-    typer.echo(json.dumps(value, ensure_ascii=False, indent=2, default=str))
+    typer.echo(console_safe_json(value))
 
 
 def fail_router_command(exc: Exception) -> None:
@@ -275,8 +288,39 @@ def evaluate(
         bool,
         typer.Option("--online", help="运行真实模型的15项只读评测。"),
     ] = False,
+    start: Annotated[int, typer.Option("--start", min=1)] = 1,
+    limit: Annotated[int | None, typer.Option("--limit", min=1)] = None,
+    execute_collections: Annotated[
+        bool,
+        typer.Option(
+            "--execute-collections",
+            help="审批并执行案例中显式标记的小范围真实采集。",
+        ),
+    ] = False,
+    output: Annotated[Path | None, typer.Option("--output")] = None,
 ) -> None:
-    report = run_online_evaluation() if online else run_offline_evaluation()
+    if execute_collections and not online:
+        raise typer.BadParameter("--execute-collections 只能与 --online 一起使用。")
+    report = (
+        run_online_evaluation(
+            start=start,
+            limit=limit,
+            execute_collections=execute_collections,
+            progress_callback=lambda index, total, prompt: typer.echo(
+                f"[{index}/{total}] {prompt}",
+                err=True,
+            ),
+        )
+        if online
+        else run_offline_evaluation()
+    )
+    if output:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n",
+            encoding="utf-8",
+        )
+        report["output_path"] = str(output.resolve())
     echo_json(report)
     if report["summary"]["failed"]:
         raise typer.Exit(code=1)

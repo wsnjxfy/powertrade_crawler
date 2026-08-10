@@ -1,0 +1,49 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "elecheck_spot",
+      "turns": [
+        "分析山西最近30天的日前现货日均价"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_analyze_elecheck_spot"
+      ],
+      "tool_arguments": [
+        {
+          "area": "山西",
+          "start_date": null,
+          "end_date": null,
+          "metric": "day_ahead",
+          "aggregation": "daily"
+        }
+      ],
+      "window_match": true,
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh",
+        "个"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 22 个；结果均值为 304.02 CNY/MWh；结果最小值为 236.14 CNY/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 62.925
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 62.925
+  }
+}

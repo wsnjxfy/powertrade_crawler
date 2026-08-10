@@ -18,6 +18,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
+from sqlalchemy.pool import NullPool
 
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.models import (
@@ -776,6 +777,7 @@ def get_engine():
             settings.database_url,
             future=True,
             connect_args={"timeout": 60},
+            poolclass=NullPool,
         )
 
         @event.listens_for(engine, "connect")
@@ -797,6 +799,8 @@ def init_db() -> None:
     add_gridstatus_description_chinese_column_if_missing(engine)
     add_elecheck_area_earliest_clear_price_date_column_if_missing(engine)
     add_elecheck_clear_price_chart_index_if_missing(engine)
+    add_delivery_query_indexes_if_missing(engine)
+    add_null_safe_unique_indexes_if_missing(engine)
     add_agent_router_metadata_columns_if_missing(engine)
     upsert_elecheck_area_records(DEFAULT_ELECHECK_AREA_RECORDS)
 
@@ -890,6 +894,92 @@ def add_elecheck_clear_price_chart_index_if_missing(engine) -> None:
                 "(area_code, endpoint, start_date, end_date, metric, time96)"
             )
         )
+
+
+def add_delivery_query_indexes_if_missing(engine) -> None:
+    """Add composite indexes used by the GUI's most common bounded queries."""
+    if engine.dialect.name != "sqlite":
+        return
+    statements = (
+        "CREATE INDEX IF NOT EXISTS ix_market_source_region_trade_date "
+        "ON market_records (source, region, trade_date)",
+        "CREATE INDEX IF NOT EXISTS ix_entsoe_dataset_area_interval_start "
+        "ON entsoe_records (dataset, area, interval_start_utc)",
+        "CREATE INDEX IF NOT EXISTS ix_elexon_dataset_area_settlement_date "
+        "ON elexon_records (dataset, area, settlement_date)",
+        "CREATE INDEX IF NOT EXISTS ix_elexon_dataset_effective_time "
+        "ON elexon_records "
+        "(dataset, COALESCE(start_time_utc, settlement_date, publish_time_utc, ''))",
+        "CREATE INDEX IF NOT EXISTS ix_gridstatus_dataset_location_record_time "
+        "ON gridstatus_records (dataset, location, record_time_utc)",
+        "CREATE INDEX IF NOT EXISTS ix_gzpec_news_type_publish_date "
+        "ON gzpec_news_records (news_type, publish_date)",
+        "CREATE INDEX IF NOT EXISTS ix_elecheck_purchasing_province_month_metric "
+        "ON elecheck_purchasing_records (province_name, data_month, metric)",
+        "CREATE INDEX IF NOT EXISTS ix_elecheck_clear_price_browse "
+        "ON elecheck_clear_price_records "
+        "(area_code, start_date DESC, end_date DESC, endpoint, time96, metric)",
+        "CREATE INDEX IF NOT EXISTS ix_elecheck_mechanism_region_category "
+        "ON elecheck_mechanism_electricity_price_records (region_name, category)",
+    )
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+
+def add_null_safe_unique_indexes_if_missing(engine) -> None:
+    """Enforce natural keys even where SQLite normally treats NULL values as distinct."""
+    if engine.dialect.name != "sqlite":
+        return
+    specs = (
+        (
+            "uq_elecheck_clear_price_natural_key_null_safe",
+            "elecheck_clear_price_records",
+            (
+                "source, endpoint, area_code, start_date, end_date, metric, unit"
+            ),
+            "time96 IS NULL",
+        ),
+        (
+            "uq_elecheck_purchasing_natural_key_null_safe",
+            "elecheck_purchasing_records",
+            (
+                "source, endpoint, data_kind, data_month, "
+                "COALESCE(province_name, ''), metric, COALESCE(statistic, ''), "
+                "COALESCE(related_province_name, '')"
+            ),
+            "",
+        ),
+    )
+    with engine.begin() as connection:
+        for index_name, table_name, key_sql, predicate in specs:
+            exists = connection.execute(
+                text(
+                    "SELECT 1 FROM sqlite_master "
+                    "WHERE type = 'index' AND name = :index_name"
+                ),
+                {"index_name": index_name},
+            ).scalar()
+            if exists:
+                continue
+            where_sql = f" WHERE {predicate}" if predicate else ""
+            connection.execute(
+                text(
+                    f"DELETE FROM {table_name}{where_sql} AND id NOT IN ("
+                    f"SELECT MAX(id) FROM {table_name}{where_sql} GROUP BY {key_sql})"
+                    if predicate
+                    else (
+                        f"DELETE FROM {table_name} WHERE id NOT IN ("
+                        f"SELECT MAX(id) FROM {table_name} GROUP BY {key_sql})"
+                    )
+                )
+            )
+            connection.execute(
+                text(
+                    f"CREATE UNIQUE INDEX {index_name} "
+                    f"ON {table_name} ({key_sql}){where_sql}"
+                )
+            )
 
 
 def get_session() -> Session:

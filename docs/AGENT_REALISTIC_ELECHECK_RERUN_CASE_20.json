@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 1,
+    "action_cases_executed": 0,
+    "elapsed_seconds": 0.264
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "把最新一个月的代理购电价格导出来，我要后面自己核对。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [
+        "elecheck_export_purchasing"
+      ],
+      "expected_tool": "elecheck_export_purchasing",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "conclusion": "导出已完成：D:\\Code\\myproject\\powertrade_crawler\\exports\\agent\\4f06e29b-bb71-42b4-af52-842b4b8d3191\\20260807T141201615909Z-purchasing-price-all-provinces.csv。",
+      "latency_seconds": 0.264,
+      "usage": {},
+      "error_code": null
+    }
+  ]
+}

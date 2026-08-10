@@ -1,0 +1,31 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "oversized_collection",
+      "turns": [
+        "把 ENTSO-E 德国从 2025-01-01 到 2026-07-31 的日前价一次全采完"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [],
+      "tool_arguments": [],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "当前无法发起采集：ENTSO-E 单次采集范围超过 31 天。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [],
+      "latency_seconds": 0.168
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.168
+  }
+}

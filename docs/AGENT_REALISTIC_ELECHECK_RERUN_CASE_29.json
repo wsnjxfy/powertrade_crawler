@@ -1,0 +1,41 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 1,
+    "action_cases_executed": 0,
+    "elapsed_seconds": 0.247
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "建个禁用的任务，每天凌晨 3 点采江苏昨天现货，名字叫日常补采测试；先别真执行。",
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_create_schedule"
+      ],
+      "expected_tool": "elecheck_create_schedule",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "conclusion": "",
+      "latency_seconds": 0.247,
+      "usage": {},
+      "error_code": null
+    }
+  ]
+}

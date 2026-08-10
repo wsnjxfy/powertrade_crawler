@@ -1,0 +1,197 @@
+{
+  "ok": false,
+  "mode": "live",
+  "summary": {
+    "total": 8,
+    "passed": 7,
+    "completion_rate": 0.875,
+    "tool_selection_rate": 0.875,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 0.8,
+    "tool_case_count": 5,
+    "action_cases_executed": 3,
+    "elapsed_seconds": 4.763
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "帮我采一下江苏现货，日期我还没想好。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [],
+      "expected_tool": null,
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [],
+      "conclusion": "当前无法发起操作：现货采集缺少日期范围。",
+      "latency_seconds": 0.209,
+      "usage": {},
+      "error_code": null
+    },
+    {
+      "case_id": 2,
+      "prompt": "采集江苏 2026-07-31 这一天的现货数据，先停下来让我确认参数。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_collect_spot"
+      ],
+      "expected_tool": "elecheck_collect_spot",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "action_executed": true,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "conclusion": "已审批并完成 elecheck_collect_spot，写入或更新 200 条记录。",
+      "latency_seconds": 2.864,
+      "usage": {},
+      "error_code": null
+    },
+    {
+      "case_id": 3,
+      "prompt": "补采 2026-07 这一个月的全国代理购电数据，审批后再执行。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_collect_purchasing"
+      ],
+      "expected_tool": "elecheck_collect_purchasing",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "action_executed": true,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "conclusion": "已审批并完成 elecheck_collect_purchasing，写入或更新 138 条记录。",
+      "latency_seconds": 0.546,
+      "usage": {},
+      "error_code": null
+    },
+    {
+      "case_id": 4,
+      "prompt": "更新一次增量机制电价快照，先让我审批。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_update_mechanism"
+      ],
+      "expected_tool": "elecheck_update_mechanism",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "action_executed": true,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "conclusion": "已审批并完成 elecheck_update_mechanism，写入或更新 80 条记录。",
+      "latency_seconds": 0.486,
+      "usage": {},
+      "error_code": null
+    },
+    {
+      "case_id": 5,
+      "prompt": "建个禁用的任务，每天凌晨 3 点采江苏昨天现货，名字叫日常补采测试；先别真执行。",
+      "passed": false,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [],
+      "expected_tool": "elecheck_create_schedule",
+      "tool_correct": false,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": false,
+      "action_executed": false,
+      "tool_call_statuses": [],
+      "conclusion": "当前无法发起操作：现货采集缺少日期范围。",
+      "latency_seconds": 0.172,
+      "usage": {},
+      "error_code": null
+    },
+    {
+      "case_id": 6,
+      "prompt": "把 Elecheck 所有地区现货补到昨天，先算清范围和副作用然后等我批，不要擅自开跑。",
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "proposed_tools": [
+        "elecheck_update_all_spot"
+      ],
+      "expected_tool": "elecheck_update_all_spot",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": true,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "conclusion": "",
+      "latency_seconds": 0.165,
+      "usage": {},
+      "error_code": null
+    },
+    {
+      "case_id": 7,
+      "prompt": "最近那些定时采集跑得怎么样？如果失败，把已记录的原因告诉我。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [
+        "elecheck_list_schedule_runs"
+      ],
+      "expected_tool": "elecheck_list_schedule_runs",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "conclusion": "当前没有 Elecheck 定时任务运行记录。",
+      "latency_seconds": 0.176,
+      "usage": {},
+      "error_code": null
+    },
+    {
+      "case_id": 8,
+      "prompt": "一次把江苏 2025-01-01 到 2026-07-31 的现货全采完，不要分批。",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [],
+      "expected_tool": null,
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [],
+      "conclusion": "当前无法发起操作：现货单次采集范围超过 31 天。",
+      "latency_seconds": 0.144,
+      "usage": {},
+      "error_code": null
+    }
+  ]
+}

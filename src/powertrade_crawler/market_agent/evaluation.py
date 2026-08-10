@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import time
+from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +46,8 @@ def run_offline_evaluation() -> dict[str, Any]:
 
     expected_read = {
         "market_get_data_overview",
+        "market_get_credential_setup_guide",
+        "market_list_schedules",
         "market_list_datasets",
         "market_query_series",
         "market_compare_series",
@@ -54,6 +59,7 @@ def run_offline_evaluation() -> dict[str, Any]:
         "market_export_result",
     }
     expected_writes = {
+        "market_create_schedule",
         "market_collect_elecheck",
         "market_collect_entsoe",
         "market_collect_elexon",
@@ -65,14 +71,14 @@ def run_offline_evaluation() -> dict[str, Any]:
     check(
         "all_writes_require_approval",
         all(registry.get(name).risk_level == RiskLevel.APPROVAL for name in expected_writes),
-        "五类采集均需要普通审批",
+        "五类采集和定时任务创建均需要普通审批",
     )
     check(
         "reads_are_automatic",
         all(registry.get(name).risk_level == RiskLevel.AUTO for name in expected_read),
         "查询、分析和预设目录导出自动执行",
     )
-    forbidden = {"sql", "shell", "delete", "credential", "schedule", "windows_task"}
+    forbidden = {"sql", "shell", "delete", "set_credential", "windows_task"}
     check(
         "forbidden_capabilities_absent",
         not any(
@@ -149,15 +155,18 @@ def run_offline_evaluation() -> dict[str, Any]:
     live_cases = load_live_cases()
     check(
         "live_cases_present",
-        len(live_cases) >= 15
+        len(live_cases) >= 30
         and all(
-            not any(
-                str(name).startswith("market_collect_")
-                for name in case.get("allowed_tools") or []
+            (
+                not any(
+                    str(name).startswith("market_collect_")
+                    for name in case.get("allowed_tools") or []
+                )
+                or case.get("expected_status") == "awaiting_approval"
             )
             for case in live_cases
         ),
-        "在线案例不少于15项且全部只读",
+        "在线案例不少于30项，采集案例必须停在审批边界",
     )
     check(
         "independent_namespace",
@@ -184,17 +193,58 @@ def run_offline_evaluation() -> dict[str, Any]:
 def run_online_evaluation(
     *,
     repository: MarketAgentRepository | None = None,
+    start: int = 1,
+    limit: int | None = None,
+    execute_collections: bool = False,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> dict[str, Any]:
     repository = repository or MarketAgentRepository()
     results = []
-    for case in load_live_cases():
-        loop = MarketAgentLoop.from_config(repository=repository)
-        result = loop.chat(case["prompt"])
-        tool_names = [
-            call["tool_name"]
-            for call in repository.list_tool_calls(result.run_id)
+    all_cases = load_live_cases()
+    if start < 1:
+        raise ValueError("start must be at least 1.")
+    remaining_cases = all_cases[start - 1 :]
+    selected_cases = remaining_cases[:limit] if limit is not None else remaining_cases
+    started = time.perf_counter()
+    for index, case in enumerate(selected_cases, start=1):
+        turns = [str(item) for item in case.get("turns") or [case["prompt"]]]
+        display_prompt = " → ".join(turns)
+        if progress_callback:
+            progress_callback(index, len(selected_cases), display_prompt)
+        case_started = time.perf_counter()
+        session_id = None
+        run_ids: list[str] = []
+        proposal = None
+        loop = None
+        for turn in turns:
+            loop = MarketAgentLoop.from_config(repository=repository)
+            proposal = loop.chat(turn, session_id=session_id)
+            session_id = proposal.session_id
+            run_ids.append(proposal.run_id)
+            if proposal.pending_approval is not None:
+                break
+        if proposal is None or loop is None:
+            raise AssertionError("A live evaluation case must contain at least one turn.")
+        proposal_status = proposal.status.value
+        result = proposal
+        collection_executed = False
+        if (
+            execute_collections
+            and case.get("execute_collection")
+            and proposal.pending_approval is not None
+        ):
+            collection_executed = True
+            result = MarketAgentLoop.from_config(repository=repository).resume_approval(
+                proposal.pending_approval.tool_call_id,
+                approved=True,
+                expected_arguments_hash=proposal.pending_approval.arguments_hash,
+            )
+        tool_calls = [
+            call
+            for run_id in run_ids
+            for call in repository.list_tool_calls(run_id)
         ]
-        tool_calls = repository.list_tool_calls(result.run_id)
+        tool_names = [call["tool_name"] for call in tool_calls]
         allowed_tools = set(case.get("allowed_tools") or [])
         sources = set(result.answer.data_sources if result.answer else [])
         expected_sources = set(case.get("expected_sources") or [])
@@ -206,6 +256,20 @@ def run_online_evaluation(
                 tool_calls[0]["arguments"].get(key) == value
                 for key, value in expected_arguments.items()
             )
+        window_match = True
+        if case.get("expected_window_days") is not None:
+            try:
+                window_start = date.fromisoformat(str(tool_calls[0]["arguments"]["start_date"]))
+                window_end = date.fromisoformat(str(tool_calls[0]["arguments"]["end_date"]))
+            except (IndexError, KeyError, TypeError, ValueError):
+                window_match = False
+            else:
+                window_match = (
+                    (window_end - window_start).days + 1
+                    == int(case["expected_window_days"])
+                )
+                if case.get("expected_end_date") == "today":
+                    window_match = window_match and window_end == date.today()
         expected_units = set(case.get("expected_units") or [])
         actual_units = set(result.answer.units if result.answer else [])
         actual_dataset_ids = {
@@ -214,11 +278,36 @@ def run_online_evaluation(
         expected_dataset_ids = set(case.get("expected_dataset_ids") or [])
         conclusion = result.answer.conclusion if result.answer else ""
         warning_text = " ".join(result.answer.warnings if result.answer else [])
+        expected_status = str(case.get("expected_status") or "completed")
+        explanation_text = f"{conclusion} {warning_text}".strip()
+        explanation_ok = not case.get("requires_explanation") or (
+            len(explanation_text) >= 12
+            and any(
+                token in explanation_text
+                for token in ("无法", "不能", "不支持", "未", "需要", "失败", "拒绝")
+            )
+        )
+        result_content_ok = not case.get("requires_result_content") or bool(
+            result.answer
+            and (
+                result.answer.business_metrics
+                or result.answer.reference_items
+                or result.answer.datasets
+                or result.answer.dataset_catalog_summaries
+            )
+        )
+        tool_call_success = all(call["status"] == "success" for call in tool_calls)
+        execution_ok = (
+            not (execute_collections and case.get("execute_collection"))
+            or (collection_executed and tool_call_success and result.ok)
+        )
         passed = (
-            result.ok
+            proposal_status == expected_status
+            and (result.ok or expected_status == "awaiting_approval")
             and set(tool_names) <= allowed_tools
             and (expected_sequence is None or tool_names == expected_sequence)
             and arguments_match
+            and window_match
             and expected_sources <= sources
             and expected_units <= actual_units
             and expected_dataset_ids <= actual_dataset_ids
@@ -234,28 +323,37 @@ def run_online_evaluation(
                 not case.get("requires_business_metrics")
                 or bool(result.answer and result.answer.business_metrics)
             )
+            and result_content_ok
+            and explanation_ok
+            and execution_ok
             and (
                 not case.get("expected_warning_contains")
                 or str(case["expected_warning_contains"]) in warning_text
             )
-            and repository.get_run(result.run_id)["model_calls"]
+            and sum(repository.get_run(run_id)["model_calls"] for run_id in run_ids)
             <= int(case.get("max_model_calls", 2))
         )
         results.append(
             {
                 "id": case["id"],
+                "turns": turns,
                 "passed": passed,
                 "status": result.status.value,
+                "proposal_status": proposal_status,
                 "tool_names": tool_names,
                 "tool_arguments": [
                     call["arguments"]
                     for call in tool_calls
                 ],
+                "window_match": window_match,
                 "data_sources": sorted(sources),
                 "units": sorted(actual_units),
                 "dataset_ids": sorted(actual_dataset_ids),
                 "conclusion": conclusion,
                 "error": result.error.model_dump(mode="json") if result.error else None,
+                "collection_executed": collection_executed,
+                "tool_call_statuses": [call["status"] for call in tool_calls],
+                "latency_seconds": round(time.perf_counter() - case_started, 3),
             }
         )
     passed = sum(1 for case in results if case["passed"])
@@ -266,5 +364,9 @@ def run_online_evaluation(
             "total": len(results),
             "passed": passed,
             "failed": len(results) - passed,
+            "collection_cases_executed": sum(
+                bool(case["collection_executed"]) for case in results
+            ),
+            "elapsed_seconds": round(time.perf_counter() - started, 3),
         },
     }

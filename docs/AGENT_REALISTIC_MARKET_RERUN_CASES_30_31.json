@@ -1,0 +1,78 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "collect_elecheck_one_day",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_collect_elecheck"
+      ],
+      "tool_arguments": [
+        {
+          "category": "spot",
+          "area": "江苏",
+          "start_date": "2026-07-31",
+          "end_date": "2026-07-31",
+          "start_month": null,
+          "end_month": null
+        }
+      ],
+      "data_sources": [
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "实际写入记录数为 200 条。",
+      "error": null,
+      "collection_executed": true,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 1.931
+    },
+    {
+      "id": "collect_gridstatus_catalog",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_collect_gridstatus"
+      ],
+      "tool_arguments": [
+        {
+          "operation": "refresh_catalog",
+          "dataset": null,
+          "location": null,
+          "start_date": null,
+          "end_date": null,
+          "limit": 1000
+        }
+      ],
+      "data_sources": [
+        "GridStatus"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "实际写入记录数为 535 条。",
+      "error": null,
+      "collection_executed": true,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 2.248
+    }
+  ],
+  "summary": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "collection_cases_executed": 2,
+    "elapsed_seconds": 4.179
+  }
+}

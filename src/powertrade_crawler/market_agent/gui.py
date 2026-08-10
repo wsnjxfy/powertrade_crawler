@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+from queue import Empty, Queue
 from datetime import datetime
 from tkinter import (
     BOTH,
@@ -17,6 +18,7 @@ from tkinter import (
     messagebox,
 )
 from tkinter import ttk
+from collections.abc import Callable
 from typing import Any
 
 from powertrade_crawler.market_agent.data_tools import (
@@ -38,15 +40,17 @@ from powertrade_crawler.llm_router import (
 )
 
 
-GREEN = "#174d3a"
-GREEN_DARK = "#103b2d"
-GREEN_LIGHT = "#e8f2ee"
-MUTED = "#61726b"
+GREEN = "#102A43"
+GREEN_DARK = "#132238"
+GREEN_LIGHT = "#E9F0FF"
+MUTED = "#718096"
 EXAMPLE_PROMPT = "查询五个数据源的数据覆盖范围和最新更新时间"
 
 EVENT_LABELS = {
     "run_started": "开始运行",
     "intent_routed": "确定性路由",
+    "software_guidance": "软件使用指引",
+    "schedule_details_required": "补充任务参数",
     "model_completed": "模型响应",
     "model_timeout": "模型超时",
     "protocol_fallback": "协议回退",
@@ -71,14 +75,18 @@ class MarketAgentApp:
         self,
         parent,
         repository: MarketAgentRepository | None = None,
+        on_navigate: Callable[[str], None] | None = None,
     ) -> None:
         self.parent = parent
         self.repository = repository or MarketAgentRepository()
+        self.on_navigate = on_navigate
         self.session_id: str | None = None
         self.active_run_id: str | None = None
         self.pending_call: dict[str, Any] | None = None
         self.session_rows: list[dict[str, Any]] = []
         self.busy = False
+        self._source_status_busy = False
+        self._source_status_results: Queue[str] = Queue()
         self.status_var = StringVar(value="就绪")
         self.source_status_var = StringVar(value="正在读取五类来源状态…")
         self._build_styles()
@@ -102,11 +110,19 @@ class MarketAgentApp:
         style.configure(
             "MarketAgent.Subtitle.TLabel",
             background=GREEN,
-            foreground="#d7ebe3",
+            foreground="#D6E4F1",
         )
         style.configure(
             "MarketAgent.Primary.TButton",
+            background="#2563EB",
+            foreground="white",
+            bordercolor="#2563EB",
             padding=(12, 6),
+        )
+        style.map(
+            "MarketAgent.Primary.TButton",
+            background=[("active", "#1D4ED8"), ("pressed", "#1E40AF")],
+            foreground=[("!disabled", "white")],
         )
         style.configure(
             "MarketAgent.Card.TLabelframe",
@@ -143,6 +159,17 @@ class MarketAgentApp:
         ttk.Button(header, text="刷新状态", command=self.refresh_source_status).pack(
             side=RIGHT
         )
+        if self.on_navigate is not None:
+            ttk.Button(
+                header,
+                text="API 配置",
+                command=lambda: self.on_navigate("setup"),
+            ).pack(side=RIGHT, padx=(0, 6))
+            ttk.Button(
+                header,
+                text="定时任务",
+                command=lambda: self.on_navigate("schedule"),
+            ).pack(side=RIGHT, padx=(0, 6))
 
         status = ttk.Frame(self.parent, padding=(10, 6))
         status.grid(row=1, column=0, sticky="ew")
@@ -176,7 +203,7 @@ class MarketAgentApp:
             session_card,
             borderwidth=0,
             highlightthickness=1,
-            highlightbackground="#c6d6cf",
+            highlightbackground="#DCE4EC",
             activestyle="none",
             exportselection=False,
             font=("Microsoft YaHei UI", 10),
@@ -216,7 +243,7 @@ class MarketAgentApp:
         )
         self.conversation.pack(fill=BOTH, expand=True)
         self.conversation.tag_configure("user", foreground=GREEN_DARK, spacing1=8)
-        self.conversation.tag_configure("assistant", foreground="#26342f", spacing1=8)
+        self.conversation.tag_configure("assistant", foreground="#425168", spacing1=8)
         self.conversation.tag_configure("system", foreground=MUTED, spacing1=6)
 
         self.result_text = Text(
@@ -267,7 +294,7 @@ class MarketAgentApp:
             pady=7,
             borderwidth=0,
             highlightthickness=1,
-            highlightbackground="#9ab5aa",
+            highlightbackground="#C8D3E0",
             highlightcolor=GREEN,
             undo=True,
         )
@@ -326,7 +353,16 @@ class MarketAgentApp:
         self.input_text.insert("1.0", EXAMPLE_PROMPT)
         self.input_text.focus_set()
 
+    def prefill_prompt(self, prompt: str) -> None:
+        self.input_text.delete("1.0", END)
+        self.input_text.insert("1.0", prompt)
+        self.input_text.focus_set()
+
     def refresh_source_status(self) -> None:
+        if self._source_status_busy:
+            return
+        self._source_status_busy = True
+
         def worker() -> None:
             try:
                 payload = data_overview(
@@ -344,9 +380,23 @@ class MarketAgentApp:
                 text = "  |  ".join(parts)
             except Exception as exc:
                 text = f"读取来源状态失败：{exc}"
-            self.parent.after(0, lambda: self.source_status_var.set(text))
+            self._source_status_results.put(text)
 
         threading.Thread(target=worker, daemon=True).start()
+        self.parent.after(50, self._poll_source_status)
+
+    def _poll_source_status(self) -> None:
+        try:
+            text = self._source_status_results.get_nowait()
+        except Empty:
+            if self._source_status_busy:
+                try:
+                    self.parent.after(50, self._poll_source_status)
+                except RuntimeError:
+                    self._source_status_busy = False
+            return
+        self._source_status_busy = False
+        self.source_status_var.set(text)
 
     def refresh_sessions(self, select_first: bool = False) -> None:
         selected_id = self.session_id
@@ -769,6 +819,22 @@ class MarketAgentApp:
 
     @staticmethod
     def _approval_summary(call: dict[str, Any]) -> str:
+        if call["tool_name"] == "market_create_schedule":
+            arguments = call["arguments"]
+            return "\n".join(
+                [
+                    "操作：创建本地定时采集任务",
+                    f"名称：{arguments.get('name')}",
+                    f"数据集：{arguments.get('dataset')}",
+                    (
+                        f"计划：{arguments.get('schedule_kind')} "
+                        f"{arguments.get('schedule_time')}；"
+                        f"{'启用' if arguments.get('enabled') else '禁用'}"
+                    ),
+                    f"参数哈希：{call['arguments_hash']}",
+                    "副作用：只保存本地任务定义；不会立即采集，也不会自动安装 Windows 触发器。",
+                ]
+            )
         preview = collection_preview(call["tool_name"], call["arguments"])
         return "\n".join(
             [
@@ -781,6 +847,7 @@ class MarketAgentApp:
                     f" 至 {preview.get('end') or '当前快照'}；"
                     f"预计请求：{preview['estimated_requests']}"
                 ),
+                f"运行凭据：{preview.get('credential_status') or '不适用'}",
                 "副作用：将采集并写入对应业务数据表。",
             ]
         )

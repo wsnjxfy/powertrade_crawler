@@ -1,0 +1,49 @@
+{
+  "ok": true,
+  "mode": "live",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "completion_rate": 1.0,
+    "tool_selection_rate": 1.0,
+    "parameter_validation_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "tool_case_count": 1,
+    "action_cases_executed": 0,
+    "elapsed_seconds": 8.44
+  },
+  "cases": [
+    {
+      "case_id": 1,
+      "prompt": "分析江苏 2099-01-01 的日前和实时现货；没有数据就把原因说清楚。",
+      "turns": [
+        "分析江苏 2099-01-01 的日前和实时现货；没有数据就把原因说清楚。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "proposed_tools": [
+        "elecheck_analyze_spot"
+      ],
+      "expected_tool": "elecheck_analyze_spot",
+      "tool_correct": true,
+      "parameter_correct": true,
+      "arguments_correct": true,
+      "approval_expected": false,
+      "approval_correct": true,
+      "action_executed": false,
+      "tool_call_statuses": [
+        "failed"
+      ],
+      "conclusion": "未能完成对江苏 2099-01-01 日前和实时现货的分析。原因：Elecheck 现货数据库中不存在该日期的江苏数据。",
+      "latency_seconds": 8.44,
+      "usage": {
+        "prompt_tokens": 9314,
+        "completion_tokens": 255,
+        "total_tokens": 9569,
+        "neurons": 115.84938049316406
+      },
+      "error_code": null
+    }
+  ]
+}

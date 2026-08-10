@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime, timedelta, timezone
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -196,6 +196,28 @@ def test_entsoe_client_does_not_retry_or_expose_token_for_client_errors():
 
     assert attempts == 1
     assert "secret" not in str(exc_info.value)
+
+
+def test_entsoe_times_are_normalized_to_utc_before_storage_and_requests():
+    client = EntsoeClient.__new__(EntsoeClient)
+    plus_two = timezone(timedelta(hours=2))
+
+    assert client.parse_entsoe_datetime("2026-08-10T02:00:00+02:00") == datetime(
+        2026,
+        8,
+        10,
+        0,
+    )
+    assert client.parse_entsoe_datetime("2026-08-10T00:00:00Z") == datetime(
+        2026,
+        8,
+        10,
+        0,
+    )
+    assert client.format_period(datetime(2026, 8, 10, 2, tzinfo=plus_two)) == "202608100000"
+    assert client.format_response_time(datetime(2026, 8, 10, tzinfo=UTC)) == (
+        "2026-08-10T00:00Z"
+    )
 
 
 def test_entsoe_client_parses_generic_time_series_document():

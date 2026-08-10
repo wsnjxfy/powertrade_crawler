@@ -7,6 +7,10 @@ __pycache__/
 .env
 .auth/
 data/
+!src/powertrade_crawler/agent/data/
+!src/powertrade_crawler/agent/data/live_eval_cases.json
+!src/powertrade_crawler/market_agent/data/
+!src/powertrade_crawler/market_agent/data/live_eval_cases.json
 build/
 dist/
 exports/

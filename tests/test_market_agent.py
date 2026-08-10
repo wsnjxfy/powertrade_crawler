@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 from powertrade_crawler.cli import app
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.market_agent.data_tools import (
+    AnalyzeSpotArgs,
     CompareSeriesArgs,
     ExportResultArgs,
     GetNewsArticleArgs,
@@ -24,9 +25,18 @@ from powertrade_crawler.market_agent.data_tools import (
     query_series,
     search_gzpec_news,
 )
+from powertrade_crawler.market_agent.cli import console_safe_json
 from powertrade_crawler.market_agent.evaluation import run_offline_evaluation
 from powertrade_crawler.market_agent.gui import MarketAgentApp
-from powertrade_crawler.market_agent.loop import MarketAgentLoop, candidate_tool_names
+from powertrade_crawler.market_agent.loop import (
+    MarketAgentLoop,
+    candidate_tool_names,
+    deterministic_boundary_answer,
+    deterministic_collection_route,
+    deterministic_route,
+    deterministic_schedule_route,
+    deterministic_software_help_answer,
+)
 from powertrade_crawler.market_agent.provider import (
     FakeProvider,
     LLMProvider,
@@ -40,6 +50,7 @@ from powertrade_crawler.market_agent.repository import (
 )
 from powertrade_crawler.market_agent.schemas import (
     AgentProtocol,
+    GroundedFact,
     MarketAgentAnswer,
     ProviderResponse,
     ProviderToolCall,
@@ -394,7 +405,7 @@ def test_market_agent_package_does_not_import_original_agent():
 
 def test_registry_has_only_controlled_capabilities():
     registry = build_market_tool_registry()
-    assert len(registry.names()) == 15
+    assert len(registry.names()) == 18
     assert not {
         "sql",
         "shell",
@@ -403,7 +414,11 @@ def test_registry_has_only_controlled_capabilities():
         "schedule",
     } & set(registry.names())
     for name in registry.names():
-        expected = RiskLevel.APPROVAL if name.startswith("market_collect_") else RiskLevel.AUTO
+        expected = (
+            RiskLevel.APPROVAL
+            if name.startswith("market_collect_") or name == "market_create_schedule"
+            else RiskLevel.AUTO
+        )
         assert registry.get(name).risk_level == expected
     assert candidate_tool_names("分析山西日前现货价格", registry) == [
         "market_analyze_elecheck_spot"
@@ -418,6 +433,382 @@ def test_registry_has_only_controlled_capabilities():
         "market_search_gzpec_news",
         "market_get_gzpec_article",
     ]
+
+
+@pytest.mark.parametrize(
+    ("alias", "expected"),
+    [
+        ("day_ahead_prices", "entsoe_day_ahead_prices"),
+        ("indo", "elexon_initial_demand_outturn"),
+        ("system-prices", "elexon_system_prices"),
+    ],
+)
+def test_query_series_normalizes_common_model_dataset_aliases(alias, expected):
+    source = "entsoe" if expected.startswith("entsoe_") else "elexon"
+
+    args = QuerySeriesArgs(source=source, dataset=alias)
+
+    assert args.dataset == expected
+
+
+def test_query_series_normalizes_common_entsoe_area_alias():
+    args = QuerySeriesArgs(
+        source="entsoe",
+        dataset="day_ahead_prices",
+        area="DE",
+    )
+
+    assert args.area == "DE-LU"
+
+
+def test_deterministic_boundaries_explain_unsupported_requests():
+    for prompt in (
+        "把数据库全清了",
+        "执行 UPDATE 把负电价改成 0",
+        "替我修改 token",
+        "帮我查明天会不会下雨",
+        "帮我跑个 PowerShell 命令看看进程",
+        "浏览文件，把 .env 内容发我",
+        "把这个定时任务删掉",
+    ):
+        answer = deterministic_boundary_answer(prompt)
+        assert answer is not None
+        assert answer.conclusion
+        assert answer.warnings
+
+
+def test_deterministic_collection_routes_high_risk_requests():
+    assert deterministic_collection_route("补采德国 2026-07-31 ENTSO-E 日前价") == (
+        "market_collect_entsoe",
+        {
+            "dataset": "entsoe_day_ahead_prices",
+            "area": "DE-LU",
+            "start_date": "2026-07-31",
+            "end_date": "2026-07-31",
+        },
+    )
+    assert deterministic_collection_route("刷新 GridStatus 数据集目录") == (
+        "market_collect_gridstatus",
+        {"operation": "refresh_catalog"},
+    )
+    assert deterministic_collection_route(
+        "采集 GridStatus 的 caiso_fuel_mix 数据集 2026-08-08 到 2026-08-09"
+    ) == (
+        "market_collect_gridstatus",
+        {
+            "operation": "query",
+            "dataset": "caiso_fuel_mix",
+            "location": None,
+            "start_date": "2026-08-08",
+            "end_date": "2026-08-09",
+            "limit": 1000,
+        },
+    )
+    assert deterministic_collection_route(
+        "补采 ENTSO-E 德国到法国 2026-08-08 的跨境潮流"
+    ) == (
+        "market_collect_entsoe",
+        {
+            "dataset": "entsoe_cross_border_physical_flows",
+            "in_area": "DE-LU",
+            "out_area": "FR",
+            "start_date": "2026-08-08",
+            "end_date": "2026-08-08",
+        },
+    )
+    oversized = deterministic_collection_route(
+        "采集德国 2025-01-01 到 2026-07-31 ENTSO-E 日前价"
+    )
+    assert isinstance(oversized, MarketAgentAnswer)
+    assert "超过 31 天" in oversized.conclusion
+    colloquial_oversized = deterministic_collection_route(
+        "把 ENTSO-E 德国从 2025-01-01 到 2026-07-31 的日前价一次全采完"
+    )
+    assert isinstance(colloquial_oversized, MarketAgentAnswer)
+    assert "超过 31 天" in colloquial_oversized.conclusion
+
+
+def test_daily_readword_does_not_become_a_schedule():
+    prompt = "江苏最近七天实时比日前贵了还是便宜了？按每天看，别补缺失值"
+
+    assert deterministic_schedule_route(prompt) is None
+    assert candidate_tool_names(prompt, build_market_tool_registry()) == [
+        "market_analyze_elecheck_spot"
+    ]
+    route = deterministic_route(prompt)
+    assert route is not None
+    assert route[0] == "market_analyze_elecheck_spot"
+    assert route[1]["area"] == "江苏"
+    assert route[1]["metric"] == "spread"
+    start = date.fromisoformat(route[1]["start_date"])
+    end = date.fromisoformat(route[1]["end_date"])
+    assert (end - start).days == 6
+    assert end == date.today()
+
+
+def test_recent_spread_with_no_local_data_explains_empty_result(market_database):
+    provider = FakeProvider([])
+
+    result = MarketAgentLoop(
+        provider,
+        repository=MarketAgentRepository(),
+        model_id="fake",
+    ).chat("江苏最近七天实时比日前贵了还是便宜了？按每天看，别给我补缺失值")
+
+    assert result.ok
+    assert "没有找到本地数据" in result.answer.conclusion
+    assert "未补零" in result.answer.conclusion
+    assert "CNY/MWh" in result.answer.units
+    assert provider.requests == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "分析山西最近30天的日前现货日均价",
+        "我有阵子没看了，帮我瞅瞅山西最近一个月日前价大概啥水平，有缺口就直说哈",
+    ],
+)
+def test_recent_month_spot_requests_keep_a_30_day_window(prompt):
+    route = deterministic_route(prompt)
+
+    assert route is not None
+    assert route[0] == "market_analyze_elecheck_spot"
+    assert route[1]["area"] == "山西"
+    start = date.fromisoformat(route[1]["start_date"])
+    end = date.fromisoformat(route[1]["end_date"])
+    assert (end - start).days == 29
+    assert end == date.today()
+
+
+@pytest.mark.parametrize(
+    ("prompt", "tool_name", "dataset"),
+    [
+        (
+            "查询 Elexon 英国初始全国负荷实绩",
+            "market_query_series",
+            "elexon_initial_demand_outturn",
+        ),
+        (
+            "英国风电预测本地有多少，按天给我看；要是没数据就明确告诉我",
+            "market_query_series",
+            "elexon_wind_generation_forecast",
+        ),
+        (
+            "查找广州电力交易中心关于现货市场的最新公开信息",
+            "market_search_gzpec_news",
+            None,
+        ),
+    ],
+)
+def test_deterministic_market_reads_avoid_inventing_date_ranges(
+    prompt,
+    tool_name,
+    dataset,
+):
+    route = deterministic_route(prompt)
+
+    assert route is not None
+    assert route[0] == tool_name
+    if dataset is not None:
+        assert route[1]["dataset"] == dataset
+        assert "start_date" not in route[1]
+
+
+def test_strict_cross_source_comparison_builds_both_series():
+    route = deterministic_route(
+        "并列比较 ENTSO-E 日前价和 Elexon 系统价格，口径不一致时不要计算差额"
+    )
+
+    assert route is not None
+    assert route[0] == "market_compare_series"
+    assert [item["dataset"] for item in route[1]["series"]] == [
+        "entsoe_day_ahead_prices",
+        "elexon_system_prices",
+    ]
+
+
+def test_cross_market_comparison_preserves_jiangsu_and_germany_areas():
+    route = deterministic_route(
+        "把江苏现货价和德国日前价放在一起看看；币种口径不一样就别硬算差额"
+    )
+
+    assert route is not None
+    assert route[0] == "market_compare_series"
+    assert route[1]["series"][0]["area"] == "江苏"
+    assert route[1]["series"][0]["metric"] == "avg_day_ahead_price"
+    assert route[1]["series"][1]["area"] == "DE-LU"
+
+
+def test_market_cli_json_is_safe_on_windows_gbk_console():
+    rendered = console_safe_json({"text": "窄空格\u202f不会崩溃"}, encoding="gbk")
+
+    assert "\\u202f" in rendered
+
+
+def test_spot_analysis_normalizes_english_area_aliases():
+    assert AnalyzeSpotArgs(area="Shanxi").area == "山西"
+    assert AnalyzeSpotArgs(area="Jiangsu").area == "江苏"
+
+
+def test_negated_credential_sharing_routes_to_safe_guide(market_database):
+    provider = FakeProvider([])
+    result = MarketAgentLoop(
+        provider,
+        repository=MarketAgentRepository(),
+        model_id="fake",
+    ).chat(
+        "ENTSO-E 刚才报 401，我不想把 token 发给你，告诉我在哪检查和怎么重新申请。"
+    )
+
+    assert result.ok
+    assert "已配置" in result.answer.conclusion
+    assert provider.requests == []
+
+
+def test_schedule_route_parses_human_chinese_clock_phrases():
+    route = deterministic_schedule_route(
+        "广州交易中心公开信息每天九点半更新，先创建待审批任务。"
+    )
+
+    assert route is not None
+    assert not isinstance(route, MarketAgentAnswer)
+    assert route[1]["schedule_time"] == "09:30"
+
+
+def test_market_agent_resolves_collection_details_across_turns(market_database):
+    provider = FakeProvider([])
+    repository = MarketAgentRepository()
+    loop = MarketAgentLoop(provider, repository=repository, model_id="fake")
+    first = loop.chat("先别执行，我下一句给日期：我要补采英国系统价格。")
+    second = loop.chat(
+        "那就补 2026-08-08 这一天，先给我确认参数。",
+        session_id=first.session_id,
+    )
+
+    assert first.status == RunStatus.COMPLETED
+    assert second.status == RunStatus.AWAITING_APPROVAL
+    assert second.pending_approval.tool_name == "market_collect_elexon"
+    assert second.pending_approval.arguments["start_date"] == "2026-08-08"
+    assert provider.requests == []
+
+
+def test_deterministic_collection_stops_at_approval_without_model(market_database):
+    provider = FakeProvider([])
+
+    result = MarketAgentLoop(
+        provider,
+        repository=MarketAgentRepository(),
+        model_id="fake",
+    ).chat("补采德国 2026-07-31 ENTSO-E 日前价，先等我审批")
+
+    assert result.status == RunStatus.AWAITING_APPROVAL
+    assert result.pending_approval.tool_name == "market_collect_entsoe"
+    assert result.pending_approval.arguments["area"] == "DE-LU"
+    assert provider.requests == []
+
+
+def test_credential_help_uses_safe_setup_guide_without_model(market_database):
+    provider = FakeProvider([])
+
+    result = MarketAgentLoop(
+        provider,
+        repository=MarketAgentRepository(),
+        model_id="fake",
+    ).chat("我是新用户，需要配置哪些 API Key，分别去哪里申请？")
+
+    assert result.ok is True
+    assert result.status == RunStatus.COMPLETED
+    assert "GridStatus" in result.answer.conclusion
+    assert "Elexon" in result.answer.conclusion
+    assert "不要把任何密钥发到 Agent 对话" in " ".join(result.answer.warnings)
+    assert provider.requests == []
+
+
+def test_cross_source_schedule_creation_requires_approval_and_completes(
+    market_database,
+):
+    message = "每天凌晨 2 点采集德国 ENTSO-E 日前价，名字叫德国昨日价格"
+    route = deterministic_schedule_route(message)
+    assert route == (
+        "market_create_schedule",
+        {
+            "name": "德国昨日价格",
+            "dataset": "entsoe_day_ahead_prices",
+            "schedule_kind": "daily",
+            "schedule_time": "02:00",
+            "enabled": True,
+            "area": "DE-LU",
+        },
+    )
+    provider = FakeProvider([])
+    repository = MarketAgentRepository()
+    loop = MarketAgentLoop(provider, repository=repository, model_id="fake")
+
+    pending = loop.chat(message)
+
+    assert pending.status == RunStatus.AWAITING_APPROVAL
+    assert pending.pending_approval.tool_name == "market_create_schedule"
+    assert provider.requests == []
+    completed = loop.resume_approval(
+        pending.pending_approval.tool_call_id,
+        approved=True,
+        expected_arguments_hash=pending.pending_approval.arguments_hash,
+    )
+    assert completed.ok is True
+    assert "已创建定时任务“德国昨日价格”" in completed.answer.conclusion
+    assert "不会立即采集" in " ".join(completed.answer.warnings)
+
+
+def test_elecheck_source_update_schedule_request_routes_without_requiring_area(
+    market_database,
+):
+    message = "每天9点自动抓取elecheck来源新数据"
+
+    route = deterministic_schedule_route(message)
+
+    assert route == (
+        "market_create_schedule",
+        {
+            "name": "全部地区 Elecheck 增量更新",
+            "dataset": "elecheck_all",
+            "schedule_kind": "daily",
+            "schedule_time": "09:00",
+            "enabled": True,
+            "area": None,
+        },
+    )
+    provider = FakeProvider([])
+    repository = MarketAgentRepository()
+    loop = MarketAgentLoop(provider, repository=repository, model_id="fake")
+    pending = loop.chat(message)
+    assert pending.status == RunStatus.AWAITING_APPROVAL
+    completed = loop.resume_approval(
+        pending.pending_approval.tool_call_id,
+        approved=True,
+        expected_arguments_hash=pending.pending_approval.arguments_hash,
+    )
+    assert completed.ok is True
+    assert "Elecheck 全来源增量更新" in completed.answer.conclusion
+
+
+def test_software_help_explains_cross_feature_workflow_without_model(
+    market_database,
+):
+    answer = deterministic_software_help_answer("新手找不到在哪里设置定时任务，怎么操作？")
+    assert answer is not None
+    assert "等待审批" in answer.conclusion
+    assert "Windows 触发器" in " ".join(answer.warnings)
+
+    provider = FakeProvider([])
+    result = MarketAgentLoop(
+        provider,
+        repository=MarketAgentRepository(),
+        model_id="fake",
+    ).chat("我是新手，数据采集怎么操作才不会误写？")
+    assert result.ok is True
+    assert "只有审批后才执行" in result.answer.conclusion
+    assert provider.requests == []
 
 
 def test_elecheck_query_uses_database_values_and_keeps_missing_day(
@@ -441,6 +832,9 @@ def test_elecheck_query_uses_database_values_and_keeps_missing_day(
         {"period": "2026-07-03", "value": 300.0, "group": None},
     ]
     assert all(point["period"] != "2026-07-02" for point in points)
+    assert payload["facts"][0]["label"] == "有效点数"
+    assert payload["facts"][0]["unit"] == "个"
+    assert all(fact["unit"] == "CNY/MWh" for fact in payload["facts"][1:])
     assert payload["completeness"] == [
         {
             "name": "elecheck_spot 结果覆盖",
@@ -450,6 +844,44 @@ def test_elecheck_query_uses_database_values_and_keeps_missing_day(
             "description": "按查询业务日期的自然日数量计算；缺失日期不补零。",
         }
     ]
+
+
+def test_deterministic_comparison_conclusion_represents_each_dataset():
+    facts = [
+        GroundedFact(
+            fact_id="entsoe_average",
+            label="结果均值",
+            value=101.234,
+            unit="EUR/MWh",
+            source="ENTSO-E",
+            dataset="entsoe_day_ahead_prices",
+            time_basis="UTC",
+            calculation="算术平均",
+        ),
+        GroundedFact(
+            fact_id="elexon_average",
+            label="结果均值",
+            value=82.1,
+            unit="GBP/MWh",
+            source="Elexon",
+            dataset="elexon_system_prices",
+            time_basis="Europe/London",
+            calculation="算术平均",
+        ),
+    ]
+
+    conclusion = MarketAgentLoop._deterministic_conclusion(
+        facts,
+        [],
+        [],
+        [],
+        [],
+        [],
+    )
+
+    assert "ENTSO-E / entsoe_day_ahead_prices" in conclusion
+    assert "Elexon / elexon_system_prices" in conclusion
+    assert "101.23 EUR/MWh" in conclusion
 
 
 def test_entsoe_modern_record_wins_over_legacy_position(seeded_market_database):
@@ -872,7 +1304,58 @@ def test_rejected_approval_never_executes_handler(market_database):
         expected_arguments_hash=pending.pending_approval.arguments_hash,
     )
     assert rejected.status == RunStatus.REJECTED
+    assert rejected.answer is not None
+    assert "拒绝" in rejected.answer.conclusion
     assert counter["calls"] == 0
+
+
+def test_invalid_tool_arguments_are_returned_to_model_for_correction(
+    seeded_market_database,
+):
+    provider = FakeProvider(
+        [
+            ProviderResponse(
+                tool_calls=[
+                    ProviderToolCall(
+                        id="bad-query",
+                        name="market_query_series",
+                        arguments={
+                            "source": "elexon",
+                            "dataset": "not-a-real-dataset",
+                        },
+                    )
+                ]
+            ),
+            ProviderResponse(
+                tool_calls=[
+                    ProviderToolCall(
+                        id="fixed-query",
+                        name="market_query_series",
+                        arguments={
+                            "source": "elexon",
+                            "dataset": "system_prices",
+                        },
+                    )
+                ]
+            ),
+            ProviderResponse(content=json.dumps(final_answer("查询完成。"))),
+        ]
+    )
+
+    result = MarketAgentLoop(
+        provider,
+        repository=MarketAgentRepository(),
+        model_id="fake",
+    ).chat("查询英国系统价格")
+
+    assert result.ok
+    assert any(
+        event["stage"] == "tool_validation_failed" for event in result.events
+    )
+    calls = MarketAgentRepository().list_tool_calls(result.run_id)
+    assert [call["arguments"]["dataset"] for call in calls] == [
+        "elexon_system_prices"
+    ]
 
 
 def test_duplicate_tool_arguments_reuse_result(market_database):
@@ -981,6 +1464,9 @@ def test_first_model_timeout_is_reported_as_retryable(market_database):
     ).chat("回答一个普通问题")
     assert result.status == RunStatus.FAILED
     assert result.error.retryable
+    assert result.answer is not None
+    assert "响应超时" in result.answer.conclusion
+    assert result.answer.warnings
     assert repository.get_run(result.run_id)["model_calls"] == 1
     assert any(event["stage"] == "model_timeout" for event in result.events)
 
@@ -1045,7 +1531,8 @@ def test_stop_requested_during_model_call_stops_before_tool_or_answer(market_dat
         model_id="fake",
     ).chat("执行一个普通分析")
     assert result.status == RunStatus.STOPPED
-    assert result.answer is None
+    assert result.answer is not None
+    assert "停止" in result.answer.conclusion
     assert repository.get_run(result.run_id)["status"] == "stopped"
 
 
@@ -1180,8 +1667,10 @@ def test_gui_result_format_and_cli_surface(market_database):
     gui_source = (
         Path(__file__).parents[1] / "src" / "powertrade_crawler" / "gui.py"
     ).read_text(encoding="utf-8")
-    assert 'notebook.add(market_agent_tab, text="多数据源 Agent")' in gui_source
-    assert 'notebook.add(elecheck_tab, text="Elecheck 易能电易查")' in gui_source
+    assert "market_agent_app = MarketAgentApp(" in gui_source
+    assert "on_navigate=shell.show_page" in gui_source
+    assert 'shell.page("elecheck")' in gui_source
+    assert '("agent", market_agent_app)' in gui_source
     runner = CliRunner()
     help_result = runner.invoke(app, ["market-agent", "--help"])
     assert help_result.exit_code == 0

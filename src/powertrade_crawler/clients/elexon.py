@@ -6,6 +6,12 @@ from loguru import logger
 
 from powertrade_crawler.config import get_settings
 from powertrade_crawler.credentials import get_credential
+from powertrade_crawler.network_errors import (
+    NetworkFailure,
+    failure_from_exception,
+    failure_from_response,
+    retry_after_seconds,
+)
 
 
 class ElexonClient:
@@ -34,36 +40,43 @@ class ElexonClient:
         return self.extract_rows(payload)
 
     def get(self, *, path: str, params: dict[str, Any]) -> httpx.Response:
-        last_error: Exception | None = None
         url = f"{self.base_url}{path}"
         for attempt in range(self.retry_times + 1):
             self.wait_for_rate_limit()
             try:
                 response = self.client.get(url, params=params)
-                if response.status_code == 429:
-                    retry_after = float(response.headers.get("Retry-After", "60"))
-                    logger.warning("Elexon rate limited; sleeping {} seconds", retry_after)
-                    sleep(retry_after)
-                    continue
-                if 400 <= response.status_code < 500:
-                    raise RuntimeError(
-                        f"Elexon rejected request with HTTP {response.status_code}: "
-                        f"{self.extract_error_details(response)}"
+                if response.is_error:
+                    failure = failure_from_response(
+                        "Elexon",
+                        response,
+                        detail=self.extract_error_details(response),
+                        attempts=attempt + 1,
                     )
-                response.raise_for_status()
+                    if failure.retryable and attempt < self.retry_times:
+                        delay = retry_after_seconds(response, default=1 + attempt)
+                        logger.warning(
+                            "Elexon GET failed on attempt {} with {}",
+                            attempt + 1,
+                            failure.kind.value,
+                        )
+                        sleep(delay)
+                        continue
+                    raise failure
                 return response
-            except RuntimeError:
+            except NetworkFailure:
                 raise
-            except Exception as exc:
-                last_error = exc
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                failure = failure_from_exception("Elexon", exc, attempts=attempt + 1)
                 logger.warning(
                     "Elexon GET failed on attempt {} with {}",
                     attempt + 1,
-                    type(exc).__name__,
+                    failure.kind.value,
                 )
-                if attempt < self.retry_times:
+                if failure.retryable and attempt < self.retry_times:
                     sleep(1 + attempt)
-        raise RuntimeError("Elexon GET failed after retries") from last_error
+                    continue
+                raise failure from exc
+        raise AssertionError("unreachable")
 
     def extract_rows(self, payload: Any) -> list[dict[str, Any]]:
         if isinstance(payload, list):

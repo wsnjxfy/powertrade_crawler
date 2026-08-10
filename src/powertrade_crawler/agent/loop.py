@@ -44,16 +44,461 @@ from powertrade_crawler.agent.schemas import (
 )
 from powertrade_crawler.agent.security import arguments_hash, redact_text, redact_value
 from powertrade_crawler.agent.tools import ToolContext, ToolRegistry
+from powertrade_crawler.failure_messages import (
+    completed_change_explanation,
+    explain_agent_failure,
+)
+from powertrade_crawler.credential_setup import credential_is_configured
 from powertrade_crawler.elecheck_collection import clear_price_area_targets
 from powertrade_crawler.llm_router import (
     FreeRouterManagementClient,
     load_free_router_config,
 )
+from powertrade_crawler.intent_parsing import contextualize_continuation, parse_clock_time
 
 
 MAX_MODEL_CALLS = 8
 MAX_TOOL_CALLS_PER_RESPONSE = 8
 EventCallback = Callable[[dict[str, Any]], None]
+
+
+def user_failure_explanation(error: AgentError) -> tuple[str, str]:
+    """Turn internal failures into a concise, actionable user-facing explanation."""
+    return explain_agent_failure(
+        code=error.code,
+        message=error.message,
+        retryable=error.retryable,
+        scope_label="Elecheck ",
+    )
+
+
+def deterministic_elecheck_boundary_answer(message: str) -> AgentAnswer | None:
+    text = message.strip().lower()
+    if any(token in text for token in ("天气", "下雨", "气温", "降水")):
+        return AgentAnswer(
+            conclusion="无法查询天气：Elecheck Agent 只处理易能电易查业务数据。",
+            warnings=["没有调用外部天气服务；请切换到具备天气数据能力的工具。"],
+        )
+    if any(token in text for token in ("清空", "全删", "删除数据", "压缩数据库")):
+        return AgentAnswer(
+            conclusion="无法删除或维护业务数据：Elecheck Agent 没有数据删除或数据库维护工具。",
+            warnings=["没有修改业务数据；请使用软件的数据维护页面并人工确认。"],
+        )
+    if any(token in text for token in ("authorization", "token", "凭据")) and any(
+        token in text
+        for token in ("替我", "帮我改", "直接改", "写进", "写入", "发给你", "接收")
+    ):
+        return AgentAnswer(
+            conclusion="无法代写或接收 Elecheck 凭据：Agent 没有修改凭据或文件的工具。",
+            warnings=["请使用“API 配置向导”在本机配置，不要把凭据发送到对话中。"],
+        )
+    if any(token in text for token in ("entso-e", "entsoe", "elexon", "德国")):
+        return AgentAnswer(
+            conclusion="无法完成跨来源请求：Elecheck Agent 只处理易能电易查数据。",
+            warnings=["请切换到“多数据源 Agent”进行 ENTSO-E、Elexon 等来源的查询或比较。"],
+        )
+    if any(
+        token in text
+        for token in ("powershell", "cmd", "shell", "命令行", "执行命令", "跑个命令")
+    ):
+        return AgentAnswer(
+            conclusion="无法执行 Shell 或系统命令：Elecheck Agent 没有命令执行工具。",
+            warnings=["没有启动外部进程；请使用软件提供的受控功能入口。"],
+        )
+    if any(
+        token in text
+        for token in ("浏览文件", "任意文件", "打开.env", "读取.env", "凭据文件")
+    ):
+        return AgentAnswer(
+            conclusion="无法浏览或读取任意本机文件：Elecheck Agent 只访问受控业务表和导出目录。",
+            warnings=["没有读取文件；凭据只能通过“API 配置向导”检查配置状态。"],
+        )
+    return None
+
+
+def deterministic_elecheck_read_route(message: str) -> tuple[str, dict[str, Any]] | None:
+    text = message.strip().lower()
+    if any(token in text for token in ("authorization", "token", "凭据")) and any(
+        token in text for token in ("是否已配置", "检查", "配置状态", "有没有配置")
+    ):
+        return "elecheck_credential_status", {}
+    credential_mentioned = any(
+        token in text
+        for token in (
+            "api key",
+            "apikey",
+            "authorization",
+            "token",
+            "凭据",
+            "密钥",
+            "配置向导",
+            "401",
+            "403",
+        )
+    )
+    setup_help_requested = any(
+        token in text
+        for token in (
+            "配置",
+            "申请",
+            "注册",
+            "怎么",
+            "如何",
+            "需要哪些",
+            "新用户",
+            "缺少",
+            "失效",
+            "修改",
+            "替我",
+            "401",
+            "403",
+            "向导",
+        )
+    )
+    if credential_mentioned and setup_help_requested:
+        return "elecheck_credential_setup_guide", {}
+    if "导出" in text and "现货" in text:
+        dates = _elecheck_message_dates(message)
+        area = next(
+            (
+                name
+                for name in (
+                    "江苏",
+                    "山西",
+                    "山东",
+                    "广东",
+                    "浙江",
+                    "安徽",
+                    "福建",
+                    "甘肃",
+                    "蒙西",
+                    "湖北",
+                    "湖南",
+                    "河南",
+                    "河北",
+                    "辽宁",
+                )
+                if name in message
+            ),
+            None,
+        )
+        if dates and area:
+            series = "all"
+            if any(token in text for token in ("只要日前", "仅日前", "只导日前")):
+                series = "day_ahead"
+            elif any(token in text for token in ("只要实时", "仅实时", "只导实时")):
+                series = "real_time"
+            elif "价差" in text and not any(
+                token in text for token in ("别混价差", "不要价差", "不含价差")
+            ):
+                series = "spread"
+            elif "日前" in text and "实时" not in text:
+                series = "day_ahead"
+            elif "实时" in text and "日前" not in text:
+                series = "real_time"
+            return "elecheck_export_spot", {
+                "area": area,
+                "selected_date": dates[0].isoformat(),
+                "file_format": "png" if "png" in text else "csv",
+                "series": series,
+            }
+    if "导出" in text and "代理购电" in text and any(
+        token in text for token in ("最新", "全部省", "各省")
+    ):
+        return "elecheck_export_purchasing", {}
+    if any(token in text for token in ("更新时间", "记录量", "多少条", "新到哪")) and any(
+        token in text for token in ("三类", "现货", "代理购电", "机制", "elecheck")
+    ):
+        return "elecheck_data_freshness", {}
+    schedule_creation = any(
+        token in text for token in ("创建", "新建", "建个", "建一个", "发起创建")
+    )
+    if (
+        "定时" in text
+        and not schedule_creation
+        and any(token in text for token in ("运行记录", "运行情况", "跑得", "失败", "结果"))
+    ):
+        return "elecheck_list_schedule_runs", {}
+    if "定时任务" in text and any(token in text for token in ("列出", "哪些", "查看", "列表")):
+        return "elecheck_list_schedules", {}
+    return None
+
+
+def deterministic_monthly_extrema_routes(
+    message: str,
+) -> list[tuple[str, dict[str, Any]]] | None:
+    text = message.strip().lower()
+    if "日均价" not in text or not any(token in text for token in ("最高", "最低")):
+        return None
+    match = re.search(r"(20\d{2})\s*年\s*(\d{1,2})\s*月", message)
+    if match is None:
+        match = re.search(r"(20\d{2})-(\d{1,2})", message)
+    if match is None:
+        return None
+    year, month_number = (int(part) for part in match.groups())
+    if not 1 <= month_number <= 12:
+        return None
+    month = f"{year:04d}-{month_number:02d}"
+    area = next(
+        (
+            name
+            for name in (
+                "江苏",
+                "山西",
+                "山东",
+                "广东",
+                "浙江",
+                "安徽",
+                "福建",
+                "甘肃",
+                "蒙西",
+                "湖北",
+                "湖南",
+                "河南",
+                "河北",
+                "辽宁",
+            )
+            if name in message
+        ),
+        None,
+    )
+    price_type = "day_ahead" if "日前" in text else "real_time"
+    directions = [
+        direction
+        for token, direction in (("最高", "highest"), ("最低", "lowest"))
+        if token in text
+    ]
+    return [
+        (
+            "elecheck_analyze_spot_monthly_extrema",
+            {
+                "month": month,
+                "price_type": price_type,
+                "direction": direction,
+                "area": area,
+                "limit": 5,
+            },
+        )
+        for direction in directions
+    ]
+
+
+def _elecheck_action_failure(reason: str, guidance: str) -> AgentAnswer:
+    return AgentAnswer(
+        conclusion=f"当前无法发起操作：{reason}",
+        warnings=[f"没有执行采集，也没有修改业务数据。{guidance}"],
+    )
+
+
+def _elecheck_message_dates(message: str) -> list[date]:
+    values = []
+    for raw in re.findall(r"20\d{2}-\d{2}-\d{2}", message):
+        try:
+            parsed = date.fromisoformat(raw)
+        except ValueError:
+            continue
+        if parsed not in values:
+            values.append(parsed)
+    return values
+
+
+def deterministic_elecheck_action(
+    message: str,
+    *,
+    today: date | None = None,
+) -> tuple[str, dict[str, Any]] | AgentAnswer | None:
+    text = message.strip().lower()
+    schedule_request = (
+        "任务" in text
+        and any(token in text for token in ("创建", "新建", "建个", "建一个"))
+    ) or (
+        any(token in text for token in ("每天", "每周", "每月", "定时"))
+        and any(token in text for token in ("自动", "抓取", "采集", "更新", "采"))
+        and any(token in text for token in ("elecheck", "易能电", "现货"))
+    )
+    if schedule_request:
+        try:
+            configured_area_names = {
+                str(row["area_name"]).strip()
+                for row in clear_price_area_targets(resolve_sqlite_path())
+                if row.get("area_name")
+            }
+        except (OSError, sqlite3.Error, ValueError):
+            configured_area_names = set()
+        configured_area_names.update(
+            {
+                "江苏",
+                "山西",
+                "山东",
+                "广东",
+                "浙江",
+                "安徽",
+                "福建",
+                "甘肃",
+                "蒙西",
+                "湖北",
+                "湖南",
+                "河南",
+                "河北",
+                "辽宁",
+            }
+        )
+        area = next(
+            (
+                name
+                for name in sorted(configured_area_names, key=len, reverse=True)
+                if name in message
+            ),
+            None,
+        )
+        source_wide = "现货" not in text or any(
+            token in text for token in ("来源新数据", "全部", "全量", "所有数据", "各类")
+        )
+        if area is None and not source_wide:
+            return _elecheck_action_failure(
+                "定时现货任务缺少地区。",
+                "请指定一个 Elecheck 地区。",
+            )
+        hour, minute = parse_clock_time(message)
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            return _elecheck_action_failure(
+                "定时任务运行时间无效。",
+                "请使用 00:00 至 23:59 的时间。",
+            )
+        name_match = re.search(r"(?:名字叫|名称为)\s*([^；;，,。]+)", message)
+        name = (
+            name_match.group(1).strip()
+            if name_match
+            else (
+                f"{area or '全部地区'} Elecheck 增量更新"
+                if source_wide
+                else f"{area}昨日现货采集"
+            )
+        )
+        schedule_kind = "daily"
+        if "每周" in text:
+            schedule_kind = "weekly"
+        elif "每月" in text:
+            schedule_kind = "monthly"
+        return "elecheck_create_schedule", {
+            "name": name,
+            "spider_name": (
+                "elecheck_source_update" if source_wide else "elecheck_clear_price"
+            ),
+            "schedule_kind": schedule_kind,
+            "schedule_time": f"{hour:02d}:{minute:02d}",
+            "enabled": not any(token in text for token in ("禁用", "先别", "不要启用")),
+            "area": area,
+            "date_mode": (
+                "none" if source_wide else ("yesterday" if "昨天" in text else "none")
+            ),
+        }
+
+    routed_end_date = deterministic_all_spot_update_end_date(message, today=today)
+    if routed_end_date is not None:
+        return "elecheck_update_all_spot", {"end_date": routed_end_date}
+
+    is_action = any(
+        token in text
+        for token in (
+            "采集",
+            "补采",
+            "帮我采",
+            "采一下",
+            "补一下",
+            "采完",
+            "更新",
+            "刷新",
+        )
+    )
+    if not is_action:
+        return None
+    category_count = sum(
+        (
+            "现货" in text,
+            "代理购电" in text,
+            any(token in text for token in ("机制电价", "增量机制")),
+        )
+    )
+    if category_count > 1:
+        return None
+    if (
+        any(token in text for token in ("机制电价", "增量机制"))
+        and "代理购电" not in text
+        and "现货" not in text
+    ):
+        return "elecheck_update_mechanism", {}
+    if "代理购电" in text:
+        months = []
+        for raw in re.findall(r"20\d{2}-(?:0[1-9]|1[0-2])", message):
+            if raw not in months:
+                months.append(raw)
+        if not months:
+            return _elecheck_action_failure(
+                "代理购电采集缺少月份范围。",
+                "请提供 YYYY-MM 格式的开始和结束月份。",
+            )
+        return "elecheck_collect_purchasing", {
+            "start_month": months[0],
+            "end_month": months[-1],
+        }
+    if "现货" not in text:
+        return None
+
+    dates = _elecheck_message_dates(message)
+    if not dates:
+        return _elecheck_action_failure(
+            "现货采集缺少日期范围。",
+            "请提供开始和结束日期；单次最多 31 天。",
+        )
+    start, end = dates[0], dates[-1]
+    if (end - start).days + 1 > 31:
+        return _elecheck_action_failure(
+            "现货单次采集范围超过 31 天。",
+            "请把任务拆分为多个不超过 31 天的批次。",
+        )
+    try:
+        area_names = {
+            str(row["area_name"]).strip()
+            for row in clear_price_area_targets(resolve_sqlite_path())
+        }
+    except (OSError, sqlite3.Error, ValueError):
+        area_names = set()
+    area = next((name for name in area_names if name and name in message), None)
+    if area is None:
+        area = next(
+            (
+                name
+                for name in (
+                    "江苏",
+                    "山西",
+                    "山东",
+                    "广东",
+                    "浙江",
+                    "安徽",
+                    "福建",
+                    "甘肃",
+                    "蒙西",
+                    "湖北",
+                    "湖南",
+                    "河南",
+                    "河北",
+                    "辽宁",
+                )
+                if name in message
+            ),
+            None,
+        )
+    if area is None:
+        return _elecheck_action_failure(
+            "现货采集缺少可识别的地区。",
+            "请指定一个 Elecheck 地区。",
+        )
+    return "elecheck_collect_spot", {
+        "area": area,
+        "start_date": start.isoformat(),
+        "end_date": end.isoformat(),
+    }
 
 
 def build_configured_provider(
@@ -157,12 +602,59 @@ class AgentLoop:
             model_id=self.model_id,
         )
         messages = self._initial_messages(session_id)
-        routed_end_date = deterministic_all_spot_update_end_date(message)
-        if routed_end_date is not None:
+        read_route = deterministic_elecheck_read_route(message)
+        boundary_answer = deterministic_elecheck_boundary_answer(message)
+        if boundary_answer is not None:
+            self._event(
+                run_id,
+                session_id,
+                "request_declined",
+                {"reason": "unsupported_or_unsafe_capability"},
+            )
+            return self._complete_answer(
+                run_id,
+                session_id,
+                boundary_answer,
+                usage={},
+            )
+        extrema_routes = deterministic_monthly_extrema_routes(message)
+        if extrema_routes is not None:
+            return self._execute_direct_extrema(
+                run_id,
+                session_id,
+                extrema_routes,
+            )
+        if read_route is not None:
+            return self._execute_direct_read(
+                run_id,
+                session_id,
+                read_route[0],
+                read_route[1],
+            )
+        contextual_message = contextualize_continuation(
+            message,
+            self.repository.model_messages(session_id),
+        )
+        routed_action = deterministic_elecheck_action(contextual_message)
+        if isinstance(routed_action, AgentAnswer):
+            self._event(
+                run_id,
+                session_id,
+                "collection_details_required",
+                {"reason": routed_action.conclusion},
+            )
+            return self._complete_answer(
+                run_id,
+                session_id,
+                routed_action,
+                usage={},
+            )
+        if routed_action is not None:
+            routed_tool_name, routed_arguments = routed_action
             call = ProviderToolCall(
                 id=f"direct-all-spot-{uuid4()}",
-                name="elecheck_update_all_spot",
-                arguments={"end_date": routed_end_date},
+                name=routed_tool_name,
+                arguments=routed_arguments,
             )
             response = ProviderResponse(tool_calls=[call])
             if self.protocol == AgentProtocol.NATIVE:
@@ -190,7 +682,7 @@ class AgentLoop:
                 {
                     "tool_name": call.name,
                     "arguments": call.arguments,
-                    "reason": "explicit_all_spot_update",
+                    "reason": "deterministic_elecheck_action",
                 },
             )
             routed_result = self._process_tool_calls(
@@ -284,6 +776,52 @@ class AgentLoop:
             )
             if pending_result is not None:
                 return pending_result
+        if call["approval_status"] == "approved" and result.get("ok"):
+            data = result.get("data") or {}
+            tool_labels = {
+                "elecheck_collect_spot": "Elecheck 现货采集",
+                "elecheck_collect_purchasing": "代理购电采集",
+                "elecheck_update_mechanism": "增量机制电价更新",
+                "elecheck_update_all_spot": "全部地区现货更新",
+                "elecheck_create_schedule": "定时任务创建",
+            }
+            record_count = next(
+                (
+                    data[key]
+                    for key in (
+                        "records_upserted",
+                        "records_written",
+                        "records_produced",
+                    )
+                    if isinstance(data.get(key), int)
+                ),
+                None,
+            )
+            count_text = f"，写入或更新 {record_count} 条记录" if record_count is not None else ""
+            answer = AgentAnswer(
+                conclusion=(
+                    f"已审批并完成 {tool_labels.get(call['tool_name'], call['tool_name'])}"
+                    f"{count_text}。"
+                ),
+                business_metrics=(
+                    [
+                        {
+                            "name": "写入或更新记录数",
+                            "value": record_count,
+                            "unit": "条",
+                        }
+                    ]
+                    if record_count is not None
+                    else []
+                ),
+                units=["条"] if record_count is not None else [],
+            )
+            return self._complete_answer(
+                run["id"],
+                run["session_id"],
+                answer,
+                usage=run["usage"],
+            )
         return self._run(
             run_id=run["id"],
             session_id=run["session_id"],
@@ -302,6 +840,315 @@ class AgentLoop:
             {"role": "system", "content": system},
             *self.repository.model_messages(session_id),
         ]
+
+    def _complete_answer(
+        self,
+        run_id: str,
+        session_id: str,
+        answer: AgentAnswer,
+        *,
+        usage: dict[str, int | float],
+    ) -> AgentRunResult:
+        answer = self._ground_final_answer(run_id, answer)
+        payload = answer.model_dump(mode="json")
+        self.repository.add_message(
+            session_id,
+            role="assistant",
+            content=payload,
+            run_id=run_id,
+        )
+        self.repository.update_run(
+            run_id,
+            status=RunStatus.COMPLETED.value,
+            answer=payload,
+            clear_pending_context=True,
+            usage=usage,
+        )
+        self._event(run_id, session_id, "conclusion_generated", {})
+        return self._result(
+            ok=True,
+            status=RunStatus.COMPLETED,
+            run_id=run_id,
+            session_id=session_id,
+            answer=answer,
+            usage=usage,
+        )
+
+    def _execute_direct_read(
+        self,
+        run_id: str,
+        session_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+    ) -> AgentRunResult:
+        tool, parsed = self.registry.validate(tool_name, arguments)
+        if tool.risk_level != RiskLevel.AUTO:
+            raise ValueError("确定性只读路由不能执行需要审批的工具。")
+        normalized_arguments = parsed.model_dump(mode="json")
+        call_id = f"{run_id}:direct-{uuid4()}"[:160]
+        record = self.repository.create_tool_call(
+            call_id=call_id,
+            run_id=run_id,
+            session_id=session_id,
+            tool_name=tool_name,
+            risk_level=tool.risk_level,
+            arguments=normalized_arguments,
+        )
+        self._event(
+            run_id,
+            session_id,
+            "intent_routed",
+            {"tool_name": tool_name, "arguments": normalized_arguments},
+        )
+        self._event(
+            run_id,
+            session_id,
+            "tool_proposed",
+            {"tool_name": tool_name, "arguments": normalized_arguments},
+        )
+        result = self._execute_tool(
+            run_id=run_id,
+            session_id=session_id,
+            call_id=record["id"],
+            tool_name=tool_name,
+            arguments=normalized_arguments,
+        )
+        if not result.get("ok"):
+            raw_error = result.get("error") or {
+                "code": "tool_execution_failed",
+                "message": "工具执行失败。",
+            }
+            return self._failed(
+                run_id,
+                session_id,
+                AgentError.model_validate(raw_error),
+                {},
+            )
+        answer = self._direct_tool_answer(tool_name, result.get("data") or {})
+        return self._complete_answer(
+            run_id,
+            session_id,
+            answer,
+            usage={},
+        )
+
+    def _execute_direct_extrema(
+        self,
+        run_id: str,
+        session_id: str,
+        routes: list[tuple[str, dict[str, Any]]],
+    ) -> AgentRunResult:
+        payloads = []
+        for tool_name, arguments in routes:
+            tool, parsed = self.registry.validate(tool_name, arguments)
+            normalized_arguments = parsed.model_dump(mode="json")
+            call_id = f"{run_id}:direct-{uuid4()}"[:160]
+            record = self.repository.create_tool_call(
+                call_id=call_id,
+                run_id=run_id,
+                session_id=session_id,
+                tool_name=tool_name,
+                risk_level=tool.risk_level,
+                arguments=normalized_arguments,
+            )
+            self._event(
+                run_id,
+                session_id,
+                "intent_routed",
+                {"tool_name": tool_name, "arguments": normalized_arguments},
+            )
+            self._event(
+                run_id,
+                session_id,
+                "tool_proposed",
+                {"tool_name": tool_name, "arguments": normalized_arguments},
+            )
+            result = self._execute_tool(
+                run_id=run_id,
+                session_id=session_id,
+                call_id=record["id"],
+                tool_name=tool_name,
+                arguments=normalized_arguments,
+            )
+            if not result.get("ok"):
+                raw_error = result.get("error") or {
+                    "code": "tool_execution_failed",
+                    "message": "工具执行失败。",
+                }
+                return self._failed(
+                    run_id,
+                    session_id,
+                    AgentError.model_validate(raw_error),
+                    {},
+                )
+            payloads.append(result.get("data") or {})
+
+        snippets = []
+        metrics = []
+        warnings = []
+        data_range = []
+        for data in payloads:
+            extreme = data.get("extreme") or {}
+            direction = "最高" if data.get("direction") == "highest" else "最低"
+            scope = data.get("scope") or {}
+            scope_label = scope.get("area_name") or "全部可用地区等权平均"
+            date_text = extreme.get("date") or "未知日期"
+            value = extreme.get("average_price")
+            unit = extreme.get("unit") or "CNY/MWh"
+            display_value = f"{value:.2f}" if isinstance(value, (int, float)) else value
+            snippets.append(
+                f"{scope_label}{direction}日为 {date_text}，日均价 {display_value} {unit}"
+            )
+            metrics.append(
+                {
+                    "name": f"{direction}日均价",
+                    "value": value,
+                    "unit": unit,
+                    "description": date_text,
+                }
+            )
+            available = data.get("available_date_range") or {}
+            if available.get("first_date") and available.get("last_date"):
+                data_range.append(
+                    f"{available['first_date']} 至 {available['last_date']}"
+                )
+            warnings.extend(str(item) for item in data.get("warnings") or [])
+        answer = AgentAnswer(
+            conclusion="；".join(snippets) + "。",
+            data_range=list(dict.fromkeys(data_range)),
+            business_metrics=metrics,
+            units=["CNY/MWh"],
+            warnings=list(dict.fromkeys(warnings)),
+        )
+        return self._complete_answer(
+            run_id,
+            session_id,
+            answer,
+            usage={},
+        )
+
+    @staticmethod
+    def _direct_tool_answer(tool_name: str, data: dict[str, Any]) -> AgentAnswer:
+        if tool_name == "elecheck_credential_setup_guide":
+            return AgentAnswer(
+                conclusion=str(
+                    data.get("assistant_conclusion")
+                    or "已检查 API 配置状态，请打开 API 配置向导继续。"
+                ),
+                warnings=[str(item) for item in data.get("warnings") or []],
+                business_metrics=[
+                    {
+                        "name": "已配置采集凭据",
+                        "value": int(data.get("collection_configured") or 0),
+                        "unit": "项",
+                    },
+                    {
+                        "name": "采集必需凭据",
+                        "value": int(data.get("collection_required") or 0),
+                        "unit": "项",
+                    },
+                    {
+                        "name": "可用免费模型渠道",
+                        "value": int(
+                            (data.get("router") or {}).get(
+                                "available_free_providers", 0
+                            )
+                        ),
+                        "unit": "个",
+                    },
+                ],
+                units=["项", "个"],
+                data_sources=[str(item) for item in data.get("data_sources") or []],
+            )
+        if tool_name == "elecheck_data_freshness":
+            labels = {
+                "spot_price": "现货价格",
+                "purchasing_price": "代理购电",
+                "mechanism_price": "增量机制电价",
+            }
+            summaries = []
+            metrics = []
+            for key, label in labels.items():
+                row = data.get("tables", {}).get(key, {})
+                records = int(row.get("records") or 0)
+                latest = row.get("latest_business_period") or "无业务日期"
+                summaries.append(f"{label} {records} 条，最新业务期 {latest}")
+                metrics.append(
+                    {
+                        "name": f"{label}记录数",
+                        "value": records,
+                        "unit": "条",
+                        "description": f"最新业务期：{latest}",
+                    }
+                )
+            return AgentAnswer(
+                conclusion="；".join(summaries) + "。",
+                business_metrics=metrics,
+                units=["条"],
+                data_range=[f"统计日期：{data.get('as_of_date') or '未知'}"],
+            )
+        if tool_name == "elecheck_list_schedule_runs":
+            runs = data.get("runs") or []
+            if not runs:
+                return AgentAnswer(
+                    conclusion="当前没有 Elecheck 定时任务运行记录。",
+                    warnings=["可能尚未创建任务，或现有任务尚未运行。"],
+                )
+            latest = runs[0]
+            return AgentAnswer(
+                conclusion=(
+                    f"共找到 {len(runs)} 条近期运行记录；最近一次状态为 "
+                    f"{latest.get('status') or '未知'}。"
+                ),
+                business_metrics=[
+                    {"name": "近期运行记录数", "value": len(runs), "unit": "条"}
+                ],
+                warnings=(
+                    [str(latest.get("message"))]
+                    if latest.get("status") == "failed" and latest.get("message")
+                    else []
+                ),
+            )
+        if tool_name == "elecheck_list_schedules":
+            jobs = data.get("jobs") or []
+            return AgentAnswer(
+                conclusion=(
+                    f"当前共有 {len(jobs)} 个 Elecheck 定时任务。"
+                    if jobs
+                    else "当前没有 Elecheck 定时任务。"
+                ),
+                business_metrics=[
+                    {"name": "定时任务数", "value": len(jobs), "unit": "个"}
+                ],
+            )
+        if tool_name.startswith("elecheck_export_"):
+            if data.get("empty"):
+                reason = str(data.get("reason") or "所选范围没有可导出的数据")
+                return AgentAnswer(
+                    conclusion=f"无法导出：{reason}；未生成空文件。",
+                    warnings=["请先采集对应日期的数据，或调整日期后重试。"],
+                )
+            file_path = str(data.get("file") or "")
+            rows = data.get("rows_or_figures")
+            return AgentAnswer(
+                conclusion=(
+                    f"导出已完成：{file_path}。"
+                    if file_path
+                    else "导出工具已完成。"
+                ),
+                business_metrics=(
+                    [
+                        {
+                            "name": "导出行数或图表数",
+                            "value": rows,
+                            "unit": "项",
+                        }
+                    ]
+                    if isinstance(rows, int)
+                    else []
+                ),
+            )
+        return AgentAnswer(conclusion=f"{tool_name} 已完成。")
 
     def _run(
         self,
@@ -608,6 +1455,22 @@ class AgentLoop:
                 tool.risk_level != RiskLevel.AUTO
                 and persisted_call["approval_status"] == "pending"
             ):
+                side_effect = tool.side_effect
+                if tool.name in {
+                    "elecheck_collect_spot",
+                    "elecheck_update_all_spot",
+                    "elecheck_collect_purchasing",
+                    "elecheck_update_mechanism",
+                    "elecheck_run_schedule",
+                }:
+                    credential_status = (
+                        "已配置"
+                        if credential_is_configured("elecheck_authorization")
+                        else "待配置"
+                    )
+                    side_effect = (
+                        f"{side_effect} Elecheck Authorization：{credential_status}。"
+                    )
                 pending = PendingApproval(
                     tool_call_id=call_id,
                     run_id=run_id,
@@ -615,7 +1478,7 @@ class AgentLoop:
                     risk_level=tool.risk_level,
                     arguments=normalized_args,
                     arguments_hash=arguments_hash(normalized_args),
-                    side_effect=tool.side_effect,
+                    side_effect=side_effect,
                 )
                 self.repository.update_run(
                     run_id,
@@ -735,6 +1598,38 @@ class AgentLoop:
     ) -> tuple[list[ProviderToolCall], AgentAnswer | None]:
         if protocol == AgentProtocol.NATIVE:
             if response.tool_calls:
+                if len(response.tool_calls) == 1:
+                    call = response.tool_calls[0]
+                    pseudo_arguments = None
+                    if call.name.replace("_", "").lower() == "agentanswer":
+                        pseudo_arguments = dict(call.arguments)
+                    elif "conclusion" in call.name:
+                        try:
+                            embedded = parse_json_object(call.name)
+                        except ValueError:
+                            embedded = None
+                        if isinstance(embedded, dict) and embedded.get("conclusion"):
+                            pseudo_arguments = embedded
+                    if pseudo_arguments is not None:
+                        arguments = pseudo_arguments
+                        list_fields = {
+                            "data_range",
+                            "business_metrics",
+                            "units",
+                            "completeness",
+                            "warnings",
+                            "generated_files",
+                            "executed_actions",
+                            "data_sources",
+                        }
+                        for field in list_fields:
+                            value = arguments.get(field)
+                            if isinstance(value, str) and value.strip().startswith("["):
+                                try:
+                                    arguments[field] = json.loads(value)
+                                except json.JSONDecodeError:
+                                    pass
+                        return [], AgentAnswer.model_validate(arguments)
                 return response.tool_calls, None
             payload = parse_json_object(response.content or "")
             if "answer" in payload and isinstance(payload["answer"], dict):
@@ -898,11 +1793,9 @@ class AgentLoop:
         error: AgentError,
         usage: dict[str, int | float],
     ) -> AgentRunResult:
-        completed_actions = [
-            row["tool_name"]
-            for row in self.repository.list_tool_calls(run_id)
-            if row["status"] == "success"
-        ]
+        completed_actions, change_note = completed_change_explanation(
+            self.repository.list_tool_calls(run_id)
+        )
         if completed_actions:
             error = error.model_copy(
                 update={
@@ -912,11 +1805,25 @@ class AgentLoop:
                     }
                 }
             )
+        conclusion, guidance = user_failure_explanation(error)
+        answer = AgentAnswer(
+            conclusion=conclusion,
+            warnings=[change_note, guidance],
+            executed_actions=completed_actions,
+        )
+        answer_payload = answer.model_dump(mode="json")
         self.repository.update_run(
             run_id,
             status=RunStatus.FAILED.value,
+            answer=answer_payload,
             error=error.model_dump(mode="json"),
             usage=usage,
+        )
+        self.repository.add_message(
+            session_id,
+            role="assistant",
+            content=answer_payload,
+            run_id=run_id,
         )
         self._event(
             run_id,
@@ -929,6 +1836,7 @@ class AgentLoop:
             status=RunStatus.FAILED,
             run_id=run_id,
             session_id=session_id,
+            answer=answer,
             error=error,
             usage=usage,
         )
@@ -943,11 +1851,23 @@ class AgentLoop:
             code="run_stopped",
             message="用户已停止运行；未完成的模型结果已丢弃，后续工具不会执行。",
         )
+        answer = AgentAnswer(
+            conclusion="任务已按用户要求停止。",
+            warnings=["未完成的模型结果已丢弃，后续工具不会执行。"],
+        )
+        answer_payload = answer.model_dump(mode="json")
         self.repository.update_run(
             run_id,
             status=RunStatus.STOPPED.value,
+            answer=answer_payload,
             error=error.model_dump(mode="json"),
             usage=usage,
+        )
+        self.repository.add_message(
+            session_id,
+            role="assistant",
+            content=answer_payload,
+            run_id=run_id,
         )
         self._event(run_id, session_id, "stopped", {})
         return self._result(
@@ -955,6 +1875,7 @@ class AgentLoop:
             status=RunStatus.STOPPED,
             run_id=run_id,
             session_id=session_id,
+            answer=answer,
             error=error,
             usage=usage,
         )
@@ -991,7 +1912,7 @@ def deterministic_all_spot_update_end_date(
 ) -> str | None:
     compact = re.sub(r"\s+", "", message).lower()
     if "现货" not in compact or not any(
-        verb in compact for verb in ("更新", "采集", "补采")
+        verb in compact for verb in ("更新", "采集", "补采", "补到")
     ):
         return None
     if "elecheck" not in compact and "易能电易查" not in compact:

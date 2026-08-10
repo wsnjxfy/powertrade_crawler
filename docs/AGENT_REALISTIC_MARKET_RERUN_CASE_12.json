@@ -1,0 +1,49 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "entsoe_price",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_query_series"
+      ],
+      "tool_arguments": [
+        {
+          "source": "entsoe",
+          "dataset": "entsoe_day_ahead_prices",
+          "metric": null,
+          "area": "DE-LU",
+          "start_date": null,
+          "end_date": null,
+          "aggregation": "daily",
+          "statistic": "average",
+          "group_by": "none",
+          "limit": 366
+        }
+      ],
+      "data_sources": [
+        "ENTSO-E Transparency Platform"
+      ],
+      "units": [
+        "EUR/MWh"
+      ],
+      "dataset_ids": [],
+      "conclusion": "有效点数为 5 EUR/MWh；结果均值为 140.6809337121212 EUR/MWh；结果最小值为 115.68284090909091 EUR/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 75.718
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 75.718
+  }
+}

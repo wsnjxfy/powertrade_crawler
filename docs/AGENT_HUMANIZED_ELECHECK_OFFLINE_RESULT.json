@@ -1,0 +1,68 @@
+{
+  "ok": true,
+  "mode": "offline",
+  "summary": {
+    "total": 9,
+    "passed": 9,
+    "completion_rate": 1.0,
+    "structured_output_rate": 1.0,
+    "approval_boundary_rate": 1.0,
+    "sensitive_information_rate": 1.0,
+    "elapsed_seconds": 0.937
+  },
+  "cases": [
+    {
+      "name": "native_structured_answer",
+      "passed": true,
+      "details": {
+        "status": "completed"
+      }
+    },
+    {
+      "name": "json_fallback",
+      "passed": true,
+      "details": {
+        "status": "completed"
+      }
+    },
+    {
+      "name": "unknown_tool_rejected",
+      "passed": true,
+      "details": {}
+    },
+    {
+      "name": "extra_argument_rejected",
+      "passed": true,
+      "details": {}
+    },
+    {
+      "name": "approval_pause_resume",
+      "passed": true,
+      "details": {}
+    },
+    {
+      "name": "duplicate_execution_guard",
+      "passed": true,
+      "details": {
+        "executions": 1
+      }
+    },
+    {
+      "name": "loop_limit",
+      "passed": true,
+      "details": {}
+    },
+    {
+      "name": "persistent_session",
+      "passed": true,
+      "details": {
+        "message_count": 2
+      }
+    },
+    {
+      "name": "secret_redaction",
+      "passed": true,
+      "details": {}
+    }
+  ]
+}

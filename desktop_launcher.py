@@ -21,6 +21,12 @@ def prepare_runtime_files(base_dir: Path) -> None:
     runtime_configs = base_dir / "configs"
     if not runtime_configs.exists() and bundled_configs.exists():
         shutil.copytree(bundled_configs, runtime_configs)
+    else:
+        bundled_gridstatus_seed = bundled_configs / "gridstatus" / "datasets.initial.json"
+        runtime_gridstatus_seed = runtime_configs / "gridstatus" / "datasets.initial.json"
+        if bundled_gridstatus_seed.exists() and not runtime_gridstatus_seed.exists():
+            runtime_gridstatus_seed.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(bundled_gridstatus_seed, runtime_gridstatus_seed)
 
     env_path = base_dir / ".env"
     env_example_path = base_dir / ".env.example"
@@ -29,7 +35,12 @@ def prepare_runtime_files(base_dir: Path) -> None:
         shutil.copyfile(bundled_env_example_path, env_example_path)
     if not env_path.exists() and env_example_path.exists():
         shutil.copyfile(env_example_path, env_path)
-    (base_dir / "data").mkdir(exist_ok=True)
+    runtime_data_dir = base_dir / "data"
+    runtime_data_dir.mkdir(exist_ok=True)
+    bundled_initial_database = bundled_dir / "initial_data" / "powertrade.initial.db"
+    runtime_database = runtime_data_dir / "powertrade.db"
+    if bundled_initial_database.exists() and not runtime_database.exists():
+        shutil.copyfile(bundled_initial_database, runtime_database)
 
 
 def main() -> int:
@@ -42,6 +53,14 @@ def main() -> int:
             from powertrade_crawler.storage import init_db
 
             init_db()
+            from powertrade_crawler.gridstatus_seed import (
+                GRIDSTATUS_SEED_RELATIVE_PATH,
+                seed_gridstatus_dataset_catalog_if_empty,
+            )
+
+            seed_gridstatus_dataset_catalog_if_empty(
+                base_dir / GRIDSTATUS_SEED_RELATIVE_PATH
+            )
             from powertrade_crawler.cli import app
 
             app()
@@ -56,6 +75,12 @@ def main() -> int:
         from powertrade_crawler.storage import init_db
 
         init_db()
+        from powertrade_crawler.gridstatus_seed import (
+            GRIDSTATUS_SEED_RELATIVE_PATH,
+            seed_gridstatus_dataset_catalog_if_empty,
+        )
+
+        seed_gridstatus_dataset_catalog_if_empty(base_dir / GRIDSTATUS_SEED_RELATIVE_PATH)
 
         from powertrade_crawler.gui import launch_gui
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import queue
 import threading
+from collections.abc import Callable
 from tkinter import (
     BOTH,
     Button,
@@ -42,6 +43,8 @@ STAGE_LABELS = {
     "model_retry": "模型超时重试",
     "model_completed": "模型响应",
     "intent_routed": "识别明确意图",
+    "collection_details_required": "补充采集参数",
+    "request_declined": "安全边界说明",
     "tool_proposed": "提出工具",
     "approval_required": "等待审批",
     "approval_rejected": "审批拒绝",
@@ -58,29 +61,34 @@ STAGE_LABELS = {
 }
 
 AGENT_COLORS = {
-    "shell": "#EDF3F0",
+    "shell": "#F3F6FA",
     "surface": "#FFFFFF",
-    "surface_alt": "#F6F9F7",
-    "forest": "#173F35",
-    "primary": "#1F6B57",
-    "primary_hover": "#185745",
-    "mint": "#DCECE5",
-    "mint_hover": "#CDE3D9",
-    "text": "#17352D",
-    "muted": "#64766F",
-    "border": "#CBDAD3",
-    "danger": "#A44D47",
-    "danger_hover": "#893E39",
-    "danger_soft": "#F8E9E7",
-    "warning": "#A36A22",
-    "warning_soft": "#FAF0DD",
-    "disabled": "#A8B7B1",
+    "surface_alt": "#F7F9FC",
+    "forest": "#102A43",
+    "primary": "#2563EB",
+    "primary_hover": "#1D4ED8",
+    "mint": "#E9F0FF",
+    "mint_hover": "#DCE7FF",
+    "text": "#132238",
+    "muted": "#718096",
+    "border": "#DCE4EC",
+    "danger": "#B64242",
+    "danger_hover": "#983535",
+    "danger_soft": "#FBEAEA",
+    "warning": "#A96500",
+    "warning_soft": "#FFF4DF",
+    "disabled": "#A5B2C1",
 }
 
 
 class ElecheckAgentApp:
-    def __init__(self, root) -> None:
+    def __init__(
+        self,
+        root,
+        on_navigate: Callable[[str], None] | None = None,
+    ) -> None:
         self.root = root
+        self.on_navigate = on_navigate
         self.repository = AgentRepository()
         self.queue: queue.Queue[tuple[str, Any]] = queue.Queue()
         self.session_id: str | None = None
@@ -228,6 +236,21 @@ class ElecheckAgentApp:
             role="header",
             compact=True,
         ).pack(side=LEFT, padx=(6, 0))
+        if self.on_navigate is not None:
+            self._make_button(
+                header_actions,
+                "API 配置",
+                lambda: self.on_navigate("setup"),
+                role="header",
+                compact=True,
+            ).pack(side=LEFT, padx=(6, 0))
+            self._make_button(
+                header_actions,
+                "定时任务",
+                lambda: self.on_navigate("schedule"),
+                role="header",
+                compact=True,
+            ).pack(side=LEFT, padx=(6, 0))
         panes = ttk.Panedwindow(
             self.root,
             orient="horizontal",
@@ -487,15 +510,15 @@ class ElecheckAgentApp:
                 colors["forest"],
             ),
             "header": (
-                "#28594C",
-                "#F2FAF7",
-                "#347160",
+                "#183B59",
+                "#F2F7FC",
+                "#214B6C",
                 "#FFFFFF",
             ),
             "header_danger": (
-                "#684A46",
-                "#FFEAE7",
-                "#805651",
+                "#6D3841",
+                "#FFEFF1",
+                "#864650",
                 "#FFFFFF",
             ),
         }

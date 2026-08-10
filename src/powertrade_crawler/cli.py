@@ -1,4 +1,5 @@
 import json
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
@@ -13,6 +14,7 @@ from powertrade_crawler.credentials import (
     get_credentials_path,
     save_credential,
 )
+from powertrade_crawler.datetime_utils import parse_utc_naive
 from powertrade_crawler.elecheck_auth import (
     cache_elecheck_authorization,
     resolve_elecheck_authorization,
@@ -39,6 +41,7 @@ from powertrade_crawler.registry import get_spider, list_spiders
 from powertrade_crawler.scheduler import (
     create_default_job_templates,
     create_scheduled_job,
+    create_source_update_job,
     delete_scheduled_job,
     install_windows_task,
     list_recent_job_runs,
@@ -456,6 +459,75 @@ def schedule_create(
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
     typer.echo(f"Created scheduled job {job.id}: {job.name}")
+
+
+@app.command("schedule-create-source")
+def schedule_create_source(
+    source: Annotated[
+        str,
+        typer.Argument(help="elecheck, entsoe, elexon, gridstatus, or gzpec."),
+    ],
+    schedule_time: Annotated[
+        str,
+        typer.Option("--schedule-time", help="Local 24-hour HH:MM time."),
+    ] = "09:00",
+    area: Annotated[
+        str | None,
+        typer.Option(
+            "--area",
+            help="ENTSO-E bidding area, or optional Elecheck area; blank means all Elecheck areas.",
+        ),
+    ] = None,
+    name: Annotated[
+        str | None,
+        typer.Option("--name", help="Optional display name."),
+    ] = None,
+    schedule_kind: Annotated[
+        str,
+        typer.Option("--schedule-kind", help="daily, weekly, or monthly."),
+    ] = "daily",
+    enabled: Annotated[
+        bool,
+        typer.Option("--enabled/--disabled", help="Enable this local job."),
+    ] = True,
+    install_windows: Annotated[
+        bool,
+        typer.Option(
+            "--install-windows/--local-only",
+            help="Also install a Windows trigger so the job runs while the GUI is closed.",
+        ),
+    ] = False,
+) -> None:
+    """Create a safe source-level incremental update job."""
+    init_db()
+    try:
+        job = create_source_update_job(
+            source=source,
+            schedule_time=schedule_time,
+            area=area,
+            name=name,
+            schedule_kind=schedule_kind,
+            enabled=enabled,
+        )
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    typer.echo(f"Created source update job {job.id}: {job.name}")
+    if not install_windows:
+        typer.echo(
+            "Local task only: install its Windows trigger before expecting it to run while the GUI is closed."
+        )
+        return
+    if not enabled:
+        raise typer.BadParameter(
+            "The local task was created disabled; enable it before installing a Windows trigger."
+        )
+    try:
+        task_name = install_windows_task(job.id)
+    except (RuntimeError, ValueError, subprocess.CalledProcessError) as exc:
+        raise typer.BadParameter(
+            f"Local task {job.id} was kept, but Windows trigger installation failed: {exc}"
+        ) from exc
+    typer.echo(f"Installed Windows scheduled task: {task_name}")
 
 
 @app.command("schedule-create-templates")
@@ -1032,11 +1104,7 @@ def parse_key_value_options(
 
 
 def parse_entsoe_cli_datetime(value: str) -> datetime:
-    if len(value) == 10:
-        return datetime.fromisoformat(value)
-    if len(value) == 12 and value.isdigit():
-        return datetime.strptime(value, "%Y%m%d%H%M")
-    return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    return parse_utc_naive(value, compact_format="%Y%m%d%H%M")
 
 
 def crawl_with_optional_elecheck_auth_retry(spider_name: str, spider_kwargs: dict) -> list:

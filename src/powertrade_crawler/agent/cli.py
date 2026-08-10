@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -33,12 +34,16 @@ agent_app.add_typer(approvals_app, name="approvals")
 agent_app.add_typer(tools_app, name="tools")
 
 
+def console_safe_json(value: Any, *, indent: int | None = None) -> str:
+    text = json.dumps(value, ensure_ascii=False, default=str, indent=indent)
+    encoding = sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, errors="backslashreplace").decode(encoding)
+
+
 def emit_json(*, ok: bool, data: Any = None, error: Any = None) -> None:
     typer.echo(
-        json.dumps(
+        console_safe_json(
             {"ok": ok, "data": data if ok else None, "error": error if not ok else None},
-            ensure_ascii=False,
-            default=str,
         )
     )
 
@@ -677,17 +682,29 @@ def tools_show(
 @agent_app.command("eval")
 def evaluate(
     mode: Annotated[str, typer.Option("--mode")] = "offline",
+    start: Annotated[int, typer.Option("--start", min=1)] = 1,
     limit: Annotated[int | None, typer.Option("--limit", min=1)] = None,
     output: Annotated[Path | None, typer.Option("--output", "-o")] = None,
+    execute_actions: Annotated[
+        bool,
+        typer.Option(
+            "--execute-actions",
+            help="审批并执行案例中显式标记的小范围真实采集。",
+        ),
+    ] = False,
     json_output: Annotated[bool, typer.Option("--json")] = False,
 ) -> None:
     from powertrade_crawler.agent.evaluation import run_evaluation
 
     try:
+        if execute_actions and mode != "live":
+            raise ValueError("--execute-actions 只能与 --mode live 一起使用。")
         report = run_evaluation(
             mode=mode,
+            start=start,
             limit=limit,
             output_path=output,
+            execute_actions=execute_actions,
             progress_callback=lambda index, total, _prompt: typer.echo(
                 f"[Agent Eval] {index}/{total}",
                 err=True,
@@ -703,7 +720,7 @@ def evaluate(
     if json_output:
         emit_json(ok=bool(report["ok"]), data=report if report["ok"] else None, error=None if report["ok"] else report)
     else:
-        typer.echo(json.dumps(report, ensure_ascii=False, indent=2))
+        typer.echo(console_safe_json(report, indent=2))
     if not report["ok"]:
         raise typer.Exit(EXIT_RUN_FAILED)
 

@@ -1,0 +1,45 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "gzpec_green_certificate",
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_search_gzpec_news"
+      ],
+      "tool_arguments": [
+        {
+          "keyword": "绿证",
+          "category": null,
+          "news_type": "green_certificate",
+          "start_date": null,
+          "end_date": null,
+          "limit": 10
+        }
+      ],
+      "data_sources": [
+        "广州电力交易中心"
+      ],
+      "units": [
+        "篇"
+      ],
+      "dataset_ids": [],
+      "conclusion": "已找到 10 条公开信息：绿证交易每周行情一览（2026年第30周）、绿证交易每周行情一览（2026年第29周）、绿证交易每周行情一览（2026年第27周）、绿证交易每周行情一览（2026年第26周）、绿证交易每周行情一览（2026年第25周）等。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 17.248
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 17.248
+  }
+}

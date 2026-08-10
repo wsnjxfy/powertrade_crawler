@@ -1,0 +1,44 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "multi_turn_elexon_collection",
+      "turns": [
+        "先别执行，我下一句给日期：我要补采英国系统价格。",
+        "那就补 2026-08-08 这一天，先给我确认参数。"
+      ],
+      "passed": true,
+      "status": "awaiting_approval",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_collect_elexon"
+      ],
+      "tool_arguments": [
+        {
+          "dataset": "elexon_system_prices",
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-08",
+          "filter_name": null,
+          "filter_value": null
+        }
+      ],
+      "data_sources": [],
+      "units": [],
+      "dataset_ids": [],
+      "conclusion": "",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "proposed"
+      ],
+      "latency_seconds": 0.306
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.306
+  }
+}

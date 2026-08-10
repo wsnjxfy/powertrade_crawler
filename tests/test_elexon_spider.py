@@ -1,8 +1,20 @@
+from datetime import datetime
+
 from powertrade_crawler.clients.elexon import ElexonClient
 from powertrade_crawler.spiders.elexon import (
+    ConfiguredElexonSpider,
     build_elexon_spider_classes,
     get_elexon_request_config,
 )
+
+
+def test_elexon_offset_inputs_are_normalized_to_utc():
+    spider = ConfiguredElexonSpider.__new__(ConfiguredElexonSpider)
+
+    parsed = spider.parse_cli_datetime("2026-08-10T01:00:00+01:00")
+
+    assert parsed == datetime(2026, 8, 10, 0, 0)
+    assert spider.format_elexon_time(parsed) == "2026-08-10T00:00Z"
 
 
 def test_elexon_client_flattens_nested_data_rows():

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from powertrade_crawler.clients.elexon import ElexonClient
+from powertrade_crawler.datetime_utils import format_utc_z, parse_utc_naive
 from powertrade_crawler.models import ElexonRecord
 from powertrade_crawler.spiders.base import BaseSpider
 
@@ -237,16 +238,13 @@ class ConfiguredElexonSpider(BaseSpider):
         return None
 
     def parse_cli_datetime(self, value: str) -> datetime:
-        stripped = value.strip()
-        if len(stripped) == 10:
-            return self.start_of_day(date.fromisoformat(stripped))
-        return datetime.fromisoformat(stripped.replace("Z", "+00:00")).replace(tzinfo=None)
+        return parse_utc_naive(value)
 
     def start_of_day(self, value: date) -> datetime:
         return datetime.combine(value, time.min)
 
     def format_elexon_time(self, value: datetime) -> str:
-        return value.strftime("%Y-%m-%dT%H:%MZ")
+        return format_utc_z(value)
 
     def parse_optional_float(self, value: Any) -> float | None:
         if isinstance(value, bool) or value is None:

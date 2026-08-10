@@ -1,0 +1,58 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "strict_comparison",
+      "turns": [
+        "并列比较 ENTSO-E 日前价和 Elexon 系统价格，口径不一致时不要计算差额"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_compare_series"
+      ],
+      "tool_arguments": [
+        {
+          "series": [
+            {
+              "source": "entsoe",
+              "dataset": "entsoe_day_ahead_prices",
+              "aggregation": "daily"
+            },
+            {
+              "source": "elexon",
+              "dataset": "elexon_system_prices",
+              "aggregation": "daily"
+            }
+          ]
+        }
+      ],
+      "window_match": true,
+      "data_sources": [
+        "ENTSO-E Transparency Platform",
+        "Elexon Insights API"
+      ],
+      "units": [
+        "EUR/MWh",
+        "GBP/MWh",
+        "个"
+      ],
+      "dataset_ids": [],
+      "conclusion": "ENTSO-E Transparency Platform / entsoe_day_ahead_prices 结果均值为 143.30 EUR/MWh；Elexon Insights API / elexon_system_prices 结果均值为 135.17 GBP/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.211
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.211
+  }
+}

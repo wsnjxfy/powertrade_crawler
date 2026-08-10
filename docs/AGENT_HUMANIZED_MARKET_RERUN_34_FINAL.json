@@ -1,0 +1,61 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "cross_market_incompatible",
+      "turns": [
+        "把江苏现货价和德国日前价放一起看看；币种口径不一样就别硬算差额"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "completed",
+      "tool_names": [
+        "market_compare_series"
+      ],
+      "tool_arguments": [
+        {
+          "series": [
+            {
+              "source": "elecheck",
+              "dataset": "elecheck_spot",
+              "metric": "avg_day_ahead_price",
+              "area": "江苏",
+              "aggregation": "daily"
+            },
+            {
+              "source": "entsoe",
+              "dataset": "entsoe_day_ahead_prices",
+              "area": "DE-LU",
+              "aggregation": "daily"
+            }
+          ]
+        }
+      ],
+      "window_match": true,
+      "data_sources": [
+        "ENTSO-E Transparency Platform",
+        "Elecheck 易能电易查"
+      ],
+      "units": [
+        "CNY/MWh",
+        "EUR/MWh",
+        "个"
+      ],
+      "dataset_ids": [],
+      "conclusion": "Elecheck 易能电易查 / elecheck_spot 结果均值为 333.91 CNY/MWh；ENTSO-E Transparency Platform / entsoe_day_ahead_prices 结果均值为 143.30 EUR/MWh。",
+      "error": null,
+      "collection_executed": false,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 0.72
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 0,
+    "elapsed_seconds": 0.72
+  }
+}

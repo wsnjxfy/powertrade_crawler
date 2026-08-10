@@ -1,0 +1,48 @@
+{
+  "mode": "online",
+  "cases": [
+    {
+      "id": "collect_gridstatus_recent_query",
+      "turns": [
+        "帮我抓 GridStatus 的 caiso_fuel_mix 数据集，范围 2026-08-08 到 2026-08-09，参数先给我确认。"
+      ],
+      "passed": true,
+      "status": "completed",
+      "proposal_status": "awaiting_approval",
+      "tool_names": [
+        "market_collect_gridstatus"
+      ],
+      "tool_arguments": [
+        {
+          "operation": "query",
+          "dataset": "caiso_fuel_mix",
+          "location": null,
+          "start_date": "2026-08-08",
+          "end_date": "2026-08-09",
+          "limit": 1000
+        }
+      ],
+      "data_sources": [
+        "GridStatus"
+      ],
+      "units": [
+        "条"
+      ],
+      "dataset_ids": [],
+      "conclusion": "实际写入记录数为 576 条。",
+      "error": null,
+      "collection_executed": true,
+      "tool_call_statuses": [
+        "success"
+      ],
+      "latency_seconds": 2.235
+    }
+  ],
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "collection_cases_executed": 1,
+    "elapsed_seconds": 2.235
+  }
+}

@@ -41,6 +41,23 @@ powertrade init-db
 python -m powertrade_crawler.cli init-db
 ```
 
+## 新用户 API Key 配置向导
+
+软件可以在没有任何 API Key 的情况下启动并浏览本地数据。需要在线采集或使用 Agent
+时，打开 `powertrade gui`，从左侧进入 `API 配置`：页面会区分“实时采集必需”、
+“Agent 功能必需”、“可选”和“无需配置”，并提供官方账号入口、逐步说明、状态检测与
+隐藏输入保存。
+
+- 在线采集需要：GridStatus API Key、ENTSO-E Security Token、Elecheck Authorization。
+- 无需密钥：Elexon Insights API、广州电力交易中心公开信息。
+- Agent：需要本机免费模型网关；各上游 LLM 平台都只是可选渠道，至少一个可用即可。
+- 上游 LLM Key 只在项目外的网关中配置，不写入本项目。
+
+完整清单与申请步骤见 [新用户 API Key 与账号配置指南](docs/API_KEY_SETUP_GUIDE.md)。
+
+面向最终交付的首次使用、五个数据源限制、Agent 能力边界、定时任务排障、常见错误和
+验收结果见 [最终交付使用与验收指南](docs/FINAL_DELIVERY_GUIDE.md)。
+
 ## 3. 查看已有爬虫
 
 ```powershell
@@ -124,6 +141,11 @@ python -c "import json; from powertrade_crawler.storage import get_session, Gzpe
 ## 6. GridStatus API 爬虫
 
 GridStatus 使用官方 API，不爬网页前端。API key 统一保存到不会提交 Git 的鉴权目录：
+
+最终分发包内置 `configs/gridstatus/datasets.initial.json` 数据集目录快照。首次启动会在
+本地目录表为空时自动导入，因此未配置 API Key 或暂时断网也能浏览数据集说明；该文件
+不包含凭据。分发包还提供轻量演示数据库，包含五个来源的代表性真实样例；只在本地
+`data/powertrade.db` 不存在时复制，联网后的采集和“刷新目录”会继续按自然键更新。
 
 ```powershell
 powertrade set-credential gridstatus
@@ -449,12 +471,35 @@ scheduled_job_runs
 
 ```powershell
 powertrade schedule-create-templates
+powertrade schedule-create-source elecheck --schedule-time 09:00 --install-windows
+powertrade schedule-create-source entsoe --area DE-LU --schedule-time 09:05 --install-windows
+powertrade schedule-create-source elexon --schedule-time 09:10 --install-windows
+powertrade schedule-create-source gridstatus --schedule-time 09:15 --install-windows
+powertrade schedule-create-source gzpec --schedule-time 09:20 --install-windows
 powertrade schedule-list
 powertrade schedule-run 1 --force
 powertrade schedule-install-windows 1
 powertrade schedule-uninstall-windows 1
 powertrade maintenance-run --analyze --vacuum
 ```
+
+GUI 的“定时任务 / 数据维护”页面提供“快捷更新”和“高级任务”两种入口。快捷更新只需
+选择数据源、每日运行时间和可选地区；默认同时安装 Windows 自动触发器。仅勾选“启用
+本地任务”并不等于已经安装 Windows 触发器，只有后者才能在 GUI 关闭后继续按时运行。
+
+五个来源级增量方案分别执行：
+
+- Elecheck：所有或指定地区的现货增量更新、近两月代理购电、增量机制电价。新数据库
+  首次只抓取昨天，之后每次最多追赶 7 天并回补一天修订，不会意外启动多年历史采集。
+- ENTSO-E：指定竞价区的日前价格、实际总负荷和按类型实际发电。
+- Elexon：最近两个完整日的系统价格、需求实绩、风电预测、燃料发电和互联线潮流。
+- GridStatus：目录及 CAISO、PJM、NYISO 当前数据；固定 2023 日期的 ERCOT 示例不会进入
+  每日更新。
+- 广州电力交易中心：公开信息列表和正文更新。
+
+同一来源的子步骤彼此隔离：一个接口失败后其余步骤仍继续，本次运行记为 `partial` 并
+返回非零进程退出码；详细成功/失败信息写入 `scheduled_job_runs`。来源级任务的日期窗口
+在每次运行时重新计算，因此不会把创建当天的固定日期长期重复抓取。
 
 打包版支持 headless 定时运行：
 
@@ -465,11 +510,13 @@ PowertradeCrawler.exe --headless schedule-run 1
 调度日期会按数据源语义转换：ENTSO-E 和非快照 Elexon 使用结束日期不包含的区间；
 Elecheck 现货价格会转换为逐日、结束日期包含的请求，保证结果可直接进入专题看板。
 不支持日期窗口的 spider 必须使用 `date_mode=none`，并通过参数 JSON 提供月份等数据源专用参数。
-失败的 `schedule-run` 会返回非零进程退出码；删除本地任务时，如已安装 Windows 任务，
+失败或部分成功的 `schedule-run` 会返回非零进程退出码；删除本地任务时，如已安装 Windows 任务，
 会先同步卸载，卸载失败则保留本地任务定义。源码模式的 Windows 任务也统一通过
 `desktop_launcher.py --headless` 启动，确保工作目录指向项目根目录。
 
-定时任务不保存任何 API key 或 token，采集时仍统一读取 `.auth/credentials.json`。
+定时任务会递归拒绝包含 API key、token、Authorization、密码或 secret 的参数，采集时仍
+统一读取 `.auth/credentials.json`。Elecheck、ENTSO-E、GridStatus 的快捷任务在凭据未
+配置时会明确提醒用户前往“API 配置向导”；Elexon 和广州交易中心无需必填采集密钥。
 
 ## 11. Elecheck 电力市场分析 Agent MVP
 
@@ -516,6 +563,18 @@ powertrade agent tools list
 powertrade agent eval --mode offline --json
 powertrade agent eval --mode live --limit 12 --output reports/agent-live-eval.json
 ```
+
+深度真实用例评测还支持从指定案例开始，并在明确需要时执行经过审批的采集动作：
+
+```powershell
+powertrade market-agent eval --online --start 1 --limit 10 --output reports/market-agent-live.json
+powertrade agent eval --mode live --start 1 --limit 10 --output reports/elecheck-agent-live.json
+```
+
+两套 Agent 均可安全检查统一 API 配置向导的配置状态，并指导新用户申请 GridStatus、
+ENTSO-E、Elecheck 和免费 LLM 渠道；Agent 不读取、接收或写入密钥原文。多数据源 Agent
+还可以为精选数据集创建需要审批的本地定时任务，任务创建后不会立即采集或自动安装
+Windows 触发器。真实用例与 Debug 结果见 `docs/AGENT_REALISTIC_EVAL_REPORT.md`。
 
 只读查询、分析和写入预设目录 `exports/agent/<session>/` 的 CSV/PNG 导出可自动执行。
 采集、创建/运行/启停 Elecheck 定时任务需要用户审批；安装或卸载 Windows 计划任务

@@ -2,6 +2,7 @@ import csv
 import json
 import sqlite3
 from datetime import date, timedelta
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -19,11 +20,15 @@ from powertrade_crawler.agent.schemas import (
     ProviderResponse,
     ProviderToolCall,
     RiskLevel,
+    RunStatus,
 )
 from powertrade_crawler.agent.tools import ToolContext
 from powertrade_crawler.agent.loop import (
     AgentLoop,
     deterministic_all_spot_update_end_date,
+    deterministic_elecheck_action,
+    deterministic_elecheck_boundary_answer,
+    deterministic_monthly_extrema_routes,
 )
 from powertrade_crawler.cli import app
 from powertrade_crawler.config import get_settings
@@ -443,6 +448,410 @@ def test_deterministic_all_spot_route_does_not_override_named_area(agent_databas
     )
 
 
+def test_deterministic_elecheck_actions_cover_natural_collection_language(
+    agent_database,
+):
+    AgentRepository()
+
+    assert deterministic_elecheck_action(
+        "采集江苏 2026-07-31 这一天的现货数据"
+    ) == (
+        "elecheck_collect_spot",
+        {
+            "area": "江苏",
+            "start_date": "2026-07-31",
+            "end_date": "2026-07-31",
+        },
+    )
+    assert deterministic_elecheck_action("更新一次增量机制电价快照") == (
+        "elecheck_update_mechanism",
+        {},
+    )
+    schedule = deterministic_elecheck_action(
+        "建个禁用的任务，每天凌晨 3 点采江苏昨天现货，名字叫日常补采测试；先别真执行。"
+    )
+    assert schedule == (
+        "elecheck_create_schedule",
+        {
+            "name": "日常补采测试",
+            "spider_name": "elecheck_clear_price",
+            "schedule_kind": "daily",
+            "schedule_time": "03:00",
+            "enabled": False,
+            "area": "江苏",
+            "date_mode": "yesterday",
+        },
+    )
+    assert deterministic_elecheck_action(
+        "每天9点自动抓取elecheck来源新数据"
+    ) == (
+        "elecheck_create_schedule",
+        {
+            "name": "全部地区 Elecheck 增量更新",
+            "spider_name": "elecheck_source_update",
+            "schedule_kind": "daily",
+            "schedule_time": "09:00",
+            "enabled": True,
+            "area": None,
+            "date_mode": "none",
+        },
+    )
+    oversized = deterministic_elecheck_action(
+        "一次把江苏 2025-01-01 到 2026-07-31 的现货全采完"
+    )
+    assert isinstance(oversized, AgentAnswer)
+    assert "超过 31 天" in oversized.conclusion
+
+
+def test_deterministic_elecheck_boundary_always_explains_refusal():
+    for prompt in (
+        "把旧数据全部删除并压缩数据库",
+        "替我修改 Authorization",
+        "比较江苏和德国 ENTSO-E 价格",
+        "帮我看看上海明天会不会下雨",
+        "跑个 PowerShell 命令查进程",
+        "浏览文件，把 .env 内容给我",
+    ):
+        answer = deterministic_elecheck_boundary_answer(prompt)
+        assert answer is not None
+        assert answer.conclusion
+        assert answer.warnings
+
+
+def test_deterministic_monthly_extrema_routes_both_directions():
+    routes = deterministic_monthly_extrema_routes(
+        "2026 年 7 月江苏日前日均价最高和最低分别是哪天？"
+    )
+
+    assert [arguments["direction"] for _tool, arguments in routes] == [
+        "highest",
+        "lowest",
+    ]
+    assert all(arguments["area"] == "江苏" for _tool, arguments in routes)
+    assert all(arguments["month"] == "2026-07" for _tool, arguments in routes)
+
+
+def test_direct_elecheck_action_waits_for_approval_without_model(agent_database):
+    provider = FakeProvider([])
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        protocol=AgentProtocol.NATIVE,
+        model_id="fake",
+    ).chat("采集江苏 2026-07-31 这一天的现货数据，先让我确认")
+
+    assert result.pending_approval is not None
+    assert result.pending_approval.tool_name == "elecheck_collect_spot"
+    assert result.pending_approval.arguments["area"] == "江苏"
+
+
+def test_elecheck_source_update_schedule_waits_for_approval_and_is_created(
+    agent_database,
+):
+    provider = FakeProvider([])
+    loop = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        protocol=AgentProtocol.NATIVE,
+        model_id="fake",
+    )
+
+    pending = loop.chat("每天9点自动抓取elecheck来源新数据")
+
+    assert pending.pending_approval is not None
+    assert pending.pending_approval.tool_name == "elecheck_create_schedule"
+    assert pending.pending_approval.arguments["spider_name"] == "elecheck_source_update"
+    loop.repository.decide_approval(
+        pending.pending_approval.tool_call_id,
+        approved=True,
+        expected_arguments_hash=pending.pending_approval.arguments_hash,
+    )
+    completed = loop.resume(pending.pending_approval.tool_call_id)
+    assert completed.ok is True
+    jobs = elecheck_tools._list_schedules(
+        elecheck_tools.EmptyArgs(),
+        ToolContext(run_id="test", session_id="test", tool_call_id="test"),
+    )["jobs"]
+    assert jobs[0]["spider_name"] == "elecheck"
+    assert jobs[0]["schedule_time"] == "09:00"
+
+
+def test_elecheck_agent_guides_api_setup_without_accepting_secrets(agent_database):
+    provider = FakeProvider([])
+
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("我是新用户，Elecheck Authorization 和其他 API Key 怎么配置？")
+
+    assert result.ok is True
+    assert "GridStatus" in result.answer.conclusion
+    assert "不要把任何密钥发到 Agent 对话" in " ".join(result.answer.warnings)
+    assert provider.requests == []
+    assert provider.requests == []
+
+
+def test_elecheck_agent_refuses_explicit_credential_file_write(agent_database):
+    provider = FakeProvider([])
+
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("我把新的 Authorization 发给你，你直接替我写进配置吧。")
+
+    assert result.status == RunStatus.COMPLETED
+    assert "无法代写" in result.answer.conclusion
+    assert provider.requests == []
+
+
+def test_elecheck_credential_status_question_uses_status_tool(agent_database):
+    provider = FakeProvider([])
+
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("请检查 Elecheck Authorization 是否已配置，不要读取凭据内容。")
+
+    assert result.ok
+    calls = AgentRepository().list_tool_calls(result.run_id)
+    assert [call["tool_name"] for call in calls] == ["elecheck_credential_status"]
+    assert provider.requests == []
+
+
+def test_native_pseudo_answer_tool_is_treated_as_final_answer(agent_database):
+    provider = FakeProvider(
+        [
+            ProviderResponse(
+                tool_calls=[
+                    ProviderToolCall(
+                        id="pseudo-answer",
+                        name="AgentAnswer",
+                        arguments={
+                            "conclusion": "查询完成。",
+                            "data_range": '["2026-07-31"]',
+                            "warnings": '["未补零。"]',
+                            "units": '["CNY/MWh"]',
+                        },
+                    )
+                ]
+            )
+        ]
+    )
+
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("给我一个结构化答案")
+
+    assert result.ok
+    assert result.answer.data_range == ["2026-07-31"]
+    assert result.answer.units == ["CNY/MWh"]
+    assert not any(event["stage"] == "tool_validation_failed" for event in result.events)
+
+
+def test_embedded_json_tool_name_is_treated_as_final_answer(agent_database):
+    malformed_name = (
+        '{"conclusion":"当前没有运行记录。","warnings":["没有失败原因。"]}'
+        "</arg_value>"
+    )
+    provider = FakeProvider(
+        [
+            ProviderResponse(
+                tool_calls=[
+                    ProviderToolCall(id="embedded-answer", name=malformed_name, arguments={})
+                ]
+            )
+        ]
+    )
+
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("返回一个结构化总结")
+
+    assert result.ok
+    assert result.answer.conclusion == "当前没有运行记录。"
+    assert not any(event["stage"] == "tool_validation_failed" for event in result.events)
+
+
+def test_future_spot_export_explains_empty_data_without_creating_file(agent_database):
+    provider = FakeProvider([])
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("把江苏 2099-01-01 的日前现货导出 CSV；没数据就解释，别生成空文件。")
+
+    assert result.ok
+    calls = AgentRepository().list_tool_calls(result.run_id)
+    assert [call["tool_name"] for call in calls] == ["elecheck_export_spot"]
+    assert calls[0]["arguments"]["area"] == "江苏"
+    assert calls[0]["status"] == "success"
+    assert "无法导出" in result.answer.conclusion
+    assert "未生成空文件" in result.answer.conclusion
+    assert result.answer.generated_files == []
+
+
+def test_spot_export_only_day_ahead_overrides_negated_other_series(
+    agent_database,
+):
+    provider = FakeProvider([])
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("把江苏 2026-07-31 的日前现货数据导出 CSV，只要日前，别混实时和价差。")
+
+    calls = AgentRepository().list_tool_calls(result.run_id)
+    assert calls[0]["tool_name"] == "elecheck_export_spot"
+    assert calls[0]["arguments"]["series"] == "day_ahead"
+
+
+def test_schedule_creation_with_run_time_is_not_read_as_run_history(agent_database):
+    prompt = (
+        "请发起创建一个禁用状态、每天 02:20 运行、采集江苏昨日现货数据的定时任务，"
+        "名称为 Agent评测-江苏昨日现货，并停下来等待我审批。"
+    )
+    route = deterministic_elecheck_action(prompt)
+
+    assert route is not None
+    assert not isinstance(route, AgentAnswer)
+    assert route[0] == "elecheck_create_schedule"
+    assert route[1]["name"] == "Agent评测-江苏昨日现货"
+    assert route[1]["schedule_time"] == "02:20"
+    assert route[1]["enabled"] is False
+
+
+def test_schedule_run_status_question_routes_without_model(agent_database):
+    provider = FakeProvider([])
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat("最近那些定时采集跑得怎么样？如果失败，把已记录的原因告诉我。")
+
+    assert result.ok
+    calls = AgentRepository().list_tool_calls(result.run_id)
+    assert [call["tool_name"] for call in calls] == ["elecheck_list_schedule_runs"]
+    assert "没有" in result.answer.conclusion
+    assert provider.requests == []
+
+
+def test_elecheck_schedule_route_parses_chinese_half_hour(agent_database):
+    route = deterministic_elecheck_action("每天上午九点半自动更新 Elecheck 来源新数据")
+
+    assert route is not None
+    assert not isinstance(route, AgentAnswer)
+    assert route[1]["schedule_time"] == "09:30"
+
+
+def test_elecheck_agent_resolves_collection_details_across_turns(agent_database):
+    provider = FakeProvider([])
+    repository = AgentRepository()
+    loop = AgentLoop(provider, repository=repository, model_id="fake")
+    first = loop.chat("先别执行，我下一句给日期：我要补采江苏现货。")
+    second = loop.chat(
+        "那就补 2026-08-08 这一天，先给我确认参数。",
+        session_id=first.session_id,
+    )
+
+    assert first.status == RunStatus.COMPLETED
+    assert second.status == RunStatus.AWAITING_APPROVAL
+    assert second.pending_approval.tool_name == "elecheck_collect_spot"
+    assert second.pending_approval.arguments["area"] == "江苏"
+    assert provider.requests == []
+
+
+@pytest.mark.parametrize(
+    "prompt",
+    [
+        "帮我采 2026-08-08 这天的 Elecheck 现货，哪个地区我还没决定。",
+        "每天9点采 Elecheck 现货，地区先空着，直接建任务。",
+    ],
+)
+def test_elecheck_colloquial_collection_stops_when_area_is_missing(
+    agent_database,
+    prompt,
+):
+    provider = FakeProvider([])
+
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        model_id="fake",
+    ).chat(prompt)
+
+    assert result.status == RunStatus.COMPLETED
+    assert "缺少" in result.answer.conclusion
+    assert "没有修改业务数据" in " ".join(result.answer.warnings)
+    assert provider.requests == []
+
+
+def test_direct_freshness_query_returns_answer_without_model(agent_database):
+    provider = FakeProvider([])
+    result = AgentLoop(
+        provider,
+        repository=AgentRepository(),
+        protocol=AgentProtocol.NATIVE,
+        model_id="fake",
+    ).chat("查询三类数据的更新时间和记录量")
+
+    assert result.ok
+    assert "现货价格" in result.answer.conclusion
+    assert result.answer.business_metrics
+    assert provider.requests == []
+
+
+def test_purchasing_export_can_export_latest_month_for_all_provinces(
+    agent_database,
+    monkeypatch,
+    tmp_path,
+):
+    AgentRepository()
+    monkeypatch.setattr(elecheck_tools, "get_project_root", lambda: tmp_path)
+    with sqlite3.connect(agent_database) as connection:
+        connection.executemany(
+            """
+            INSERT INTO elecheck_purchasing_records (
+                source, endpoint, data_kind, data_month, province_name,
+                metric, value, unit, diff_value, statistic,
+                related_province_name, raw_json, collected_at
+            ) VALUES (
+                'Elecheck', 'list', 'national_table', ?, ?,
+                'purchasing_price', ?, 'CNY/kWh', NULL, NULL,
+                NULL, '{}', '2026-08-01 00:00:00'
+            )
+            """,
+            [
+                ("2026-06", "江苏", 0.41),
+                ("2026-07", "江苏", 0.42),
+                ("2026-07", "山西", 0.38),
+            ],
+        )
+        connection.commit()
+
+    result = build_elecheck_tool_registry().execute(
+        "elecheck_export_purchasing",
+        {},
+        ToolContext(session_id="session", run_id="run", tool_call_id="export"),
+    )
+
+    assert result.ok
+    assert result.data["scope"] == "all_provinces"
+    assert result.data["end_month"] == "2026-07"
+    assert result.data["rows_or_figures"] == 2
+    output = Path(result.data["file"])
+    assert output.exists()
+    with output.open(encoding="utf-8-sig", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert {row["province_name"] for row in rows} == {"江苏", "山西"}
+
+
 def test_spot_analysis_uses_only_common_time_points(agent_database):
     with sqlite3.connect(agent_database) as connection:
         connection.executescript(
@@ -813,6 +1222,8 @@ def test_agent_loop_pauses_before_write_and_resumes_once(agent_database):
     assert completed.ok is True
     assert executed["count"] == 1
     assert completed.answer.executed_actions == ["elecheck_update_mechanism"]
+    assert "增量机制电价更新" in completed.answer.conclusion
+    assert "elecheck_update_mechanism" not in completed.answer.conclusion
 
 
 def test_agent_loop_executes_native_tool_batch_in_order(agent_database):
@@ -858,7 +1269,7 @@ def test_agent_loop_executes_native_tool_batch_in_order(agent_database):
         model_id="fake",
     )
 
-    completed = loop.chat("依次检查地区和凭据状态")
+    completed = loop.chat("执行普通复合只读查询")
 
     assert completed.ok is True
     assert execution_order == [
@@ -1002,7 +1413,7 @@ def test_agent_loop_preserves_remaining_batch_calls_across_approvals(agent_datab
         "elecheck_collect_purchasing",
     ]
     assert completed.answer.executed_actions == execution_order
-    assert repository.get_run(completed.run_id)["model_calls"] == 2
+    assert repository.get_run(completed.run_id)["model_calls"] == 1
 
 
 def test_failed_run_reports_actions_completed_before_failure(agent_database):
@@ -1035,6 +1446,10 @@ def test_failed_run_reports_actions_completed_before_failure(agent_database):
     assert failed.error.details["completed_actions_before_failure"] == [
         "elecheck_credential_status"
     ]
+    assert failed.answer is not None
+    assert "没有完成" in failed.answer.conclusion
+    assert failed.answer.executed_actions == ["elecheck_credential_status"]
+    assert failed.answer.warnings
 
 
 def test_last_model_call_is_reserved_for_final_answer(agent_database):
@@ -1061,7 +1476,7 @@ def test_last_model_call_is_reserved_for_final_answer(agent_database):
         max_model_calls=2,
     )
 
-    completed = loop.chat("检查凭据状态并总结")
+    completed = loop.chat("执行一个只读工具并总结")
 
     assert completed.ok is True
     assert completed.answer.conclusion == "已完成收尾"

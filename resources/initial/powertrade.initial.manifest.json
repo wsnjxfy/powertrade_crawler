@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-08-10T08:55:56.202665Z",
+  "purpose": "Lightweight packaged demo database",
+  "database_file": "powertrade.initial.db",
+  "database_bytes": 8859648,
+  "contains_credentials": false,
+  "source_counts": {
+    "entsoe": 603,
+    "elexon": 301,
+    "gridstatus": 1000,
+    "gridstatus_dataset_catalog": 535,
+    "elecheck": 1460,
+    "gzpec": 241
+  },
+  "table_counts": {
+    "market_records": 526,
+    "entsoe_records": 77,
+    "elexon_records": 301,
+    "gridstatus_records": 1000,
+    "gridstatus_dataset_metadata": 535,
+    "gzpec_news_records": 241,
+    "elecheck_clear_price_records": 904,
+    "elecheck_area_records": 29,
+    "elecheck_purchasing_records": 414,
+    "elecheck_purchasing_area_records": 33,
+    "elecheck_mechanism_electricity_price_records": 80,
+    "dashboard_daily_metrics": 1476
+  }
+}

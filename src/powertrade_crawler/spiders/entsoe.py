@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from powertrade_crawler.clients.entsoe import EntsoeClient
+from powertrade_crawler.datetime_utils import parse_utc_naive, utc_now_naive
 from powertrade_crawler.models import EntsoeRecord, MarketRecord
 from powertrade_crawler.spiders.base import BaseSpider
 
@@ -119,14 +120,10 @@ class EntsoeDayAheadPricesSpider(BaseSpider):
             ) from exc
 
     def parse_cli_datetime(self, value: str) -> datetime:
-        if len(value) == 10:
-            return datetime.fromisoformat(value)
-        if len(value) == 12 and value.isdigit():
-            return datetime.strptime(value, "%Y%m%d%H%M")
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        return parse_utc_naive(value, compact_format="%Y%m%d%H%M")
 
     def default_start(self) -> datetime:
-        now = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        now = utc_now_naive().replace(minute=0, second=0, microsecond=0)
         return now.replace(hour=0)
 
     def close(self) -> None:
@@ -325,14 +322,10 @@ class ConfiguredEntsoeSpider(BaseSpider):
             ) from exc
 
     def parse_cli_datetime(self, value: str) -> datetime:
-        if len(value) == 10:
-            return datetime.fromisoformat(value)
-        if len(value) == 12 and value.isdigit():
-            return datetime.strptime(value, "%Y%m%d%H%M")
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+        return parse_utc_naive(value, compact_format="%Y%m%d%H%M")
 
     def default_start(self) -> datetime:
-        now = datetime.utcnow().replace(minute=0, second=0, microsecond=0)
+        now = utc_now_naive().replace(minute=0, second=0, microsecond=0)
         return now.replace(hour=0)
 
     def close(self) -> None:

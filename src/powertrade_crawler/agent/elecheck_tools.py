@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import csv
 import re
 import sqlite3
 import time
@@ -15,6 +16,7 @@ from powertrade_crawler.agent.schemas import RiskLevel
 from powertrade_crawler.agent.security import redact_text, redact_value
 from powertrade_crawler.agent.tools import ToolContext, ToolDefinition, ToolRegistry
 from powertrade_crawler.config import get_settings
+from powertrade_crawler.credential_setup import assistant_credential_setup_payload
 from powertrade_crawler.credentials import get_credential, get_project_root
 from powertrade_crawler.elecheck_business_dashboard import (
     ElecheckMechanismDashboardRepository,
@@ -37,6 +39,7 @@ from powertrade_crawler.elecheck_dashboard import (
 )
 from powertrade_crawler.scheduler import (
     create_scheduled_job,
+    create_source_update_job,
     get_scheduled_job,
     install_windows_task,
     list_recent_job_runs,
@@ -44,6 +47,7 @@ from powertrade_crawler.scheduler import (
     parse_params_json,
     run_scheduled_job,
     set_scheduled_job_enabled,
+    synchronize_windows_task_state,
     uninstall_windows_task,
 )
 from powertrade_crawler.scheduler import run_spider_and_upsert
@@ -154,6 +158,29 @@ class EmptyArgs(ToolArgs):
 class AreaArgs(ToolArgs):
     area: str = Field(min_length=1, max_length=120)
 
+    @field_validator("area", mode="before")
+    @classmethod
+    def normalize_area_alias(cls, value: Any) -> Any:
+        if not isinstance(value, str):
+            return value
+        normalized = value.strip().lower().replace(" ", "")
+        return {
+            "jiangsu": "江苏",
+            "shanxi": "山西",
+            "shandong": "山东",
+            "guangdong": "广东",
+            "zhejiang": "浙江",
+            "anhui": "安徽",
+            "fujian": "福建",
+            "gansu": "甘肃",
+            "westerninnermongolia": "蒙西",
+            "hubei": "湖北",
+            "hunan": "湖南",
+            "henan": "河南",
+            "hebei": "河北",
+            "liaoning": "辽宁",
+        }.get(normalized, value.strip())
+
 
 class PurchasingOptionsArgs(ToolArgs):
     province: str | None = Field(default=None, max_length=120)
@@ -201,8 +228,18 @@ class SpotExportArgs(AreaArgs):
     series: Literal["all", "day_ahead", "real_time", "spread"] = "all"
 
 
-class PurchasingExportArgs(PurchasingAnalysisArgs):
-    file_format: Literal["csv", "png"]
+class PurchasingExportArgs(ToolArgs):
+    province: str | None = Field(default=None, max_length=120)
+    end_month: str | None = None
+    window_months: Literal[0, 12, 24] = 12
+    file_format: Literal["csv", "png"] = "csv"
+
+    @field_validator("end_month")
+    @classmethod
+    def validate_optional_end_month(cls, value: str | None) -> str | None:
+        if value is not None:
+            validate_month(value)
+        return value
 
 
 class MechanismExportArgs(MechanismAnalysisArgs):
@@ -258,6 +295,7 @@ class CreateScheduleArgs(ToolArgs):
         "elecheck_clear_price",
         "elecheck_purchasing_national_range",
         "elecheck_mechanism_electricity_price",
+        "elecheck_source_update",
     ]
     schedule_kind: Literal["daily", "weekly", "monthly"] = "daily"
     schedule_time: str = "02:00"
@@ -953,7 +991,15 @@ def _credential_status(_args: EmptyArgs, _context: ToolContext) -> dict[str, Any
     return {"elecheck_authorization": "configured" if get_credential("elecheck_authorization") else "missing"}
 
 
+def _credential_setup_guide(
+    _args: EmptyArgs,
+    _context: ToolContext,
+) -> dict[str, Any]:
+    return assistant_credential_setup_payload()
+
+
 def _schedule_payload(row) -> dict[str, Any]:
+    windows_status = synchronize_windows_task_state(row.id)
     return {
         "id": row.id,
         "name": row.name,
@@ -965,7 +1011,9 @@ def _schedule_payload(row) -> dict[str, Any]:
         "end_date": row.end_date.isoformat() if row.end_date else None,
         "enabled": row.enabled,
         "params": redact_value(parse_params_json(row.params_json)),
-        "windows_task_name": row.windows_task_name,
+        "windows_task_name": None if windows_status == "missing" else row.windows_task_name,
+        "windows_task_status": windows_status,
+        "windows_installed": windows_status == "installed",
     }
 
 
@@ -973,7 +1021,7 @@ def _list_schedules(_args: EmptyArgs, _context: ToolContext) -> dict[str, Any]:
     rows = [
         row
         for row in list_scheduled_jobs()
-        if row.spider_name in ELECHECK_AGENT_SPIDERS
+        if _is_elecheck_schedule(row)
     ]
     return {"jobs": [_schedule_payload(row) for row in rows]}
 
@@ -982,7 +1030,7 @@ def _list_schedule_runs(_args: EmptyArgs, _context: ToolContext) -> dict[str, An
     elecheck_ids = {
         row.id
         for row in list_scheduled_jobs()
-        if row.spider_name in ELECHECK_AGENT_SPIDERS
+        if _is_elecheck_schedule(row)
     }
     rows = [
         row for row in list_recent_job_runs(limit=100) if row.job_id in elecheck_ids
@@ -1016,10 +1064,31 @@ def _export_path(context: ToolContext, analysis: str, extension: str) -> Path:
 
 def _export_spot(args: SpotExportArgs, context: ToolContext) -> dict[str, Any]:
     repository = ElecheckPriceDashboardRepository(resolve_sqlite_path())
-    area = _spot_area(repository, args.area)
+    try:
+        area = _spot_area(repository, args.area)
+    except ValueError as exc:
+        return {
+            "analysis": "spot_export",
+            "empty": True,
+            "reason": str(exc),
+            "selected_date": args.selected_date.isoformat(),
+            "area": args.area,
+            "file": None,
+            "rows_or_figures": 0,
+            "generated_files": [],
+        }
     data = repository.load_dashboard_data(area=area, selected_date=args.selected_date)
     if not data.day_ahead and not data.real_time:
-        raise ValueError("没有可导出的现货分析数据。")
+        return {
+            "analysis": "spot_export",
+            "empty": True,
+            "reason": f"{area.area_name} 在 {args.selected_date} 没有可导出的现货明细数据",
+            "selected_date": args.selected_date.isoformat(),
+            "area": area.area_name,
+            "file": None,
+            "rows_or_figures": 0,
+            "generated_files": [],
+        }
     analysis_name = (
         "spot-price" if args.series == "all" else f"spot-{args.series.replace('_', '-')}-price"
     )
@@ -1064,9 +1133,59 @@ def _export_purchasing(
     context: ToolContext,
 ) -> dict[str, Any]:
     repository = ElecheckPurchasingDashboardRepository(resolve_sqlite_path())
+    if args.province is None:
+        if args.file_format != "csv":
+            raise ValueError("导出全部省份时仅支持 CSV；PNG 需要指定一个省份。")
+        with sqlite3.connect(resolve_sqlite_path()) as connection:
+            connection.row_factory = sqlite3.Row
+            end_month = args.end_month or connection.execute(
+                "SELECT MAX(data_month) FROM elecheck_purchasing_records "
+                "WHERE data_kind = 'national_table'"
+            ).fetchone()[0]
+            if not end_month:
+                raise ValueError("没有可导出的代理购电数据。")
+            rows = connection.execute(
+                """
+                SELECT data_month, province_name, metric, value, unit,
+                       diff_value, collected_at
+                FROM elecheck_purchasing_records
+                WHERE data_kind = 'national_table' AND data_month = ?
+                ORDER BY province_name, metric
+                """,
+                (end_month,),
+            ).fetchall()
+        if not rows:
+            raise ValueError(f"{end_month} 没有可导出的全国代理购电数据。")
+        output = _export_path(context, "purchasing-price-all-provinces", "csv")
+        fieldnames = [
+            "data_month",
+            "province_name",
+            "metric",
+            "value",
+            "unit",
+            "diff_value",
+            "collected_at",
+        ]
+        with output.open("w", encoding="utf-8-sig", newline="") as file:
+            writer = csv.DictWriter(file, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(dict(row) for row in rows)
+        return {
+            "file": str(output),
+            "format": "csv",
+            "rows_or_figures": len(rows),
+            "scope": "all_provinces",
+            "end_month": str(end_month),
+        }
+    end_month = args.end_month
+    if end_month is None:
+        months = repository.list_months(args.province)
+        end_month = months[-1] if months else None
+    if end_month is None:
+        raise ValueError(f"{args.province} 没有可导出的代理购电数据。")
     data = repository.load_dashboard_data(
         province_name=args.province,
-        end_month=args.end_month,
+        end_month=end_month,
         window_label=WINDOW_LABELS[args.window_months],
     )
     if data.current is None:
@@ -1185,6 +1304,25 @@ def _update_mechanism(_args: EmptyArgs, _context: ToolContext) -> dict[str, Any]
 
 
 def _create_schedule(args: CreateScheduleArgs, _context: ToolContext) -> dict[str, Any]:
+    if args.spider_name == "elecheck_source_update":
+        if (
+            args.date_mode != "none"
+            or args.start_date is not None
+            or args.end_date is not None
+            or args.start_month is not None
+            or args.end_month is not None
+        ):
+            raise ValueError("Elecheck 来源级更新会自动计算增量窗口，不接受日期或月份参数。")
+        row = create_source_update_job(
+            name=args.name,
+            source="elecheck",
+            area=args.area,
+            schedule_kind=args.schedule_kind,
+            schedule_time=args.schedule_time,
+            enabled=args.enabled,
+        )
+        return {"job": _schedule_payload(row)}
+
     params: dict[str, Any] = {}
     date_mode = args.date_mode
     start_date = args.start_date
@@ -1232,9 +1370,15 @@ def _create_schedule(args: CreateScheduleArgs, _context: ToolContext) -> dict[st
     return {"job": _schedule_payload(row)}
 
 
+def _is_elecheck_schedule(row) -> bool:
+    return row.spider_name in ELECHECK_AGENT_SPIDERS or (
+        row.job_type == "source_update" and row.spider_name == "elecheck"
+    )
+
+
 def _elecheck_job(job_id: int):
     row = get_scheduled_job(job_id)
-    if row.spider_name not in ELECHECK_AGENT_SPIDERS:
+    if not _is_elecheck_schedule(row):
         raise ValueError("Agent 只能操作 Elecheck allowlist 中的定时任务。")
     params = parse_params_json(row.params_json)
     if row.spider_name == "elecheck_purchasing_national_range":
@@ -1368,6 +1512,15 @@ def build_elecheck_tool_registry() -> ToolRegistry:
     add("elecheck_analyze_purchasing", "分析单省代理购电费用构成、环比、月份断点和省际排名。", PurchasingAnalysisArgs, _analyze_purchasing)
     add("elecheck_analyze_mechanism", "分析增量机制最新快照的价格差额、差幅和地区/电源类型排名。", MechanismAnalysisArgs, _analyze_mechanism)
     add("elecheck_credential_status", "只查询 Elecheck Authorization 是否已配置，不读取凭据内容。", EmptyArgs, _credential_status)
+    add(
+        "elecheck_credential_setup_guide",
+        (
+            "安全检查全部电力网站和本机免费模型网关的配置状态，并返回新用户申请、"
+            "配置和排障步骤；绝不读取或返回密钥内容。"
+        ),
+        EmptyArgs,
+        _credential_setup_guide,
+    )
     add("elecheck_list_schedules", "列出 Agent allowlist 内的 Elecheck 定时任务。", EmptyArgs, _list_schedules)
     add("elecheck_list_schedule_runs", "列出 Elecheck 定时任务最近运行结果和失败原因。", EmptyArgs, _list_schedule_runs)
     add(
@@ -1380,7 +1533,15 @@ def build_elecheck_tool_registry() -> ToolRegistry:
         SpotExportArgs,
         _export_spot,
     )
-    add("elecheck_export_purchasing", "把指定代理购电分析导出为预设目录下的 CSV 或 PNG。", PurchasingExportArgs, _export_purchasing)
+    add(
+        "elecheck_export_purchasing",
+        (
+            "把代理购电数据导出到预设目录。未指定省份时导出最新或指定月份的"
+            "全部省份 CSV；指定省份时可导出该省分析 CSV 或 PNG。"
+        ),
+        PurchasingExportArgs,
+        _export_purchasing,
+    )
     add("elecheck_export_mechanism", "把指定增量机制分析导出为预设目录下的 CSV 或 PNG。", MechanismExportArgs, _export_mechanism)
     add(
         "elecheck_collect_spot",
