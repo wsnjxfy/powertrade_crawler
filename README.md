@@ -9,7 +9,7 @@ Powertrade Crawler 是一套面向电力市场学习、研究和数据分析的�
 数据采集、SQLite 存储、筛选导出、专题分析、增量调度、受控 Agent、本地混合 RAG 和 Windows
 分发整合在同一套应用中。
 
-它已经不只是一个爬虫脚本，而是一套可以在本机完成“采集—存储—浏览—分析—问答—交付”的
+一套可以在本机完成“采集—存储—浏览—分析—问答—交付”的
 电力数据工具。
 
 [下载 Windows 版](https://github.com/wsnjxfy/powertrade_crawler/releases/latest) ·
