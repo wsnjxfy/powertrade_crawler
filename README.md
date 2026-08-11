@@ -10,6 +10,16 @@
 - 广州电力交易中心新闻。
 - 微信小程序“易能电易查”的多个业务接口。
 
+## 中文使用与维护指南
+
+- 普通用户：从下载、首次启动、API 配置、五个数据源、Agent、定时任务到故障排查，请阅读
+  [Powertrade Crawler 中文用户使用指南](docs/USER_GUIDE_ZH.md)。
+- 开发者和后续维护者：从环境、架构、数据接入、SQLite 一致性、GUI 线程、Agent/RAG 安全边界、
+  测试到 Windows 发布，请阅读
+  [Powertrade Crawler 中文开发维护与接手指南](docs/DEVELOPER_HANDOVER_GUIDE_ZH.md)。
+- 可直接运行的 Windows 包和校验信息见
+  [GitHub Releases](https://github.com/wsnjxfy/powertrade_crawler/releases/latest)。
+
 ## 1. 环境搭建
 
 建议使用 Python 3.11+。
