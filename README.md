@@ -1,631 +1,408 @@
 # Powertrade Crawler
 
-一个面向国内外电力交易、电价和电力系统运行数据的本地采集、存储与浏览工具。
+[![Release](https://img.shields.io/github/v/release/wsnjxfy/powertrade_crawler?label=release)](https://github.com/wsnjxfy/powertrade_crawler/releases/latest)
+![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)
+![Platform](https://img.shields.io/badge/platform-Windows-0078D4)
+![Tests](https://img.shields.io/badge/pytest-319%20passed-2E8B57)
 
-当前已接入的数据源包括：
+Powertrade Crawler 是一套面向电力市场学习、研究和数据分析的本地桌面软件。项目将国内外电力
+数据采集、SQLite 存储、筛选导出、专题分析、增量调度、受控 Agent、本地混合 RAG 和 Windows
+分发整合在同一套应用中。
 
-- ENTSO-E Transparency Platform 欧洲电力数据。
-- Elexon Insights API 英国电力数据。
-- GridStatus API。
-- 广州电力交易中心新闻。
-- 微信小程序“易能电易查”的多个业务接口。
+它已经不只是一个爬虫脚本，而是一套可以在本机完成“采集—存储—浏览—分析—问答—交付”的
+电力数据工具。
 
-## 中文使用与维护指南
+[下载 Windows 版](https://github.com/wsnjxfy/powertrade_crawler/releases/latest) ·
+[用户使用指南](docs/USER_GUIDE_ZH.md) ·
+[开发维护与接手指南](docs/DEVELOPER_HANDOVER_GUIDE_ZH.md) ·
+[API Key 配置指南](docs/API_KEY_SETUP_GUIDE.md)
 
-- 普通用户：从下载、首次启动、API 配置、五个数据源、Agent、定时任务到故障排查，请阅读
-  [Powertrade Crawler 中文用户使用指南](docs/USER_GUIDE_ZH.md)。
-- 开发者和后续维护者：从环境、架构、数据接入、SQLite 一致性、GUI 线程、Agent/RAG 安全边界、
-  测试到 Windows 发布，请阅读
-  [Powertrade Crawler 中文开发维护与接手指南](docs/DEVELOPER_HANDOVER_GUIDE_ZH.md)。
-- 可直接运行的 Windows 包和校验信息见
-  [GitHub Releases](https://github.com/wsnjxfy/powertrade_crawler/releases/latest)。
+## 项目定位
 
-## 1. 环境搭建
+项目主要服务于以下场景：
 
-建议使用 Python 3.11+。
+- 电气工程、电力市场和能源经济方向的教学与学习；
+- 国内外电价、负荷、发电、平衡和跨境交换数据的本地研究；
+- 现货价格、代理购电和增量机制电价的可视化分析；
+- 多来源数据的统一浏览、确定性统计和受控比较；
+- Windows 环境下无需部署服务器的离线数据工具交付；
+- 在现有框架上继续接入新地区、新数据集或新分析模块。
+
+本项目是本地单用户桌面应用，不是云端多人协作平台。数据库、凭据、Agent 会话和任务记录默认
+保存在运行软件的电脑上。
+
+## 已接入的五个数据来源
+
+| 数据来源 | 覆盖范围 | 代表性内容 | 在线采集凭据 | 主要时间口径 |
+|---|---|---|---|---|
+| ENTSO-E Transparency Platform | 欧洲 | 日前价格、负荷、发电、跨境交换、平衡、停运 | Security Token | 请求和存储以 UTC 为主 |
+| Elexon Insights API | 英国 GB | 需求、燃料发电、系统价格、平衡、容量裕度、互联线 | 当前公开接口无需 Key | 日期区间结束边界通常不包含 |
+| GridStatus API | 北美 ISO/RTO | 数据集目录、燃料结构、负荷、LMP 等 | API Key | 数据时间统一为 UTC |
+| Elecheck 易能电易查 | 中国 | 现货日前/实时价格、代理购电、增量机制电价 | 有效 Authorization | 现货逐日请求，结束日期包含 |
+| 广州电力交易中心 | 中国南方区域 | 公开信息、绿证和现货市场周报正文 | 无需凭据 | 以文章发布日期为主 |
+
+不同来源的币种、单位、市场规则、时间粒度和日界并不一致。系统默认保留原始业务口径，不会为了
+得到“好看”的跨来源结论而自动换算或补齐不具备业务依据的数据。
+
+## 核心能力
+
+### 数据采集
+
+- 使用官方 API 或公开网页接入五个来源；
+- 统一处理超时、连接失败、HTTP 状态码和第三方服务异常；
+- 支持分页、游标、时间分块、请求间隔和来源级增量更新；
+- 部分 GUI 预览只生成脱敏请求参数、不访问接口；通用 CLI `--dry-run` 可能联网，但不写数据库；
+- 使用稳定自然键和 upsert，重复运行不会持续制造重复记录；
+- 批量写入失败时通过事务回滚保护数据一致性。
+
+### 本地存储与分析
+
+- 使用 SQLite 和 SQLAlchemy，不要求单独部署数据库服务；
+- 为常用筛选、自然键和任务查询建立索引；
+- 保留必要原始上下文，同时为常用业务字段建立结构化列；
+- 支持表格筛选、CSV 导出、图表 PNG 导出和日维度指标；
+- 统计和跨来源比较由确定性工具执行，结果同时说明样本数、时间范围、单位和数据完整度。
+
+### 图形界面
+
+GUI 包含 8 个主要页面：
+
+| 页面 | 主要用途 |
+|---|---|
+| 数据总览 | 查看五个来源的数据量、覆盖时间和快捷入口 |
+| GridStatus | 浏览北美数据集目录，筛选、分页并下载数据 |
+| Elecheck 易能电易查 | 国内现货、代理购电、增量机制分析与独立 Agent |
+| ENTSO-E 欧洲 | 选择欧洲数据集和区域，预览、采集、浏览及导出 |
+| Elexon 英国 | 查询英国需求、发电、价格、平衡和互联线数据 |
+| 多数据源 Agent | 跨来源查询、比较、导出、知识检索和受控采集 |
+| 定时任务 / 数据维护 | 创建增量任务、查看运行记录和同步 Windows 触发器 |
+| API 配置向导 | 查看账号要求，隐藏输入凭据并检测配置状态 |
+
+界面采用响应式网格、滚动区域和统一状态反馈，并考虑最小窗口、高 DPI 和中文显示。网络、模型、
+导出等耗时操作在后台执行，Tkinter 控件只由主线程更新；生命周期令牌和任务取消机制用于阻止窗口
+关闭后的迟到回调继续修改界面。
+
+## 总体架构
+
+```mermaid
+flowchart LR
+    A["ENTSO-E / Elexon / GridStatus / Elecheck / GZPEC"] --> B["HTTP clients"]
+    B --> C["Spiders 与数据标准化"]
+    C --> D["自然键校验、事务与 upsert"]
+    D --> E[("SQLite")]
+
+    F["GUI"] --> C
+    G["CLI"] --> C
+    H["来源级调度器"] --> C
+
+    E --> I["数据浏览与专题图表"]
+    E --> J["确定性统计与跨来源比较"]
+    E --> K["受控 Agent 工具"]
+
+    L["公开知识白名单"] --> M["本地 hybrid RAG"]
+    M --> K
+    K --> N["带引用的回答、导出或审批请求"]
+```
+
+主要代码位于 `src/powertrade_crawler/`：
+
+| 目录或文件 | 职责 |
+|---|---|
+| `clients/` | 外部 API 和网页请求、重试及异常分类 |
+| `spiders/` | 将来源响应转换为内部标准记录 |
+| `models.py` | Pydantic 业务模型 |
+| `storage.py` | ORM 表、索引、事务、upsert、查询和导出 |
+| `metrics.py` | 日维度确定性指标 |
+| `app_shell.py`、`*_gui.py` | 桌面壳层、页面和专题看板 |
+| `ui_dispatch.py` | 后台任务到 Tk 主线程的安全事件分发 |
+| `scheduler.py` | 来源级增量任务、互斥和 Windows 任务计划同步 |
+| `agent/` | Elecheck Agent |
+| `market_agent/` | 多数据源 Agent、本地 RAG 和跨来源工具 |
+
+更完整的接手地图见[开发维护与接手指南](docs/DEVELOPER_HANDOVER_GUIDE_ZH.md)。
+
+## Agent：不只是调用 LLM
+
+LLM 负责理解问题、生成文字和选择下一步工具；Agent 则在 LLM 外增加了可执行工具、会话状态、
+审批、任务时间线、失败规范和权限控制。换句话说，LLM 是推理与表达组件，Agent 是受约束的完整
+工作流程。
+
+项目包含两套相互独立的 Agent：
+
+- **Elecheck Agent**：面向国内现货、代理购电和增量机制数据；
+- **多数据源 Agent**：面向五个来源的查询、比较、知识检索、导出、采集和调度。
+
+两套 Agent 都只执行注册工具。只读查询和确定性统计可以自动运行；采集、更新数据或创建任务等
+操作需要审批，Windows 触发器安装或卸载需要更强确认。Agent 不拥有任意 SQL 写入、Shell、删除
+业务数据、任意文件浏览或凭据修改能力，也不会在免费模型不可用时自动切换到付费渠道。
+
+当任务失败或未完成时，回答需要说明：失败原因、是否已经修改数据，以及用户下一步可以怎样处理。
+
+详细设计见 [Agent MVP 指南](docs/AGENT_MVP_GUIDE.md)、
+[安全评审](docs/AGENT_SECURITY_REVIEW.md)和[威胁模型](docs/AGENT_THREAT_MODEL.md)。
+
+## 完全本地的混合 RAG
+
+多数据源 Agent 内置本地知识检索，用于查询公开文章、数据集目录和受控请求定义：
+
+- 嵌入模型：`BAAI/bge-small-zh-v1.5`；
+- 推理方式：FastEmbed CPU ONNX，冻结版无需联网下载模型；
+- 向量存储：`float32` 向量写入 SQLite BLOB；
+- 全文检索：SQLite FTS5 `trigram`，适配中文子串；
+- 混合召回：向量和全文分别召回，再使用 RRF 融合排序；
+- 增量更新：分块内容哈希不变时复用已有向量；
+- 发布切换：新代次完整构建后原子切换，失败时保留旧代次；
+- 失败降级：向量不可用时明确进入全文检索模式；
+- 引用：由工具结果确定性生成，不交给模型自由编造。
+
+知识库只索引白名单中的公开知识，不向量化业务价格时序、凭据、Agent 会话、审批、日志或用户
+文件。检索到的正文会被视为不可信外部内容，不能覆盖系统规则或触发工具调用。
+
+完整原理和维护命令见[本地混合 RAG 指南](docs/RAG_GUIDE.md)。
+
+## 快速开始：直接使用 Windows 发布包
+
+### 1. 下载
+
+进入 [GitHub Releases](https://github.com/wsnjxfy/powertrade_crawler/releases/latest)，下载名称类似：
+
+```text
+PowertradeCrawler-vX.Y.Z-windows-x64-unsigned.zip
+```
+
+Release 页面中的 `Source code (zip)` 是源码快照，不是可直接双击运行的软件。
+
+### 2. 校验文件
+
+在 ZIP 所在目录打开 PowerShell：
 
 ```powershell
+Get-FileHash .\PowertradeCrawler-v0.1.0-windows-x64-unsigned.zip -Algorithm SHA256
+```
+
+`v0.1.0` 发布包的 SHA-256：
+
+```text
+E421E3E1DD72AAE5796AB2F0338E16C31FACD2A617DEB0B1E8CA131D44C03330
+```
+
+文件名、版本或哈希不一致时不要运行。
+
+### 3. 解压和启动
+
+1. 将 ZIP 完整解压到普通可写目录，支持中文和空格路径；
+2. 不要只复制 `PowertradeCrawler.exe`，程序依赖同目录的 `_internal`；
+3. 双击 `PowertradeCrawler.exe`；
+4. 首次启动后先浏览“数据总览”和内置演示数据；
+5. 需要在线采集时，再进入“API 配置向导”配置对应来源。
+
+程序仅在 `data/powertrade.db` 不存在时复制初始数据库，不会覆盖已有用户数据库。
+
+### 4. 关于未签名提示
+
+当前 Windows 发布包没有 Authenticode 代码签名。这是开源分发成本与兼容性的明确取舍，不是程序
+功能 Bug，但可能触发浏览器、Microsoft Defender SmartScreen、Smart App Control 或企业应用
+控制提示。
+
+请只从本仓库 Release 下载并核对 SHA-256。个人设备在确认来源可信且系统允许时再决定是否运行；
+学校或企业受管设备如果被策略阻止，应联系管理员，不要关闭安全软件或绕过单位策略。
+
+完整操作、升级、备份和排障步骤见[中文用户使用指南](docs/USER_GUIDE_ZH.md)。
+
+## 从源码运行
+
+要求 Python 3.11 或更高版本。以下示例使用 Windows PowerShell：
+
+```powershell
+git clone https://github.com/wsnjxfy/powertrade_crawler.git
+cd powertrade_crawler
+
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
-```
 
-如果后续要爬取强依赖浏览器渲染的网站，再安装：
-
-```powershell
-pip install -e ".[browser]"
-playwright install chromium
-```
-
-## 2. 初始化数据库
-
-```powershell
 powertrade init-db
-```
-
-如果命令不可用，可以用：
-
-```powershell
-python -m powertrade_crawler.cli init-db
-```
-
-## 新用户 API Key 配置向导
-
-软件可以在没有任何 API Key 的情况下启动并浏览本地数据。需要在线采集或使用 Agent
-时，打开 `powertrade gui`，从左侧进入 `API 配置`：页面会区分“实时采集必需”、
-“Agent 功能必需”、“可选”和“无需配置”，并提供官方账号入口、逐步说明、状态检测与
-隐藏输入保存。
-
-- 在线采集需要：GridStatus API Key、ENTSO-E Security Token、Elecheck Authorization。
-- 无需密钥：Elexon Insights API、广州电力交易中心公开信息。
-- Agent：需要本机免费模型网关；各上游 LLM 平台都只是可选渠道，至少一个可用即可。
-- 上游 LLM Key 只在项目外的网关中配置，不写入本项目。
-
-完整清单与申请步骤见 [新用户 API Key 与账号配置指南](docs/API_KEY_SETUP_GUIDE.md)。
-
-面向最终交付的首次使用、五个数据源限制、Agent 能力边界、定时任务排障、常见错误和
-验收结果见 [最终交付使用与验收指南](docs/FINAL_DELIVERY_GUIDE.md)。
-
-## 3. 查看已有爬虫
-
-```powershell
-powertrade list-spiders
-```
-
-当前保留的广州电力交易中心爬虫是：
-
-```text
-gzpec-news-combined
-```
-
-## 4. 运行示例爬虫
-
-示例爬虫默认读取本地 fixture，不访问外网，方便先验证项目结构。
-
-```powershell
-powertrade crawl demo-market
-```
-
-运行后数据会写入 `data/powertrade.db` 的 `market_records` 表。
-
-## 5. 合并爬取广州电力交易中心新闻
-
-这个爬虫把索引页和详情页两个步骤合并为一步：
-
-1. 抓取 `index.html` 到 `index_19.html` 的新闻链接。
-2. 立即进入每条新闻详情页。
-3. 判断新闻类型。
-4. 按顺序保存文字块和图片块。
-5. 写入一张合并表。
-
-运行：
-
-```powershell
-powertrade init-db
-powertrade crawl gzpec-news-combined
-```
-
-只预览，不写数据库：
-
-```powershell
-powertrade crawl gzpec-news-combined --dry-run
-```
-
-合并结果写入表：
-
-```text
-gzpec_news_records
-```
-
-这张表包含：
-
-- `source`
-- `category`
-- `title`
-- `url`
-- `publish_date`
-- `index_url`
-- `news_type`
-- `content_json`
-- `collected_at`
-
-`news_type` 的取值：
-
-- `green_certificate`：标题以“绿证交易每周行情一览”开头
-- `spot_market`：标题以“南方区域电力现货市场每周行情一览”开头
-- `ordinary`：其他普通新闻
-
-`content_json` 是按网页正文顺序保存的内容块：
-
-- `text`：文字
-- `image`：图片 URL，暂不下载图片，也不做 OCR
-
-查看一条合并后的记录：
-
-```powershell
-python -c "import json; from powertrade_crawler.storage import get_session, GzpecNewsRecordRow; s=get_session(); r=s.query(GzpecNewsRecordRow).first(); print(r.news_type, r.publish_date, r.title); print(r.url); print(json.dumps(json.loads(r.content_json)[:5], ensure_ascii=False, indent=2)); s.close()"
-```
-
-## 6. GridStatus API 爬虫
-
-GridStatus 使用官方 API，不爬网页前端。API key 统一保存到不会提交 Git 的鉴权目录：
-
-最终分发包内置 `configs/gridstatus/datasets.initial.json` 数据集目录快照。首次启动会在
-本地目录表为空时自动导入，因此未配置 API Key 或暂时断网也能浏览数据集说明；该文件
-不包含凭据。分发包还提供轻量演示数据库，包含五个来源的代表性真实样例；只在本地
-`data/powertrade.db` 不存在时复制，联网后的采集和“刷新目录”会继续按自然键更新。
-
-```powershell
-powertrade set-credential gridstatus
-```
-
-初始化数据库：
-
-```powershell
-powertrade init-db
-```
-
-查看自动注册的 GridStatus 命令：
-
-```powershell
-powertrade list-spiders
-```
-
-当前 MVP 已配置 5 个请求：
-
-```text
-gridstatus_datasets
-gridstatus_caiso_fuel_mix
-gridstatus_ercot_load
-gridstatus_pjm_lmp_day_ahead_hourly_pseg
-gridstatus_nyiso_fuel_mix_updates
-```
-
-运行示例：
-
-```powershell
-powertrade crawl gridstatus_datasets
-powertrade crawl gridstatus_caiso_fuel_mix
-powertrade crawl gridstatus_ercot_load
-powertrade crawl gridstatus_pjm_lmp_day_ahead_hourly_pseg
-powertrade crawl gridstatus_nyiso_fuel_mix_updates
-```
-
-所有 GridStatus 结果先统一写入：
-
-```text
-gridstatus_records
-```
-
-这张表会保存：
-
-- `request_name`：具体 crawl 命令名
-- `request_type`：请求类型，例如 datasets、dataset_query、dataset_location_query、dataset_updates
-- `dataset`：GridStatus dataset id
-- `location`：节点或区域，例如 PSEG
-- `interval_start_utc`
-- `interval_end_utc`
-- `record_time_utc`
-- `raw_json`：API 返回的原始行数据
-- `collected_at`
-
-新增 GridStatus 请求时，优先改配置文件：
-
-```text
-configs/gridstatus/requests.json
-```
-
-例如新增一个普通 dataset query：
-
-```json
-{
-  "name": "gridstatus_aeso_load",
-  "type": "dataset_query",
-  "dataset": "aeso_load",
-  "params": {
-    "limit": 1000
-  }
-}
-```
-
-保存后重新运行：
-
-```powershell
-powertrade list-spiders
-powertrade crawl gridstatus_aeso_load
-```
-
-GridStatus 时间参数统一使用 UTC。GUI 下载器支持明确设置 `start_time`、`end_time`、
-`filter_column` 和 `filter_value`，首请求使用空 cursor，随后读取响应中的 cursor 自动翻页，
-直至每个时间分块全部完成。当前账户验证可用的最大 `page_size` 为 50,000，GUI 默认使用该值；
-小时级数据在设置等值筛选后默认按一年分块，以减少完整历史下载的请求次数。下载断点会保存时间、
-筛选和分页设置，恢复时会校验查询条件，CSV 按页追加，SQLite 按主键增量写入。
-
-客户端、批量下载和内部重试共享进程级限流器，请求间隔至少 2.1 秒，并额外限制为每分钟最多
-30 次。GUI 对活跃数据集生成下载区间时，结束时间取程序运行当下的 UTC 时间，不再把本地数据集
-目录中的旧更新时间当作今天。`ercot_spp_day_ahead_hourly` 下载窗口默认预填
-`location_type = Load Zone`；选择“完整数据集”时，开始时间来自目录中的
-`2010-12-01T06:00:00+00:00`。
-
-## 7. 新增一个网站爬虫
-
-每接入一个新网站，只需要做三件事：
-
-1. 在 `src/powertrade_crawler/spiders/` 下新增一个文件，例如 `caiso.py`。
-2. 继承 `BaseSpider`，实现 `crawl()` 方法，返回标准化后的数据模型。
-3. 在 `src/powertrade_crawler/registry.py` 里注册这个 spider。
-
-## 8. ENTSO-E Transparency Platform 爬虫
-
-ENTSO-E 建议使用官方 Transparency Platform REST API，不直接抓网页前端。
-
-使用隐藏输入命令保存 ENTSO-E token：
-
-```powershell
-powertrade set-credential entsoe
-```
-
-Elecheck authorization 同样保存在统一鉴权文件中：
-
-```powershell
-powertrade set-credential elecheck
-```
-
-查看凭据是否已经配置，不会显示具体内容：
-
-```powershell
-powertrade credentials-status
-```
-
-凭据统一保存在 `.auth/credentials.json`：
-
-```json
-{
-  "gridstatus_api_key": "",
-  "elecheck_authorization": "",
-  "entsoe_security_token": "",
-  "elexon_api_key": ""
-}
-```
-
-`.auth/` 整个目录已加入 `.gitignore`，不会上传到远程仓库。`.env` 只保存请求间隔、超时和数据库地址等非敏感配置。
-
-当前已经实现日前电价、负荷、发电、跨境交换、平衡和停运等常用数据：
-
-```powershell
-powertrade entsoe-datasets
-powertrade entsoe-areas
-powertrade entsoe-describe entsoe_actual_total_load
-```
-
-示例：
-
-```powershell
-powertrade crawl entsoe_day_ahead_prices --area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-```
-
-其他常用数据集示例：
-
-```powershell
-powertrade crawl entsoe_actual_total_load --area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-powertrade crawl entsoe_actual_generation_by_type --area DE-LU --psr-type B16 --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-powertrade crawl entsoe_cross_border_physical_flows --in-area FR --out-area DE-LU --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-```
-
-也可以直接传 EIC：
-
-```powershell
-powertrade crawl entsoe_day_ahead_prices --area-code 10Y1001A1001A82H --start-date 2026-06-01 --end-date 2026-06-02
-```
-
-### ENTSO-E GUI 使用
-
-图形界面已接入 ENTSO-E。启动：
-
-```powershell
 powertrade gui
 ```
 
-打开后选择顶部的 `ENTSO-E 欧洲` 页签。
-
-这个页签提供：
-
-- token 状态显示：只显示 `configured` 或 `missing`，不会显示 token 明文。
-- 数据集下拉框：数据来自 `configs/entsoe/requests.json`，当前 26 个配置化数据集已全部接入 GUI。
-- 数据集说明：显示中文说明、英文说明、参数含义和返回数据意义。
-- 区域选择：下拉显示中文名称，例如 `德国-卢森堡 (DE-LU)`；单区域数据使用 `区域`，跨境数据使用 `来源区域` 和 `目标区域`。
-- 全部区域：选择空白或 `全部区域` 时，执行爬取会展开为全部内置 area；跨境数据会展开为来源/目标组合，执行前会提示确认。
-- 跨境可用性：如果存在 `configs/entsoe/border_availability.json`，已探测的数据集会根据可用边界动态过滤来源/目标区域，不可用组合不会进入可选列表。
-- 日期选择：`start-date` 和 `end-date` 按 UTC 查询窗口发送，`end-date` 是不包含的结束边界。
-- `dry-run 预览`：只展示不含 `securityToken` 的请求参数，不访问接口，也不写数据库。
-- `执行爬取`：复用已有 spider/client/credentials/storage 逻辑，请求 ENTSO-E 并写入本地数据库。
-- 结果浏览：通用 ENTSO-E 数据从 `entsoe_records` 读取；兼容的 `entsoe_day_ahead_prices` 从 `market_records` 读取。
-- `导出数据`：按当前数据集、区域和日期筛选导出 CSV。
-- `清除数据`：按当前数据集、区域和日期筛选清除本地记录，执行前会二次确认。
-
-常用区域别名例如：
-
-```text
-DE-LU, FR, BE, NL, AT, CZ, PL, DK1, DK2, NO1, SE4
-```
-
-如果内置别名不适合某个控制区、报价区或特殊区域，CLI 可以直接使用 EIC 参数；GUI 当前主要提供中文可读的常用 area 下拉，真实数据可用性仍以 ENTSO-E API 返回为准。
-
-跨境数据可用性可以用脚本探测并刷新本地配置：
+当前正式来源主要使用 API 或普通 HTTP 页面。只有未来接入强依赖浏览器渲染的数据源时才需要：
 
 ```powershell
-python scripts/probe_entsoe_border_availability.py --dataset entsoe_cross_border_physical_flows
+python -m pip install -e ".[browser]"
+playwright install chromium
 ```
 
-脚本会读取 `.auth/credentials.json` 中的 ENTSO-E token，但不会打印或写出 token。输出文件：
+## 凭据配置
 
-```text
-configs/entsoe/border_availability.json
-```
+软件可以在没有任何 API Key 的情况下启动、浏览演示数据和使用本地 RAG。在线能力要求如下：
 
-当前已探测 5 个跨境数据集在 `2026-06-01` 到 `2026-06-02` 窗口内的 124 个候选跨境方向：
+| 能力 | 是否需要额外配置 |
+|---|---|
+| Elexon 和广州公开信息采集 | 不需要 Key |
+| GridStatus 在线采集 | GridStatus API Key |
+| ENTSO-E 在线采集 | Transparency Platform Security Token |
+| Elecheck 在线采集 | 有效 Authorization |
+| 两套 Agent | 项目外的本机免费 LLM 路由器和至少一个可用免费渠道 |
 
-| 数据集 | 有数据 | 无数据 | 错误/超时 |
-|---|---:|---:|---:|
-| `entsoe_cross_border_physical_flows` | 122 | 2 | 0 |
-| `entsoe_commercial_schedules` | 122 | 2 | 0 |
-| `entsoe_forecasted_transfer_capacity` | 42 | 82 | 0 |
-| `entsoe_offered_transfer_capacity` | 22 | 102 | 0 |
-| `entsoe_transmission_outages` | 23 | 60 | 41 |
-
-这个结论只代表该探测窗口，跨境数据可用性可能随日期、方向和数据集变化。
-
-API 使用的核心参数：
-
-- `documentType=A44`：Price Document，用于日日前价格。
-- `contract_MarketAgreement.type=A01`：日拍卖 / day-ahead。
-- `in_Domain` / `out_Domain`：Bidding Zone 的 EIC code。
-- `periodStart` / `periodEnd`：UTC 时间，格式 `yyyyMMddHHmm`。
-- `securityToken`：ENTSO-E 账号生成的 API token。
-
-存储说明：
-
-- `entsoe_day_ahead_prices` 是兼容 spider，仍输出 `MarketRecord` 并写入 `market_records`。
-- 其他 ENTSO-E 配置化 spider 输出 `EntsoeRecord` 并写入 `entsoe_records`。
-- `raw_json` 会保留 ENTSO-E XML 解析后的原始上下文，便于以后解释复杂业务字段。
-
-完整的中英文调用说明、每个数据集的固定 API 参数、PSR 发电类型和跨境方向说明见：
-
-```text
-docs/ENTSOE_API_GUIDE.md
-```
-
-## 9. Elexon Insights API 英国数据源
-
-Elexon 用于查询英国 GB 在 ENTSO-E 停止发布后的负荷、发电、价格和平衡机制数据。当前 Elexon Insights API 公开访问，不要求 API key；项目仍预留可选凭据：
+源码版可使用隐藏输入保存来源凭据：
 
 ```powershell
-powertrade set-credential elexon
+powertrade set-credential gridstatus
+powertrade set-credential entsoe
+powertrade set-credential elecheck
+powertrade credentials-status
 ```
 
-查看已经配置的数据集：
+来源凭据保存在 Git 忽略的 `.auth/credentials.json`。上游 LLM 平台 Key 只配置在项目外的本机
+路由器中。不要把真实凭据写入 `.env`、任务参数、数据库、日志、截图、测试或 Git。
+
+申请入口和逐步说明见 [API Key 与账号配置指南](docs/API_KEY_SETUP_GUIDE.md)。
+
+## 常用 CLI
 
 ```powershell
-powertrade elexon-datasets
-powertrade elexon-describe elexon_initial_demand_outturn
-```
+# 查看能力
+powertrade list-spiders
+powertrade help-commands
+powertrade credentials-status
 
-示例：
+# 采集前预览与执行
+powertrade crawl gzpec-news-combined --dry-run
+powertrade crawl gzpec-news-combined
 
-```powershell
-powertrade crawl elexon_initial_demand_outturn --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-powertrade crawl elexon_generation_by_fuel_half_hourly --start-date 2026-06-01 --end-date 2026-06-02 --elexon-param fuelType=CCGT --dry-run
-powertrade crawl elexon_system_prices --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-powertrade crawl elexon_balancing_physical --start-date 2026-06-01 --end-date 2026-06-02 --elexon-param settlementPeriod=1 --dry-run
-powertrade crawl elexon_loss_of_load_probability --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-powertrade crawl elexon_interconnector_flows --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-powertrade crawl elexon_net_balancing_services_adjustment --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
-```
+# ENTSO-E 示例：结束日期不包含
+powertrade crawl entsoe_day_ahead_prices --area DE-LU `
+  --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
 
-通用 Elexon 数据写入：
+# Elexon 示例
+powertrade crawl elexon_system_prices `
+  --start-date 2026-06-01 --end-date 2026-06-02 --dry-run
 
-```text
-elexon_records
-```
+# Agent 和本地 RAG 状态
+powertrade agent doctor --json
+powertrade market-agent doctor --online
+powertrade market-agent rag status --json
+powertrade market-agent rag search "绿证交易" --top-k 5 --json
 
-GUI 已增加 `Elexon 英国` 页签，支持数据集选择、说明查看、日期范围、额外参数、dry-run 预览、执行爬取、刷新、导出和清除本地数据。
-
-Elexon 页签中的说明区会直接解释 LOLP、de-rated margin、互联线名称、NETBSAD、DISBSAD、STOR、BMU 等术语；互联线参考接口 `/reference/interconnectors/all` 作为参数说明来源使用，不单独做参考数据页面。
-
-完整说明见：
-
-```text
-docs/ELEXON_API_GUIDE.md
-```
-
-## 10. Elecheck 分析看板、指标汇总和定时任务
-
-GUI 中的 `Elecheck 易能电易查` 页签新增 `现货价格分析` 子页，提供：
-
-- 单一地区、单一日期的日前价格与实时价格日内折线图
-- 仅按共同时间点计算的 `实时价 - 日前价` 价差图
-- 最近 30 个自然日的日前、实时日均价趋势，缺失日期保留断点
-- 前后有数据日期导航、完整度提示、CSV 和 PNG 导出
-
-图表只读取 `elecheck_clear_price_records` 中 `endpoint = 'detail'` 且 `start_date = end_date` 的每日明细，不做跨地区或跨数据源比较，也不会插值或把缺失值补零。顶部通用 `分析看板` 已从 GUI 隐藏。
-
-同一 Elecheck 页签还提供：
-
-- `代理购电分析`：单省近 12/24 月或全部月份的费用构成柱、合计价趋势，以及所选月份全国合计价高低各 10 名和当前省份。
-- `增量机制分析`：按电源类型对比各地区燃煤基准价与 26 年增量机制电价，并展示当前地区各电源类型价格。
-
-代理购电图表只读取 `data_kind = 'national_table'`，排除全国极值和其他摘要记录；增量机制图表只反映当前快照，不生成虚假的历史趋势。两页均保持原始 `CNY/kWh` 口径，支持悬停、CSV 和 PNG 导出，采集完成后自动刷新。
-
-GUI 顶层仍提供 `定时任务/数据维护` 页签。原有通用指标汇总代码和 CLI 继续保留，供后续其他数据源看板复用；如需重建指标，可运行：
-
-```powershell
-powertrade metrics-rebuild --start-date 2026-06-01 --end-date 2026-07-01
-```
-
-指标写入本地表：
-
-```text
-dashboard_daily_metrics
-```
-
-定时任务配置和运行日志写入本地表：
-
-```text
-scheduled_jobs
-scheduled_job_runs
-```
-
-常用命令：
-
-```powershell
-powertrade schedule-create-templates
-powertrade schedule-create-source elecheck --schedule-time 09:00 --install-windows
-powertrade schedule-create-source entsoe --area DE-LU --schedule-time 09:05 --install-windows
-powertrade schedule-create-source elexon --schedule-time 09:10 --install-windows
-powertrade schedule-create-source gridstatus --schedule-time 09:15 --install-windows
-powertrade schedule-create-source gzpec --schedule-time 09:20 --install-windows
+# 调度
 powertrade schedule-list
 powertrade schedule-run 1 --force
-powertrade schedule-install-windows 1
-powertrade schedule-uninstall-windows 1
-powertrade maintenance-run --analyze --vacuum
 ```
 
-GUI 的“定时任务 / 数据维护”页面提供“快捷更新”和“高级任务”两种入口。快捷更新只需
-选择数据源、每日运行时间和可选地区；默认同时安装 Windows 自动触发器。仅勾选“启用
-本地任务”并不等于已经安装 Windows 触发器，只有后者才能在 GUI 关闭后继续按时运行。
+更多数据集、参数和来源限制见 [ENTSO-E 指南](docs/ENTSOE_API_GUIDE.md)、
+[Elexon 指南](docs/ELEXON_API_GUIDE.md)和[用户使用指南](docs/USER_GUIDE_ZH.md)。
 
-五个来源级增量方案分别执行：
+## 调度与自动更新
 
-- Elecheck：所有或指定地区的现货增量更新、近两月代理购电、增量机制电价。新数据库
-  首次只抓取昨天，之后每次最多追赶 7 天并回补一天修订，不会意外启动多年历史采集。
-- ENTSO-E：指定竞价区的日前价格、实际总负荷和按类型实际发电。
-- Elexon：最近两个完整日的系统价格、需求实绩、风电预测、燃料发电和互联线潮流。
-- GridStatus：目录及 CAISO、PJM、NYISO 当前数据；固定 2023 日期的 ERCOT 示例不会进入
-  每日更新。
-- 广州电力交易中心：公开信息列表和正文更新。
+调度器支持来源级增量任务：
 
-同一来源的子步骤彼此隔离：一个接口失败后其余步骤仍继续，本次运行记为 `partial` 并
-返回非零进程退出码；详细成功/失败信息写入 `scheduled_job_runs`。来源级任务的日期窗口
-在每次运行时重新计算，因此不会把创建当天的固定日期长期重复抓取。
+- 每次运行时重新计算日期窗口；
+- 同一任务通过线程级和进程级互斥避免重复执行；
+- 一个来源中的子步骤失败不会阻断其他步骤，结果标记为 `partial`；
+- 本地启用状态与 Windows 触发器安装状态分别管理；
+- 任务参数递归拒绝 API Key、Token、Authorization、Password 和 Secret；
+- 冻结版和源码版都支持 GUI 关闭后的 Windows 任务计划运行。
 
-打包版支持 headless 定时运行：
+具体创建、验收和排障方式见[调度验收报告](docs/SCHEDULE_ACCEPTANCE_REPORT.md)。
+
+## 质量与验收基线
+
+`v0.1.0` 最终发布门禁记录了以下结果：
+
+| 检查项 | 结果 |
+|---|---:|
+| Pytest（`-W error`） | 319 项通过 |
+| Ruff / Python 编译检查 | 通过 |
+| 依赖兼容检查 | 66 个包兼容 |
+| 多数据源 Agent 离线评测 | 17/17 |
+| Elecheck Agent 离线评测 | 9/9 |
+| RAG 离线评测 | 60/60 |
+| RAG Recall@5 / MRR@5 | 100% / 0.9743 |
+| RAG 过滤正确率 / 引用有效率 | 100% / 100% |
+| RAG 无结果误命中率 | 0% |
+| 冻结态知识库 | 1410 个文档、2851 个分块 |
+
+在最终验收环境中，RAG 完整重建约 65.94 秒，暖查询 P95 约 0.1 秒；这些时间属于特定机器上的
+测量值，不应视为所有设备的性能保证。
+
+自动化发布验收还覆盖了中文空格路径、离线首次启动、8 页面 GUI、冻结态 hybrid RAG、初始数据库
+只首次复制，以及敏感文件排除。该验收通过复制到全新目录模拟干净环境，但不等同于已经在所有
+物理干净机、学校网络或企业应用控制策略中完成验证。
+
+详见[最终交付指南](docs/FINAL_DELIVERY_GUIDE.md)、
+[Agent 真实评测报告](docs/AGENT_REALISTIC_EVAL_REPORT.md)和
+[Windows 发布门禁](docs/WINDOWS_RELEASE_GATE.md)。
+
+## 开发与接手
+
+开发者在修改前应先阅读：
+
+1. [开发维护与接手指南](docs/DEVELOPER_HANDOVER_GUIDE_ZH.md)
+2. [AGENTS.md](AGENTS.md)
+3. 与任务相关的专项指南、源码和测试
+
+提交前的完整质量检查：
 
 ```powershell
-PowertradeCrawler.exe --headless schedule-run 1
+.\.venv\Scripts\python.exe -m ruff check src tests scripts
+.\.venv\Scripts\python.exe -m pytest -q -W error
+.\.venv\Scripts\python.exe -m compileall src
+git diff --check
 ```
 
-调度日期会按数据源语义转换：ENTSO-E 和非快照 Elexon 使用结束日期不包含的区间；
-Elecheck 现货价格会转换为逐日、结束日期包含的请求，保证结果可直接进入专题看板。
-不支持日期窗口的 spider 必须使用 `date_mode=none`，并通过参数 JSON 提供月份等数据源专用参数。
-失败或部分成功的 `schedule-run` 会返回非零进程退出码；删除本地任务时，如已安装 Windows 任务，
-会先同步卸载，卸载失败则保留本地任务定义。源码模式的 Windows 任务也统一通过
-`desktop_launcher.py --headless` 启动，确保工作目录指向项目根目录。
+新增数据源时，应把 client、spider、业务模型、自然键、存储、注册表、CLI/GUI、调度、Agent 工具、
+测试、文档和冻结资源看作一条完整交付链路，而不是只增加一个请求函数。
 
-定时任务会递归拒绝包含 API key、token、Authorization、密码或 secret 的参数，采集时仍
-统一读取 `.auth/credentials.json`。Elecheck、ENTSO-E、GridStatus 的快捷任务在凭据未
-配置时会明确提醒用户前往“API 配置向导”；Elexon 和广州交易中心无需必填采集密钥。
-
-## 11. Elecheck 电力市场分析 Agent MVP
-
-第十一周在项目内自建了轻量单 Agent 框架，不依赖 OpenAI SDK 或任何 Agent SDK。
-模型通过现有 `httpx` 调用本机免费 LLM 统一网关的 OpenAI 兼容接口；GUI 的
-`Elecheck 易能电易查 -> 智能 Agent` 和 CLI 共用同一套工具注册、参数校验、审批、
-幂等、持久会话和审计逻辑。
-
-免费池客户端配置必须位于项目外的
-`%USERPROFILE%\.config\llm-router\client-free.env`。项目不读取或保存任何上游平台的
-原始 Key，也不会把本地免费池密钥写入 SQLite、日志、提示词、评测报告或 Git。
-如需改用另一个外部配置路径，只设置非敏感的 `LLM_ROUTER_CLIENT_ENV`。检查运行条件：
-
-```powershell
-powertrade agent config show
-powertrade agent doctor --json
-```
-
-默认策略为 `smart-auto`，只在免费渠道中自动选择；免费渠道额度耗尽、限流或失效时由
-本地路由器切换到其他免费渠道，所有免费渠道均不可用时明确失败，不会回退付费接口。
-也可以固定到 `tier=free` 且 `available=true` 的渠道：
-
-```powershell
-powertrade agent config providers
-powertrade agent config alerts
-powertrade agent config strategy
-powertrade agent config use-provider groq-gpt-oss-120b
-powertrade agent config use-auto
-```
-
-`use-provider` 同时接受渠道 ID 和 `provider/<渠道ID>`；保存前会实时校验免费档位与可用
-状态。每次成功模型响应都会记录 `x-llm-router-provider`、
-`x-llm-router-upstream-model` 和 `x-llm-router-alert-count`，用于运行审计和 GUI 时间线。
-
-常用 Agent 命令：
-
-```powershell
-powertrade agent chat --message "分析江苏最新可用日的现货价格"
-powertrade agent chat --message "帮我把 Elecheck 现货数据更新到今天"
-powertrade agent sessions list
-powertrade agent approvals list
-powertrade agent approvals approve TOOL_CALL_ID
-powertrade agent tools list
-powertrade agent eval --mode offline --json
-powertrade agent eval --mode live --limit 12 --output reports/agent-live-eval.json
-```
-
-深度真实用例评测还支持从指定案例开始，并在明确需要时执行经过审批的采集动作：
-
-```powershell
-powertrade market-agent eval --online --start 1 --limit 10 --output reports/market-agent-live.json
-powertrade agent eval --mode live --start 1 --limit 10 --output reports/elecheck-agent-live.json
-```
-
-两套 Agent 均可安全检查统一 API 配置向导的配置状态，并指导新用户申请 GridStatus、
-ENTSO-E、Elecheck 和免费 LLM 渠道；Agent 不读取、接收或写入密钥原文。多数据源 Agent
-还可以为精选数据集创建需要审批的本地定时任务，任务创建后不会立即采集或自动安装
-Windows 触发器。真实用例与 Debug 结果见 `docs/AGENT_REALISTIC_EVAL_REPORT.md`。
-
-只读查询、分析和写入预设目录 `exports/agent/<session>/` 的 CSV/PNG 导出可自动执行。
-采集、创建/运行/启停 Elecheck 定时任务需要用户审批；安装或卸载 Windows 计划任务
-需要二次确认。Agent 提供仅限 Elecheck 业务表的受控只读 SQL 查询，用于最高、最低、
-排名、计数和筛选；查询使用表/字段/函数白名单、只读连接、单语句、超时和 200 行上限。
-月度现货日均价最高/最低日期使用专用统计工具：先计算各地区日均价，再做地区等权平均，
-并返回日期及地区覆盖，避免模型为常见业务问题反复试探 SQL。
-Agent 不拥有 SQL 写入、删除业务数据、删除本地任务、Shell、任意文件访问、数据库维护
-或凭据修改能力。API Key 不进入 SQLite、提示词、任务参数、日志或评测报告。
-
-Agent 执行全部现货更新时会弹出下载进度对话框，按地区和逐日请求显示抓取/写入数量；
-可选择“结束并保存”停止后续请求，已完成的逐日数据会保留。
-
-完整架构、工具清单、审批规则和评测说明见：
+## 项目目录
 
 ```text
-docs/AGENT_MVP_GUIDE.md
-docs/AGENT_SECURITY_REVIEW.md
-docs/AGENT_THREAT_MODEL.md
+powertrade_crawler/
+├─ src/powertrade_crawler/   # 主程序
+├─ tests/                    # 自动化测试
+├─ configs/                  # 受控数据集和请求定义
+├─ docs/                     # 用户、开发、安全、RAG 和发布文档
+├─ scripts/                  # 模型准备、接口探测和发布验收脚本
+├─ desktop_launcher.py       # Windows 桌面与 headless 入口
+├─ PowertradeCrawler.spec    # PyInstaller 配置
+└─ pyproject.toml            # Python 项目和依赖配置
 ```
 
-## 12. 独立多数据源 Agent 与统一免费模型网关
+本地运行会产生 `.auth/`、`data/`、`exports/`、`work/`、`build/` 和 `dist/` 等目录；这些目录
+可能包含凭据、用户数据或大型产物，不应提交到 Git。
 
-多数据源 Agent 是独立的 `powertrade_crawler.market_agent` 系统，拥有单独的顶层 GUI
-页签、CLI 命令空间和 `market_agent_*` 会话表，不覆盖或导入 Elecheck Agent 包。
-它与 Elecheck Agent 只共享业务数据、采集基础设施和中立的免费 LLM 路由器客户端。
+## 当前限制
 
-免费模型管理命令与 Elecheck Agent 对称：
+- 在线结果受第三方接口、账号权限、套餐、限流和网页结构变化影响；
+- ENTSO-E 当前统一保存 UTC，尚未为所有区域自动换算当地交易日；
+- Elecheck Authorization 需要由有权访问该服务的用户自行提供；
+- 广州公开信息中的图片只保存 URL，不下载图片，也不执行 OCR；
+- Agent 只能使用注册工具，不是任意电脑操作助手；
+- Windows 包未签名，不能保证通过所有 SmartScreen 或企业应用控制策略；
+- 自动化验收不能证明软件在所有硬件、网络和第三方环境中都不存在问题。
 
-```powershell
-powertrade market-agent doctor --online
-powertrade market-agent config providers
-powertrade market-agent config alerts
-powertrade market-agent config strategy
-powertrade market-agent config use-provider groq-gpt-oss-120b
-powertrade market-agent config use-auto
-```
+## 文档索引
 
-两个 Agent 的策略设置相互独立，但都只从项目外 `client-free.env` 读取同一个本地免费池
-密钥。GUI 的“模型设置”窗口可刷新免费渠道和告警，在 `smart-auto` 与当前可用的
-`provider/<渠道ID>` 之间切换。`127.0.0.1` 仅适用于与路由器同机运行；项目不会自动将
-本地网关暴露到公网。
+- [中文用户使用指南](docs/USER_GUIDE_ZH.md)
+- [中文开发维护与接手指南](docs/DEVELOPER_HANDOVER_GUIDE_ZH.md)
+- [最终交付使用与验收指南](docs/FINAL_DELIVERY_GUIDE.md)
+- [API Key 与账号配置指南](docs/API_KEY_SETUP_GUIDE.md)
+- [ENTSO-E 数据集指南](docs/ENTSOE_API_GUIDE.md)
+- [Elexon 数据集指南](docs/ELEXON_API_GUIDE.md)
+- [Agent MVP 指南](docs/AGENT_MVP_GUIDE.md)
+- [Agent 安全评审](docs/AGENT_SECURITY_REVIEW.md)
+- [Agent 威胁模型](docs/AGENT_THREAT_MODEL.md)
+- [Agent 真实评测报告](docs/AGENT_REALISTIC_EVAL_REPORT.md)
+- [本地混合 RAG 指南](docs/RAG_GUIDE.md)
+- [调度验收报告](docs/SCHEDULE_ACCEPTANCE_REPORT.md)
+- [Windows 发布门禁](docs/WINDOWS_RELEASE_GATE.md)
+- [RAG 第三方许可说明](docs/THIRD_PARTY_NOTICES_RAG.md)
 
+## 许可与第三方组件
 
+仓库包含 RAG 模型和相关组件的第三方许可说明，详见
+[THIRD_PARTY_NOTICES_RAG.md](docs/THIRD_PARTY_NOTICES_RAG.md)。
+
+当前仓库根目录尚未提供主项目 `LICENSE` 文件。公开可见的 GitHub 仓库并不自动授予复制、修改或
+再分发权利；如需在教学提交之外进行协作、二次开发或再分发，请先与项目所有者确认许可范围。
